@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false,
+    "strict": false,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": false,
+    "outDir": "./dist-server",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["node", "express"],
+    "moduleDetection": "force",
+    "module": "ESNext",
+    "moduleResolution": "node"
+  },
+  "include": [
+    "server/**/*",
+    "src/server/**/*",
+    "src/server/authenticate.ts",
+    "src/api/**/*",
+    "src/services/**/*",
+    "src/integrations/**/*"
+  ],
+  "exclude": ["node_modules", "dist", "dist-server", "src/components/**/*", "src/pages/**/*", "src/contexts/**/*", "src/hooks/**/*", "**/*.tsx"]
+} 

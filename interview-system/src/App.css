@@ -1,0 +1,230 @@
+/* 面接システム - 基本スタイル */
+
+/* Tailwind CSS ベースを読み込み */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* カスタムCSSバリアブル */
+:root {
+  --interview-primary: #2563eb;
+  --interview-primary-dark: #1d4ed8;
+  --interview-secondary: #64748b;
+  --interview-success: #059669;
+  --interview-error: #dc2626;
+  --interview-warning: #d97706;
+  
+  --interview-bg-gradient-start: #f8fafc;
+  --interview-bg-gradient-end: #e2e8f0;
+  
+  --interview-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --interview-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --interview-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  
+  --interview-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* ベースフォント設定 */
+body {
+  font-family: var(--interview-font-family);
+  line-height: 1.6;
+  color: #374151;
+  background-color: #f9fafb;
+}
+
+/* フォーカススタイルの統一 */
+.interview-focus {
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
+/* ボタンスタイル */
+.interview-button-primary {
+  @apply bg-blue-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200;
+}
+
+.interview-button-secondary {
+  @apply bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200;
+}
+
+.interview-button-danger {
+  @apply bg-red-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200;
+}
+
+/* カード スタイル */
+.interview-card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+}
+
+.interview-card-header {
+  @apply mb-4 pb-4 border-b border-gray-200;
+}
+
+/* 入力フィールド */
+.interview-input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200;
+}
+
+.interview-input-error {
+  @apply border-red-500 focus:ring-red-500 focus:border-red-500;
+}
+
+.interview-textarea {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors duration-200;
+}
+
+/* 進捗バー */
+.interview-progress-bar {
+  @apply w-full bg-gray-200 rounded-full overflow-hidden;
+}
+
+.interview-progress-fill {
+  @apply h-full bg-blue-600 transition-all duration-300 ease-in-out;
+}
+
+/* チェックボックス */
+.interview-checkbox {
+  @apply w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2;
+}
+
+/* AI メッセージ スタイル */
+.interview-ai-message {
+  @apply bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg;
+}
+
+.interview-ai-message-text {
+  @apply text-gray-700 leading-relaxed;
+}
+
+/* ユーザー回答 スタイル */
+.interview-user-answer {
+  @apply bg-gray-50 border-l-4 border-gray-400 p-4 rounded-r-lg;
+}
+
+/* ローディング アニメーション */
+.interview-loading-spinner {
+  @apply animate-spin rounded-full border-2 border-gray-300 border-t-blue-600;
+}
+
+/* タイムスタンプ */
+.interview-timestamp {
+  @apply text-xs text-gray-500 font-mono;
+}
+
+/* バッジ */
+.interview-badge-success {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800;
+}
+
+.interview-badge-warning {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800;
+}
+
+.interview-badge-error {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800;
+}
+
+/* アラート */
+.interview-alert-info {
+  @apply bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded relative;
+}
+
+.interview-alert-success {
+  @apply bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded relative;
+}
+
+.interview-alert-warning {
+  @apply bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded relative;
+}
+
+.interview-alert-error {
+  @apply bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .interview-mobile-padding {
+    @apply px-4 py-6;
+  }
+  
+  .interview-mobile-text {
+    @apply text-sm;
+  }
+  
+  .interview-mobile-button {
+    @apply text-sm px-3 py-2;
+  }
+}
+
+/* アクセシビリティ */
+@media (prefers-reduced-motion: reduce) {
+  .interview-progress-fill {
+    transition: none;
+  }
+  
+  .interview-loading-spinner {
+    animation: none;
+  }
+}
+
+/* ハイコントラストモード */
+@media (prefers-contrast: high) {
+  .interview-button-primary {
+    @apply border-2 border-blue-700;
+  }
+  
+  .interview-input {
+    @apply border-2 border-gray-600;
+  }
+}
+
+/* ダークモード サポート（将来の拡張用） */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --interview-bg-gradient-start: #1f2937;
+    --interview-bg-gradient-end: #111827;
+  }
+  
+  .interview-dark-mode {
+    @apply bg-gray-800 text-gray-100;
+  }
+}
+
+/* カスタムアニメーション */
+@keyframes interview-slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.interview-slide-in-up {
+  animation: interview-slide-in-up 0.3s ease-out;
+}
+
+@keyframes interview-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.interview-fade-in {
+  animation: interview-fade-in 0.5s ease-out;
+}
+
+/* 印刷スタイル */
+@media print {
+  .interview-no-print {
+    display: none !important;
+  }
+  
+  .interview-print-break {
+    page-break-before: always;
+  }
+} 
