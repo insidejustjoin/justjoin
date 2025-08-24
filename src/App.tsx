@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "./contexts/AuthContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
@@ -129,14 +129,10 @@ function App() {
               } />
               {/* 単数形のパスから複数形へのリダイレクト */}
               <Route path="/admin/jobseeker" element={
-                <AuthGuard requiredUserType="admin">
-                  <AdminJobSeekers />
-                </AuthGuard>
+                <Navigate to="/admin/jobseekers" replace />
               } />
               <Route path="/admin/jobseeker/" element={
-                <AuthGuard requiredUserType="admin">
-                  <AdminJobSeekers />
-                </AuthGuard>
+                <Navigate to="/admin/jobseekers" replace />
               } />
               <Route path="/admin/users" element={
                 <AuthGuard requiredUserType="admin">
