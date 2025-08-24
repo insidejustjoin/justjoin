@@ -104,7 +104,7 @@ const AdminJobSeekers: React.FC = () => {
 
   // 管理者権限チェック
   useEffect(() => {
-    if (user && user.role !== 'admin' && user.role !== 'super_admin') {
+    if (user && user.user_type !== 'admin') {
       navigate('/');
       toast({
         title: "アクセス拒否",
@@ -261,7 +261,7 @@ const AdminJobSeekers: React.FC = () => {
 
   // 初期データ取得
   useEffect(() => {
-    if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+    if (user && user.user_type === 'admin') {
       fetchJobSeekers();
     }
   }, [user]);
