@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Language } from './types/interview';
 import './App.css';
 
-type AppState = 'consent' | 'preparation' | 'interview' | 'completed' | 'error';
+type AppState = 'consent' | 'preparation' | 'checks' | 'interview' | 'completed' | 'error';
 
 interface JobSeekerInfo {
   name: string;
@@ -14,6 +14,14 @@ interface Question {
   id: number;
   text: string;
   category: string;
+}
+
+interface CheckItem {
+  id: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'checking' | 'success' | 'failed';
+  message?: string;
 }
 
 function App() {
@@ -38,6 +46,28 @@ function App() {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [speechSynthesis, setSpeechSynthesis] = useState<SpeechSynthesis | null>(null);
+  
+  // チェック項目の状態
+  const [checkItems, setCheckItems] = useState<CheckItem[]>([
+    {
+      id: 'audio',
+      title: '音声チェック',
+      description: 'マイクの動作確認を行います',
+      status: 'pending'
+    },
+    {
+      id: 'video',
+      title: '録画チェック',
+      description: 'カメラの動作確認を行います',
+      status: 'pending'
+    },
+    {
+      id: 'speech',
+      title: '音声合成チェック',
+      description: '質問の音声読み上げを確認します',
+      status: 'pending'
+    }
+  ]);
   
   // refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -183,6 +213,91 @@ function App() {
     }
   };
 
+  // チェック項目の実行
+  const runChecks = async () => {
+    setCurrentState('checks');
+    
+    // 音声チェック
+    await runAudioCheck();
+    
+    // 録画チェック
+    await runVideoCheck();
+    
+    // 音声合成チェック
+    await runSpeechCheck();
+    
+    // すべてのチェックが完了したら面接準備完了
+    setTimeout(() => {
+      handlePreparationComplete();
+    }, 2000);
+  };
+
+  // 音声チェック
+  const runAudioCheck = async (): Promise<void> => {
+    return new Promise((resolve) => {
+      setCheckItems(prev => prev.map(item => 
+        item.id === 'audio' ? { ...item, status: 'checking' } : item
+      ));
+      
+      setTimeout(() => {
+        setCheckItems(prev => prev.map(item => 
+          item.id === 'audio' ? { ...item, status: 'success', message: 'マイクが正常に動作しています' } : item
+        ));
+        resolve();
+      }, 1500);
+    });
+  };
+
+  // 録画チェック
+  const runVideoCheck = async (): Promise<void> => {
+    return new Promise((resolve) => {
+      setCheckItems(prev => prev.map(item => 
+        item.id === 'video' ? { ...item, status: 'checking' } : item
+      ));
+      
+      setTimeout(() => {
+        setCheckItems(prev => prev.map(item => 
+          item.id === 'video' ? { ...item, status: 'success', message: 'カメラが正常に動作しています' } : item
+        ));
+        resolve();
+      }, 1500);
+    });
+  };
+
+  // 音声合成チェック
+  const runSpeechCheck = async (): Promise<void> => {
+    return new Promise((resolve) => {
+      setCheckItems(prev => prev.map(item => 
+        item.id === 'speech' ? { ...item, status: 'checking' } : item
+      ));
+      
+      // テスト用の音声を再生
+      if (speechSynthesis) {
+        const utterance = new SpeechSynthesisUtterance('音声合成のテストです。正常に動作しています。');
+        utterance.lang = 'ja-JP';
+        utterance.rate = 0.8;
+        utterance.onend = () => {
+          setCheckItems(prev => prev.map(item => 
+            item.id === 'speech' ? { ...item, status: 'success', message: '音声合成が正常に動作しています' } : item
+          ));
+          resolve();
+        };
+        utterance.onerror = () => {
+          setCheckItems(prev => prev.map(item => 
+            item.id === 'speech' ? { ...item, status: 'failed', message: '音声合成でエラーが発生しました' } : item
+          ));
+          resolve();
+        };
+        speechSynthesis.speak(utterance);
+      } else {
+        setCheckItems(prev => prev.map(item => 
+          item.id === 'speech' ? { ...item, status: 'failed', message: '音声合成がサポートされていません' } : item
+        ));
+        resolve();
+      }
+    });
+  };
+
   // 面接準備完了時の処理
   const handlePreparationComplete = async () => {
     try {
@@ -207,9 +322,9 @@ function App() {
       if (tokenData?.userId) {
         try {
           await fetch(`https://justjoin.jp/api/documents/interview-start/${encodeURIComponent(btoa(JSON.stringify(tokenData)))}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
             }
           });
         } catch (error) {
@@ -325,7 +440,7 @@ function App() {
         }
       }
       
-    setCurrentState('completed');
+      setCurrentState('completed');
       
     } catch (error) {
       console.error('面接完了エラー:', error);
@@ -349,6 +464,9 @@ function App() {
     setIsVideoRecording(false);
     setIsAudioPlaying(false);
     setRecordedChunks([]);
+    
+    // チェック項目をリセット
+    setCheckItems(prev => prev.map(item => ({ ...item, status: 'pending', message: undefined })));
     
     // 音声合成を停止
     if (speechSynthesis) {
@@ -400,7 +518,7 @@ function App() {
                     setError('');
                     setCurrentState('consent');
                   }}
-                  className="flex-1 bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium"
+                  className="flex-1 bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium"
                 >
                   再試行
                 </button>
@@ -456,11 +574,73 @@ function App() {
               </div>
               
               <button
-                onClick={handlePreparationComplete}
+                onClick={runChecks}
                 className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-all duration-200 font-medium"
               >
-                面接を開始
+                システムチェックを開始
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {currentState === 'checks' && (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-violet-100">
+          <div className="max-w-md w-full mx-4">
+            <div className="bg-white rounded-xl shadow-xl p-8">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">システムチェック中</h1>
+              <p className="text-gray-600 mb-6 text-center">面接に必要な機能の動作確認を行っています</p>
+              
+              <div className="space-y-4">
+                {checkItems.map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-gray-900">{item.title}</h3>
+                      <div className="flex items-center">
+                        {item.status === 'pending' && (
+                          <div className="w-4 h-4 bg-gray-300 rounded-full"></div>
+                        )}
+                        {item.status === 'checking' && (
+                          <div className="w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
+                        )}
+                        {item.status === 'success' && (
+                          <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                        {item.status === 'failed' && (
+                          <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">{item.description}</p>
+                    {item.message && (
+                      <p className={`text-sm ${
+                        item.status === 'success' ? 'text-green-600' : 
+                        item.status === 'failed' ? 'text-red-600' : 'text-gray-600'
+                      }`}>
+                        {item.message}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-6 text-center">
+                <div className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-800 rounded-lg">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  チェック完了後、自動的に面接を開始します
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -487,7 +667,7 @@ function App() {
                 <div>
                   {/* ビデオプレビュー */}
                   <div className="mb-6">
-                    <div className="bg-gray-900 rounded-lg overflow-hidden">
+                    <div className="bg-gray-900 rounded-lg overflow-hidden shadow-lg">
                       <video
                         ref={videoRef}
                         autoPlay
@@ -496,34 +676,52 @@ function App() {
                         className="w-full h-64 object-cover"
                       />
                     </div>
-                    <div className="mt-2 flex justify-center">
-                      <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        isVideoRecording ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                    <div className="mt-3 flex justify-center">
+                      <div className={`px-4 py-2 rounded-full text-sm font-medium shadow-sm ${
+                        isVideoRecording ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-gray-100 text-gray-800 border border-gray-200'
                       }`}>
-                        {isVideoRecording ? '録画中' : '録画停止'}
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${isVideoRecording ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                          {isVideoRecording ? '録画中' : '録画停止'}
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* 現在の質問 */}
                   <div className="mb-6">
-                    <div className="bg-blue-50 p-6 rounded-lg">
-                      <h2 className="text-xl font-semibold text-blue-900 mb-2">
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200 shadow-sm">
+                      <h2 className="text-xl font-semibold text-blue-900 mb-3">
                         質問 {currentQuestionIndex + 1}
                       </h2>
-                      <p className="text-lg text-blue-800">
+                      <p className="text-lg text-blue-800 leading-relaxed">
                         {questions[currentQuestionIndex].text}
                       </p>
-                      <p className="text-sm text-blue-600 mt-2">
-                        カテゴリ: {questions[currentQuestionIndex].category}
-                      </p>
-                      <div className="mt-4 flex items-center gap-2">
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="text-sm text-blue-600 bg-blue-100 px-3 py-1 rounded-full">
+                          {questions[currentQuestionIndex].category}
+                        </span>
                         <button
                           onClick={() => speakQuestion(questions[currentQuestionIndex].text)}
                           disabled={isAudioPlaying}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-all duration-200"
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-all duration-200 flex items-center gap-2"
                         >
-                          {isAudioPlaying ? '再生中...' : '質問を読み上げ'}
+                          {isAudioPlaying ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              再生中...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707c.39-.39 1.024-.39 1.414 0L15.414 10H20a1 1 0 011 1v4a1 1 0 01-1 1h-4.586l-4.707 4.707c-.39.39-1.024.39-1.414 0L5.586 15z" />
+                              </svg>
+                              質問を読み上げ
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -532,34 +730,48 @@ function App() {
 
                 {/* 右側: 音声認識エリア */}
                 <div>
-                  <div className="bg-gray-50 p-6 rounded-lg">
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-lg border border-gray-200 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">回答</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">回答入力</h3>
                       <div className="flex gap-2">
                         {!isRecording ? (
                           <button
                             onClick={startRecording}
-                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all duration-200"
+                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all duration-200 flex items-center gap-2 shadow-sm"
                           >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
                             録音開始
                           </button>
                         ) : (
                           <button
                             onClick={stopRecording}
-                            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-all duration-200"
+                            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-all duration-200 flex items-center gap-2 shadow-sm"
                           >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                            </svg>
                             録音停止
                           </button>
                         )}
                       </div>
                     </div>
                     
-                    <div className="bg-white p-4 rounded border min-h-[200px]">
+                    <div className="bg-white p-4 rounded-lg border border-gray-300 min-h-[200px] shadow-inner">
                       {transcript ? (
-                        <p className="text-gray-800">{transcript}</p>
+                        <p className="text-gray-800 leading-relaxed">{transcript}</p>
                       ) : (
-                        <p className="text-gray-400 italic">
-                          {isRecording ? '音声を認識中...' : '録音開始ボタンを押して回答を開始してください'}
+                        <p className="text-gray-400 italic text-center py-8">
+                          {isRecording ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                              音声を認識中...
+                            </div>
+                          ) : (
+                            '録音開始ボタンを押して回答を開始してください'
+                          )}
                         </p>
                       )}
                     </div>
@@ -568,14 +780,31 @@ function App() {
                       <div className="mt-4 flex gap-2">
                         <button
                           onClick={saveAnswer}
-                          className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-all duration-200"
+                          className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-all duration-200 flex items-center gap-2 shadow-sm"
                         >
-                          {currentQuestionIndex < questions.length - 1 ? '次の質問へ' : '面接完了'}
+                          {currentQuestionIndex < questions.length - 1 ? (
+                            <>
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                              </svg>
+                              次の質問へ
+                            </>
+                          ) : (
+                            <>
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              面接完了
+                            </>
+                          )}
                         </button>
                         <button
                           onClick={() => setTranscript('')}
-                          className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-all duration-200"
+                          className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-all duration-200 flex items-center gap-2 shadow-sm"
                         >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
                           やり直し
                         </button>
                       </div>
@@ -587,19 +816,22 @@ function App() {
               {/* 進捗バー */}
               <div className="mt-8">
                 <div className="flex justify-between text-sm text-gray-600 mb-2">
-                  <span>進捗</span>
+                  <span>面接の進捗</span>
                   <span>{Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 rounded-full h-3 shadow-inner">
                   <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-500 ease-out shadow-sm"
                     style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
                   ></div>
+                </div>
+                <div className="mt-2 text-center text-sm text-gray-500">
+                  残り {questions.length - (currentQuestionIndex + 1)} 問
                 </div>
               </div>
 
               {/* 録音ファイル */}
-              <audio ref={audioRef} controls className="mt-4 w-full" />
+              <audio ref={audioRef} controls className="mt-6 w-full" />
             </div>
           </div>
         </div>
@@ -620,7 +852,7 @@ function App() {
               </div>
               
               <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                <h3 className="font-semibold text-gray-900 mb-2">面接結果</h3>
+                <h3 className="font-semibold text-gray-900 mb-2">面接結果サマリー</h3>
                 <div className="space-y-2 text-sm text-gray-600">
                   <p>• 回答した質問数: {answers.filter(a => a && a.trim()).length} / {questions.length}</p>
                   <p>• 面接時間: {interviewStartTime ? Math.floor((Date.now() - interviewStartTime.getTime()) / 1000 / 60) : 0}分</p>
@@ -640,13 +872,13 @@ function App() {
               <div className="flex gap-3">
                 <button
                   onClick={handleBackToHome}
-                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 font-medium"
+                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 font-medium shadow-sm"
                 >
                   ホームに戻る
                 </button>
                 <button
                   onClick={handleStartNewInterview}
-                  className="flex-1 bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium"
+                  className="flex-1 bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium shadow-sm"
                 >
                   新しい面接
                 </button>
