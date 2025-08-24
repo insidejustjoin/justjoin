@@ -1061,10 +1061,194 @@ curl -X PUT -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
 ```
 
 ## gitへのpush
+
+### 基本的な手順
+
 ```bash
-git add .                       
-git commit -m ""
-git push origin main
+# 1. 変更されたファイルを確認
+git status
+
+# 2. すべての変更をステージングエリアに追加
+git add .
+
+# 3. 変更をコミット（適切なメッセージを記述）
+git commit -m "変更内容の説明"
+
+# 4. リモートリポジトリにプッシュ
+git push insidejustjoin main
+```
+
+### 詳細な手順
+
+#### 1. 変更の確認
+```bash
+# 現在のブランチと変更状態を確認
+git status
+
+# 変更されたファイルの差分を確認
+git diff
+
+# 変更されたファイルの詳細な差分を確認
+git diff --cached
+```
+
+#### 2. ファイルのステージング
+```bash
+# 特定のファイルのみをステージング
+git add ファイル名
+
+# 特定のディレクトリ内のファイルをステージング
+git add ディレクトリ名/
+
+# すべての変更をステージング
+git add .
+
+# 削除されたファイルも含めてステージング
+git add -A
+```
+
+#### 3. コミット
+```bash
+# 基本的なコミット
+git commit -m "変更内容の説明"
+
+# 詳細なコミットメッセージ（エディタが開く）
+git commit
+
+# ステージングとコミットを同時に実行
+git commit -am "変更内容の説明"
+
+# 前回のコミットメッセージを修正
+git commit --amend
+```
+
+#### 4. プッシュ
+```bash
+# 現在のブランチをリモートにプッシュ
+git push insidejustjoin main
+
+# 強制プッシュ（注意: 既存の履歴が上書きされる）
+git push insidejustjoin main --force
+
+# タグも同時にプッシュ
+git push insidejustjoin main --tags
+```
+
+### よく使用するコマンド
+
+#### 履歴の確認
+```bash
+# コミット履歴を確認
+git log
+
+# 簡潔な履歴を確認
+git log --oneline
+
+# グラフィカルな履歴を確認
+git log --graph --oneline --all
+
+# 特定のファイルの履歴を確認
+git log --follow ファイル名
+```
+
+#### ブランチ操作
+```bash
+# 新しいブランチを作成
+git checkout -b ブランチ名
+
+# ブランチを切り替え
+git checkout ブランチ名
+
+# ブランチ一覧を表示
+git branch -a
+
+# ブランチを削除
+git branch -d ブランチ名
+```
+
+#### 変更の取り消し
+```bash
+# ステージングした変更を取り消し
+git reset HEAD ファイル名
+
+# ファイルの変更を取り消し
+git checkout -- ファイル名
+
+# 最後のコミットを取り消し
+git reset --soft HEAD~1
+```
+
+### コミットメッセージの例
+
+#### 面接システム関連
+```bash
+git commit -m "面接システムの大幅改善: システムチェック機能追加、UI/UX改善、日本語の流暢性向上"
+git commit -m "面接システム: 自動音声・録画・録音機能を実装"
+git commit -m "面接システム: 質問リストを10個に更新"
+git commit -m "面接システム: 名前表示のバグを修正"
+```
+
+#### 一般的な改善
+```bash
+git commit -m "UI改善: ボタンデザインとアニメーションを追加"
+git commit -m "バグ修正: 音声認識エラーを解決"
+git commit -m "新機能: システムチェック機能を追加"
+git commit -m "ドキュメント更新: READMEにgit手順を追加"
+```
+
+### トラブルシューティング
+
+#### プッシュエラー
+```bash
+# リモートの変更を取得
+git pull insidejustjoin main
+
+# コンフリクトが発生した場合
+git status  # コンフリクトファイルを確認
+# 手動でコンフリクトを解決後
+git add .
+git commit -m "コンフリクトを解決"
+git push insidejustjoin main
+```
+
+#### 認証エラー
+```bash
+# GitHubのPersonal Access Tokenを使用
+# または、SSHキーを設定
+git remote set-url insidejustjoin git@github.com:insidejustjoin/justjoin.git
+```
+
+### 注意事項
+
+- **コミット前**: 必ず`git status`で変更内容を確認
+- **コミットメッセージ**: 具体的で分かりやすい説明を記述
+- **プッシュ前**: ローカルでのテスト完了を確認
+- **強制プッシュ**: チーム開発では使用を避ける
+- **ブランチ**: 大きな変更は新しいブランチで作業
+
+### 推奨ワークフロー
+
+```bash
+# 1. 作業開始
+git status
+git pull insidejustjoin main
+
+# 2. 開発・修正
+# ... コードを編集 ...
+
+# 3. 変更の確認
+git status
+git diff
+
+# 4. コミット
+git add .
+git commit -m "具体的な変更内容"
+
+# 5. プッシュ
+git push insidejustjoin main
+
+# 6. 確認
+git log --oneline -5
 ```
 
 ## 🎊 ログインページUX改善完了！
