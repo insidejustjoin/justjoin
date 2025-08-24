@@ -89,14 +89,15 @@ CREATE TABLE IF NOT EXISTS interview_attempts (
 
 -- 面接録画テーブル（新規追加）
 CREATE TABLE IF NOT EXISTS interview_recordings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    session_id VARCHAR(255) NOT NULL,
-    recording_url TEXT,
-    duration INTEGER DEFAULT 0, -- 秒
-    status VARCHAR(50) DEFAULT 'completed' CHECK (status IN ('completed', 'processing', 'failed')),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(36) REFERENCES interview_sessions(id) ON DELETE CASCADE,
+    applicant_id VARCHAR(36) REFERENCES interview_applicants(id) ON DELETE CASCADE,
+    recording_url TEXT NOT NULL,
+    recording_type VARCHAR(20) DEFAULT 'video', -- video, audio
+    file_size BIGINT, -- ファイルサイズ（バイト）
+    duration INTEGER, -- 録画時間（秒）
+    storage_path TEXT, -- ストレージ内のパス
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- インデックスの作成
@@ -148,20 +149,6 @@ CREATE TRIGGER update_interview_urls_updated_at
 CREATE TRIGGER update_interview_attempts_updated_at 
     BEFORE UPDATE ON interview_attempts 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- 面接録画テーブルのトリガー
-CREATE OR REPLACE FUNCTION update_interview_recordings_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_interview_recordings_updated_at
-  BEFORE UPDATE ON interview_recordings
-  FOR EACH ROW
-  EXECUTE FUNCTION update_interview_recordings_updated_at();
 
 -- サンプルデータの挿入（開発用）
 INSERT INTO interview_applicants (id, email, name, position) VALUES 
