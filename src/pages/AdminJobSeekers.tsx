@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -115,7 +115,7 @@ const AdminJobSeekers: React.FC = () => {
   }, [user, navigate, toast]);
 
   // 求職者データ取得
-  const fetchJobSeekers = async () => {
+  const fetchJobSeekers = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/admin/jobseekers', {
@@ -129,8 +129,24 @@ const AdminJobSeekers: React.FC = () => {
       }
       
       const data = await response.json();
-      setJobSeekers(data);
-      setFilteredJobSeekers(data);
+      console.log('APIレスポンス:', data);
+      
+      // データの形式をチェックして適切に処理
+      let jobSeekersData = [];
+      if (Array.isArray(data)) {
+        jobSeekersData = data;
+      } else if (data && Array.isArray(data.data)) {
+        jobSeekersData = data.data;
+      } else if (data && data.success && Array.isArray(data.data)) {
+        jobSeekersData = data.data;
+      } else {
+        console.warn('予期しないデータ形式:', data);
+        jobSeekersData = [];
+      }
+      
+      console.log('処理後の求職者データ:', jobSeekersData);
+      setJobSeekers(jobSeekersData);
+      setFilteredJobSeekers(jobSeekersData);
     } catch (error) {
       console.error('求職者データ取得エラー:', error);
       toast({
@@ -141,7 +157,7 @@ const AdminJobSeekers: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // 面接状態一括取得
   const fetchAllInterviewStatuses = async () => {
@@ -264,7 +280,7 @@ const AdminJobSeekers: React.FC = () => {
     if (user && user.user_type === 'admin') {
       fetchJobSeekers();
     }
-  }, [user]);
+  }, [user, fetchJobSeekers]);
 
   // 面接状態取得
   useEffect(() => {
