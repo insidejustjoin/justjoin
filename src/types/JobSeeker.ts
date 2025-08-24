@@ -51,6 +51,11 @@ export interface JobSeeker {
   };
   age?: number;
   interviewEnabled?: boolean;
+  interview_attempts?: {
+    count: number;
+    firstAttemptAt: string | null;
+    lastAttemptAt: string | null;
+  };
 }
 
 export interface JobSeekerFormData {

@@ -1,6 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyJWT } from '../utils/auth.js';
 
+// 認証済みユーザーの型定義
+export interface AuthenticatedUser {
+  id: string | number;
+  email: string;
+  role: string;
+  loginTime?: string;
+}
+
+// 認証済みリクエストの型定義
+export interface AuthenticatedRequest extends Request {
+  user: AuthenticatedUser;
+}
+
 export function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   
@@ -38,7 +51,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     }
 
     // req.userにpayloadをセット
-    (req as any).user = { 
+    (req as AuthenticatedRequest).user = { 
       id: payload.userId, 
       email: payload.email,
       role: payload.role,

@@ -200,74 +200,10 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     });
   }, [currentQuestion, progress, isRecording, isPlaying, canStartRecording, transcript]);
 
-  // SpeechRecognitionの初期化
+  // 録画録音の初期化（簡素化版）
   useEffect(() => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      console.error('SpeechRecognition API not supported');
-      return;
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    
-    recognitionRef.current.continuous = false;
-    recognitionRef.current.interimResults = false;
-    recognitionRef.current.lang = 'ja-JP';
-    recognitionRef.current.maxAlternatives = 1;
-
-    recognitionRef.current.onstart = () => {
-      console.log('音声認識開始');
-      setIsListening(true);
-    };
-
-    recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[0][0].transcript;
-      console.log('音声認識結果:', transcript);
-      console.log('現在の質問:', currentQuestion);
-      setTranscript(transcript);
-      setIsListening(false);
-      
-      // 音声認識結果を即座に処理
-      console.log('音声認識結果を処理:', transcript);
-      handleVoiceAnswer(transcript);
-    };
-
-    recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('音声認識エラー:', event.error);
-      setIsListening(false);
-      setIsRecording(false);
-      
-      if (event.error === 'no-speech') {
-        console.log('音声が検出されませんでした');
-        setCanStartRecording(true);
-      } else {
-        console.error('音声認識エラー:', event.error);
-        setCanStartRecording(true);
-      }
-    };
-
-    recognitionRef.current.onend = () => {
-      console.log('音声認識終了');
-      setIsListening(false);
-      
-      // 音声認識が終了しても、結果が処理されていない場合は再録音を許可
-      if (!transcript.trim()) {
-        console.log('音声認識結果がないため、再録音を許可');
-        setCanStartRecording(true);
-      }
-    };
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, [transcript]); // transcriptを依存配列に追加
-
-  // 録画録音の初期化
-  useEffect(() => {
-    startVideoRecording();
-    startAudioRecording();
+    // デモ版では録画録音を無効化
+    console.log('面接画面初期化完了（デモ版）');
   }, []);
 
   // タイマー管理
@@ -285,7 +221,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     };
   }, [startTime]);
 
-  // 録音時間の管理
+  // 録音時間の管理（簡素化版）
   useEffect(() => {
     if (isRecording) {
       recordingIntervalRef.current = setInterval(() => {

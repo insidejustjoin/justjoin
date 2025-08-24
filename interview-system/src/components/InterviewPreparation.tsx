@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CheckIcon, AlertTriangleIcon, UserIcon, GlobeIcon, ClockIcon, VideoIcon, MicIcon, WifiIcon, VolumeIcon, BarChart3Icon } from 'lucide-react';
 import { Language } from '@/types/interview';
-import TranslationService from '@/services/translationService';
 
 interface InterviewPreparationProps {
   onComplete: (data: {
@@ -46,20 +45,6 @@ const InterviewPreparation: React.FC<InterviewPreparationProps> = ({
     audio: false,
     environment: false
   });
-
-  // 翻訳サービスの初期化
-  useEffect(() => {
-    const initTranslationService = async () => {
-      try {
-        const translationService = TranslationService.getInstance();
-        console.log('翻訳サービス初期化完了');
-      } catch (error) {
-        console.error('翻訳サービス初期化エラー:', error);
-      }
-    };
-
-    initTranslationService();
-  }, []);
 
   // checkResultsの変更を監視
   useEffect(() => {

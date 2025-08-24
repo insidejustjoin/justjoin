@@ -127,6 +127,17 @@ function App() {
                   <AdminJobSeekers />
                 </AuthGuard>
               } />
+              {/* 単数形のパスから複数形へのリダイレクト */}
+              <Route path="/admin/jobseeker" element={
+                <AuthGuard requiredUserType="admin">
+                  <AdminJobSeekers />
+                </AuthGuard>
+              } />
+              <Route path="/admin/jobseeker/" element={
+                <AuthGuard requiredUserType="admin">
+                  <AdminJobSeekers />
+                </AuthGuard>
+              } />
               <Route path="/admin/users" element={
                 <AuthGuard requiredUserType="admin">
                   <AdminUsers />

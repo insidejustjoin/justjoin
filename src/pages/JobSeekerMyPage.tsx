@@ -41,7 +41,7 @@ export function JobSeekerMyPage() {
     if (!user) return;
     
     try {
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
       const response = await fetch(`${apiUrl}/api/notifications/unread-count/${user.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -65,7 +65,7 @@ export function JobSeekerMyPage() {
     
     setIsLoadingInterview(true);
     try {
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
       const response = await fetch(`${apiUrl}/api/documents/interview-history/${user.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -91,7 +91,7 @@ export function JobSeekerMyPage() {
     
     setIsStartingInterview(true);
     try {
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
       const response = await fetch(`${apiUrl}/api/documents/interview-token/${user.id}`, {
         method: 'POST',
         headers: {
@@ -105,7 +105,7 @@ export function JobSeekerMyPage() {
         if (result.success) {
           // 面接システムを新しいタブで開く
           const interviewUrl = process.env.NODE_ENV === 'development' 
-            ? `http://localhost:3001/interview?token=${result.data.token}`
+            ? `http://localhost:8080/interview?token=${result.data.token}`
             : `https://interview.justjoin.jp?token=${result.data.token}`;
           
           window.open(interviewUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
@@ -190,7 +190,7 @@ export function JobSeekerMyPage() {
       // 求職者の場合は常にAPIから取得（interview_enabledを含む）
       if (user.user_type === 'job_seeker') {
         try {
-          const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+          const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
           const response = await fetch(`${apiUrl}/api/jobseekers/${user.id}`, {
             method: 'GET',
             headers: {
@@ -239,7 +239,7 @@ export function JobSeekerMyPage() {
     if (!user) return;
     
     try {
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
       const url = `${apiUrl}/api/jobseekers/completion-rate/${user.id}`;
       
       const response = await fetch(url);

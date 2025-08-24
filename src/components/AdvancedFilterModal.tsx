@@ -25,6 +25,7 @@ interface AdvancedFilters {
   hasQualifications: boolean;
   spouseStatus: 'all' | 'married' | 'single' | 'other';
   commutingTime: 'all' | '30min' | '1hour' | '1.5hour' | '2hour' | '2hour+';
+  interviewAttempts: number; // 面接受験回数
 }
 
 interface AdvancedFilterModalProps {
@@ -59,6 +60,7 @@ export function AdvancedFilterModal({
     hasQualifications: false,
     spouseStatus: 'all',
     commutingTime: 'all',
+    interviewAttempts: 0,
   });
   const [skillSearchTerm, setSkillSearchTerm] = useState('');
 
@@ -83,6 +85,7 @@ export function AdvancedFilterModal({
       hasQualifications: false,
       spouseStatus: 'all',
       commutingTime: 'all',
+      interviewAttempts: 0,
     };
     setFilters(emptyFilters);
     onClearFilters();
@@ -460,6 +463,30 @@ export function AdvancedFilterModal({
                     <SelectItem value="2hour+">2時間以上</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* 面接受験回数フィルター */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b pb-2">面接受験回数条件</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>面接受験回数（以上）</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={filters.interviewAttempts}
+                  onChange={e => setFilters(prev => ({
+                    ...prev,
+                    interviewAttempts: parseInt(e.target.value) || 0
+                  }))}
+                  placeholder="0"
+                  className="max-w-md"
+                />
+                <p className="text-sm text-muted-foreground mt-1">
+                  指定した回数以上面接を受験した求職者を表示します
+                </p>
               </div>
             </div>
           </div>

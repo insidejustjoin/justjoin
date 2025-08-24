@@ -75,17 +75,28 @@ CREATE TABLE IF NOT EXISTS interview_urls (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- 面接受験回数管理テーブル（新規追加）
+CREATE TABLE IF NOT EXISTS interview_attempts (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    attempt_count INTEGER DEFAULT 0,
+    first_attempt_at TIMESTAMP,
+    last_attempt_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
 -- 面接録画テーブル（新規追加）
 CREATE TABLE IF NOT EXISTS interview_recordings (
-    id SERIAL PRIMARY KEY,
-    session_id VARCHAR(36) REFERENCES interview_sessions(id) ON DELETE CASCADE,
-    applicant_id VARCHAR(36) REFERENCES interview_applicants(id) ON DELETE CASCADE,
-    recording_url TEXT NOT NULL,
-    recording_type VARCHAR(20) DEFAULT 'video', -- video, audio
-    file_size BIGINT, -- ファイルサイズ（バイト）
-    duration INTEGER, -- 録画時間（秒）
-    storage_path TEXT, -- ストレージ内のパス
-    created_at TIMESTAMP DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_id VARCHAR(255) NOT NULL,
+    recording_url TEXT,
+    duration INTEGER DEFAULT 0, -- 秒
+    status VARCHAR(50) DEFAULT 'completed' CHECK (status IN ('completed', 'processing', 'failed')),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- インデックスの作成
@@ -106,6 +117,9 @@ CREATE INDEX IF NOT EXISTS idx_interview_summaries_overall_score ON interview_su
 CREATE INDEX IF NOT EXISTS idx_interview_urls_user_id ON interview_urls(user_id);
 CREATE INDEX IF NOT EXISTS idx_interview_urls_token ON interview_urls(interview_token);
 CREATE INDEX IF NOT EXISTS idx_interview_urls_is_used ON interview_urls(is_used);
+
+CREATE INDEX IF NOT EXISTS idx_interview_attempts_user_id ON interview_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_interview_attempts_attempt_count ON interview_attempts(attempt_count);
 
 CREATE INDEX IF NOT EXISTS idx_interview_recordings_session_id ON interview_recordings(session_id);
 CREATE INDEX IF NOT EXISTS idx_interview_recordings_applicant_id ON interview_recordings(applicant_id);
@@ -130,6 +144,24 @@ CREATE TRIGGER update_interview_sessions_updated_at
 CREATE TRIGGER update_interview_urls_updated_at 
     BEFORE UPDATE ON interview_urls 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_interview_attempts_updated_at 
+    BEFORE UPDATE ON interview_attempts 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- 面接録画テーブルのトリガー
+CREATE OR REPLACE FUNCTION update_interview_recordings_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_interview_recordings_updated_at
+  BEFORE UPDATE ON interview_recordings
+  FOR EACH ROW
+  EXECUTE FUNCTION update_interview_recordings_updated_at();
 
 -- サンプルデータの挿入（開発用）
 INSERT INTO interview_applicants (id, email, name, position) VALUES 

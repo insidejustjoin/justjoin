@@ -1,10 +1,10 @@
 import express from 'express';
-import { logger } from '../../services/logger.js';
 import { query } from '../../integrations/postgres/client.js';
+import { authenticate } from '../authenticate.js';
+import { logger } from '../../services/logger.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { authenticate } from '../authenticate.js';
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -574,103 +574,49 @@ router.get('/jobseekers/completion-rate/:userId', async (req, res) => {
 router.get('/interview-history/:userId', authenticate, async (req, res) => {
     try {
         const { userId } = req.params;
-        // ユーザーの面接履歴を取得（簡素化）
-        const interviewQuery = `
-      SELECT 
-        ia.id as applicant_id,
-        ia.email,
-        ia.name,
-        0 as total_interviews,
-        'not_taken' as latest_status,
-        NULL as latest_completion,
-        NULL as latest_score,
-        NULL as latest_recommendation,
-        NULL as first_interview_date
-      FROM interview_applicants ia
-      WHERE ia.email = (SELECT email FROM users WHERE id = $1)
-    `;
-        const result = await query(interviewQuery, [userId]);
-        if (result.rows.length === 0) {
-            // 面接応募者データが存在しない場合は、ユーザー情報から作成
-            const userQuery = `
-        SELECT u.id, u.email, js.full_name, js.desired_job_title, js.experience_years
-        FROM users u
-        LEFT JOIN job_seekers js ON u.id = js.user_id
-        WHERE u.id = $1 AND u.user_type = 'job_seeker'
-      `;
-            const userResult = await query(userQuery, [userId]);
-            if (userResult.rows.length === 0) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'USER_NOT_FOUND',
-                    message: 'ユーザーが見つかりません'
-                });
-            }
-            const user = userResult.rows[0];
-            // 面接応募者データを作成
-            const createApplicantQuery = `
-        INSERT INTO interview_applicants (id, email, name, position, experience_years)
-        VALUES (gen_random_uuid()::text, $1, $2, $3, $4)
-        ON CONFLICT (email) DO UPDATE SET
-          name = EXCLUDED.name,
-          position = EXCLUDED.position,
-          experience_years = EXCLUDED.experience_years,
-          updated_at = NOW()
-        RETURNING id
-      `;
-            await query(createApplicantQuery, [
-                user.email,
-                user.full_name || 'Unknown',
-                user.desired_job_title || 'General',
-                user.experience_years || 0
-            ]);
-            // 面接URLを取得（有効期限なし、使用済みでないもの）
-            const urlQuery = `
-        SELECT interview_url, is_used
-        FROM interview_urls
-        WHERE user_id = $1 AND is_used = FALSE
-        ORDER BY created_at DESC
-        LIMIT 1
-      `;
-            const urlResult = await query(urlQuery, [userId]);
-            const interviewUrl = urlResult.rows.length > 0 ? urlResult.rows[0].interview_url : null;
-            return res.json({
-                success: true,
-                data: {
-                    hasInterview: false,
-                    totalInterviews: 0,
-                    canTakeInterview: true,
-                    status: 'not_taken',
-                    interviewUrl: interviewUrl
-                }
-            });
-        }
-        const interviewData = result.rows[0];
-        const hasInterview = interviewData.total_interviews > 0;
-        const canTakeInterview = interviewData.total_interviews === 0; // 1回のみ許可
-        // 面接URLを取得（有効期限なし、使用済みでないもの）
+        // 面接URLの状態を確認
         const urlQuery = `
-      SELECT interview_url, is_used
+      SELECT is_used, created_at, interview_token
       FROM interview_urls
-      WHERE user_id = $1 AND is_used = FALSE
+      WHERE user_id = $1
       ORDER BY created_at DESC
       LIMIT 1
     `;
         const urlResult = await query(urlQuery, [userId]);
-        const interviewUrl = urlResult.rows.length > 0 ? urlResult.rows[0].interview_url : null;
+        // 面接履歴を取得
+        let interviewData = {
+            hasInterview: false,
+            totalInterviews: 0,
+            canTakeInterview: true,
+            status: 'not_taken',
+            interviewUrl: null
+        };
+        if (urlResult.rows.length > 0) {
+            const urlData = urlResult.rows[0];
+            if (urlData.is_used) {
+                // 面接完了済み
+                interviewData = {
+                    hasInterview: true,
+                    totalInterviews: 1,
+                    canTakeInterview: false,
+                    status: 'completed',
+                    interviewUrl: null
+                };
+            }
+            else {
+                // 面接URLが有効
+                interviewData = {
+                    hasInterview: false,
+                    totalInterviews: 0,
+                    canTakeInterview: true,
+                    status: 'available',
+                    interviewUrl: `https://interview.justjoin.jp?token=${urlData.interview_token}`
+                };
+            }
+        }
         res.json({
             success: true,
-            data: {
-                hasInterview,
-                totalInterviews: parseInt(interviewData.total_interviews) || 0,
-                canTakeInterview,
-                status: interviewData.latest_status || 'not_taken',
-                latestCompletion: interviewData.latest_completion,
-                latestScore: interviewData.latest_score,
-                latestRecommendation: interviewData.latest_recommendation,
-                firstInterviewDate: interviewData.first_interview_date,
-                interviewUrl: interviewUrl
-            }
+            data: interviewData
         });
     }
     catch (error) {
@@ -702,31 +648,23 @@ router.post('/interview-token/:userId', authenticate, async (req, res) => {
             });
         }
         const user = userResult.rows[0];
-        // 既に面接を受けているかチェック（面接セッションテーブルが空の場合はスキップ）
-        let interviewCount = 0;
-        try {
-            const interviewCheckQuery = `
-        SELECT COUNT(*) as interview_count
-        FROM interview_applicants ia
-        JOIN interview_sessions isr ON ia.id = isr.applicant_id
-        WHERE ia.email = $1
-      `;
-            const checkResult = await query(interviewCheckQuery, [user.email]);
-            interviewCount = parseInt(checkResult.rows[0].interview_count) || 0;
-        }
-        catch (error) {
-            console.error('面接履歴チェックエラー（無視）:', error);
-            // 面接セッションテーブルが存在しない場合は0として扱う
-            interviewCount = 0;
-        }
-        if (interviewCount > 0) {
+        // 既に面接を受けているかチェック
+        const urlCheckQuery = `
+      SELECT is_used
+      FROM interview_urls
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+        const urlCheckResult = await query(urlCheckQuery, [userId]);
+        if (urlCheckResult.rows.length > 0 && urlCheckResult.rows[0].is_used) {
             return res.status(400).json({
                 success: false,
                 error: 'INTERVIEW_ALREADY_TAKEN',
                 message: '1次面接は既に受験済みです'
             });
         }
-        // 面接開始用のセッショントークンを生成（有効期限なし）
+        // 面接開始用のセッショントークンを生成
         const sessionToken = Buffer.from(JSON.stringify({
             userId: user.id,
             type: 'interview_start'
@@ -745,15 +683,14 @@ router.post('/interview-token/:userId', authenticate, async (req, res) => {
             email: user.email,
             name: user.full_name,
             position: user.desired_job_title,
-            timestamp: Date.now(),
-            expiresAt: Date.now() + (30 * 60 * 1000) // 30分後に期限切れ
+            timestamp: Date.now()
         })).toString('base64');
-        // 面接URLを生成（有効期限なし）
+        // 面接URLを生成
         const interviewUrl = `https://interview.justjoin.jp?token=${tokenString}`;
-        // 面接URLをデータベースに保存（有効期限なし）
+        // 面接URLをデータベースに保存
         const saveUrlQuery = `
       INSERT INTO interview_urls (user_id, interview_token, interview_url, expires_at, is_used)
-      VALUES ($1::uuid, $2, $3, NULL, FALSE)
+      VALUES ($1, $2, $3, NULL, FALSE)
       ON CONFLICT (user_id) DO UPDATE SET
         interview_token = EXCLUDED.interview_token,
         interview_url = EXCLUDED.interview_url,
@@ -762,6 +699,16 @@ router.post('/interview-token/:userId', authenticate, async (req, res) => {
         updated_at = NOW()
     `;
         await query(saveUrlQuery, [user.id, tokenString, interviewUrl]);
+        // 面接受験回数を更新
+        const updateAttemptsQuery = `
+      INSERT INTO interview_attempts (user_id, attempt_count, first_attempt_at, last_attempt_at)
+      VALUES ($1, 1, NOW(), NOW())
+      ON CONFLICT (user_id) DO UPDATE SET
+        attempt_count = interview_attempts.attempt_count + 1,
+        last_attempt_at = NOW(),
+        updated_at = NOW()
+    `;
+        await query(updateAttemptsQuery, [user.id]);
         res.json({
             success: true,
             data: {
@@ -827,12 +774,23 @@ router.get('/admin/interview-status/:userId', authenticate, async (req, res) => 
       LIMIT 1
     `;
         const urlResult = await query(urlQuery, [userId]);
+        // 面接受験回数を取得
+        const attemptsQuery = `
+      SELECT attempt_count, first_attempt_at, last_attempt_at
+      FROM interview_attempts
+      WHERE user_id = $1
+    `;
+        const attemptsResult = await query(attemptsQuery, [userId]);
+        const attemptsData = attemptsResult.rows.length > 0 ? attemptsResult.rows[0] : { attempt_count: 0, first_attempt_at: null, last_attempt_at: null };
         if (urlResult.rows.length === 0) {
             return res.json({
                 success: true,
                 data: {
                     status: 'not_created',
-                    message: '1次面接が公開中の場合は受験前'
+                    message: '1次面接が公開中の場合は受験前',
+                    attemptCount: attemptsData.attempt_count,
+                    firstAttemptAt: attemptsData.first_attempt_at,
+                    lastAttemptAt: attemptsData.last_attempt_at
                 }
             });
         }
@@ -843,7 +801,10 @@ router.get('/admin/interview-status/:userId', authenticate, async (req, res) => 
                 data: {
                     status: 'completed',
                     message: '1次面接を受験しURLがなくなった場合は受験完了',
-                    completedAt: urlData.created_at
+                    completedAt: urlData.created_at,
+                    attemptCount: attemptsData.attempt_count,
+                    firstAttemptAt: attemptsData.first_attempt_at,
+                    lastAttemptAt: attemptsData.last_attempt_at
                 }
             });
         }
@@ -852,7 +813,10 @@ router.get('/admin/interview-status/:userId', authenticate, async (req, res) => 
                 success: true,
                 data: {
                     status: 'available',
-                    message: '1次面接が公開中の場合は受験前'
+                    message: '1次面接が公開中の場合は受験前',
+                    attemptCount: attemptsData.attempt_count,
+                    firstAttemptAt: attemptsData.first_attempt_at,
+                    lastAttemptAt: attemptsData.last_attempt_at
                 }
             });
         }
@@ -863,6 +827,112 @@ router.get('/admin/interview-status/:userId', authenticate, async (req, res) => 
             success: false,
             error: 'INTERNAL_ERROR',
             message: '面接状態を取得できませんでした'
+        });
+    }
+});
+// 面接完了後の処理エンドポイント
+router.post('/interview-completed/:userId', authenticate, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { sessionId, score, recommendation } = req.body;
+        // 面接URLを使用済みに設定
+        const updateUrlQuery = `
+      UPDATE interview_urls 
+      SET is_used = TRUE, updated_at = NOW()
+      WHERE user_id = $1 AND is_used = FALSE
+    `;
+        await query(updateUrlQuery, [userId]);
+        // 面接受験回数を更新（完了時）
+        const updateAttemptsQuery = `
+      UPDATE interview_attempts 
+      SET last_attempt_at = NOW(), updated_at = NOW()
+      WHERE user_id = $1
+    `;
+        await query(updateAttemptsQuery, [userId]);
+        // 面接完了通知を送信
+        try {
+            const { sendNotificationToUser } = await import('../../integrations/postgres/notifications.js');
+            await sendNotificationToUser(userId, 'AI面接が完了しました！', `AI面接が完了しました！結果は管理者に送信されました。スコア: ${score || 'N/A'}, 推奨レベル: ${recommendation || 'N/A'}`, 'success');
+        }
+        catch (notificationError) {
+            console.error('面接完了通知送信エラー:', notificationError);
+        }
+        res.json({
+            success: true,
+            message: '面接完了処理が完了しました'
+        });
+    }
+    catch (error) {
+        console.error('面接完了処理エラー:', error);
+        res.status(500).json({
+            success: false,
+            error: 'INTERNAL_ERROR',
+            message: '面接完了処理に失敗しました'
+        });
+    }
+});
+// 管理者用：面接URLを再有効化するエンドポイント
+router.post('/admin/interview-reset/:userId', authenticate, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        // 管理者権限チェック
+        const adminCheckQuery = `
+      SELECT u.user_type
+      FROM users u
+      WHERE u.id = $1
+    `;
+        const adminResult = await query(adminCheckQuery, [req.user.id]);
+        if (adminResult.rows.length === 0 || !['admin', 'super_admin'].includes(adminResult.rows[0].user_type)) {
+            return res.status(403).json({
+                success: false,
+                error: 'UNAUTHORIZED',
+                message: '管理者権限が必要です'
+            });
+        }
+        // 既存の面接URLを削除
+        const deleteUrlQuery = `
+      DELETE FROM interview_urls 
+      WHERE user_id = $1
+    `;
+        await query(deleteUrlQuery, [userId]);
+        // 面接受験回数をリセット
+        const resetAttemptsQuery = `
+      UPDATE interview_attempts 
+      SET attempt_count = 0, updated_at = NOW()
+      WHERE user_id = $1
+    `;
+        await query(resetAttemptsQuery, [userId]);
+        // 面接履歴をリセット
+        try {
+            const resetHistoryQuery = `
+        UPDATE interview_applicants 
+        SET total_interviews = 0, updated_at = NOW()
+        WHERE email = (SELECT email FROM users WHERE id = $1)
+      `;
+            await query(resetHistoryQuery, [userId]);
+        }
+        catch (error) {
+            console.error('面接履歴リセットエラー（無視）:', error);
+        }
+        // 面接再開通知を送信
+        try {
+            const { sendNotificationToUser } = await import('../../integrations/postgres/notifications.js');
+            await sendNotificationToUser(userId, 'AI面接が再開されました！', 'AI面接が再開されました！再度面接を受験できます。', 'info');
+        }
+        catch (notificationError) {
+            console.error('面接再開通知送信エラー:', notificationError);
+        }
+        res.json({
+            success: true,
+            message: '面接URLが再有効化されました'
+        });
+    }
+    catch (error) {
+        console.error('面接再有効化エラー:', error);
+        res.status(500).json({
+            success: false,
+            error: 'INTERNAL_ERROR',
+            message: '面接再有効化に失敗しました'
         });
     }
 });
@@ -1090,96 +1160,48 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
         });
     }
 });
-// 管理者用：求職者の面接録画を取得するエンドポイント
+// 管理者用面接録画取得
 router.get('/admin/interview-recordings/:userId', authenticate, async (req, res) => {
     try {
         const { userId } = req.params;
-        // 求職者の面接録画を取得
+        const user = req.user;
+        // 管理者権限チェック
+        if (user.role !== 'admin' && user.role !== 'super_admin') {
+            return res.status(403).json({ error: '管理者権限が必要です' });
+        }
+        // 面接録画データを取得（実際の録画ファイルの情報）
         const recordingsQuery = `
       SELECT 
         ir.id,
+        ir.user_id,
+        ir.session_id,
         ir.recording_url,
-        ir.recording_type,
-        ir.file_size,
         ir.duration,
         ir.created_at,
-        isr.id as session_id,
-        isr.status as session_status,
-        isr.started_at,
-        isr.completed_at
+        ir.status
       FROM interview_recordings ir
-      JOIN interview_sessions isr ON ir.session_id = isr.id
-      JOIN interview_applicants ia ON ir.applicant_id = ia.id
-      JOIN users u ON ia.email = u.email
-      WHERE u.id = $1
+      WHERE ir.user_id = $1
       ORDER BY ir.created_at DESC
     `;
         const recordingsResult = await query(recordingsQuery, [userId]);
-        res.json({
-            success: true,
-            data: {
-                recordings: recordingsResult.rows,
-                count: recordingsResult.rows.length
-            }
-        });
+        // 録画データがない場合は空配列を返す
+        if (recordingsResult.rows.length === 0) {
+            return res.json([]);
+        }
+        // 録画データを整形
+        const recordings = recordingsResult.rows.map(row => ({
+            id: row.id,
+            sessionId: row.session_id,
+            recordingUrl: row.recording_url || null,
+            duration: row.duration || 0,
+            createdAt: row.created_at,
+            status: row.status || 'completed'
+        }));
+        res.json(recordings);
     }
     catch (error) {
         console.error('面接録画取得エラー:', error);
-        res.status(500).json({
-            success: false,
-            error: 'INTERNAL_ERROR',
-            message: '面接録画を取得できませんでした'
-        });
-    }
-});
-// 面接録画ファイルのダウンロードエンドポイント
-router.get('/admin/interview-recording/:recordingId', authenticate, async (req, res) => {
-    try {
-        const { recordingId } = req.params;
-        // 録画情報を取得
-        const recordingQuery = `
-      SELECT 
-        ir.recording_url,
-        ir.recording_type,
-        ir.file_size,
-        ir.storage_path
-      FROM interview_recordings ir
-      WHERE ir.id = $1
-    `;
-        const recordingResult = await query(recordingQuery, [recordingId]);
-        if (recordingResult.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                error: 'RECORDING_NOT_FOUND',
-                message: '録画が見つかりません'
-            });
-        }
-        const recording = recordingResult.rows[0];
-        // ファイルパスを構築（面接システムのuploadsディレクトリ）
-        const filePath = path.join(process.cwd(), 'interview-system', recording.storage_path);
-        // ファイルが存在するかチェック
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({
-                success: false,
-                error: 'FILE_NOT_FOUND',
-                message: '録画ファイルが見つかりません'
-            });
-        }
-        // ファイルのMIMEタイプを設定
-        const mimeType = recording.recording_type === 'video' ? 'video/webm' : 'audio/webm';
-        // ファイルをストリーミングで送信
-        res.setHeader('Content-Type', mimeType);
-        res.setHeader('Content-Disposition', `attachment; filename="interview_recording_${recordingId}.webm"`);
-        const fileStream = fs.createReadStream(filePath);
-        fileStream.pipe(res);
-    }
-    catch (error) {
-        console.error('面接録画ダウンロードエラー:', error);
-        res.status(500).json({
-            success: false,
-            error: 'INTERNAL_ERROR',
-            message: '面接録画をダウンロードできませんでした'
-        });
+        res.status(500).json({ error: '面接録画の取得に失敗しました' });
     }
 });
 export default router;

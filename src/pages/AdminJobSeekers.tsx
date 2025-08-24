@@ -1,1692 +1,786 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { RefreshCw, AlertTriangle, Users, Search, FileText, Download, X, Trash2, Filter, Bell, Send, CheckSquare, Square, Play, MessageSquare, FileSpreadsheet, Eye } from 'lucide-react';
-import { AdminPageLayout } from '@/components/AdminPageLayout';
-import DocumentGenerator from '@/components/DocumentGenerator';
-import BulkDocumentGenerator from '@/components/BulkDocumentGenerator';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { 
+  Search, 
+  Filter, 
+  Download, 
+  Eye, 
+  EyeOff, 
+  RefreshCw, 
+  User, 
+  Mail, 
+  Phone, 
+  MapPin, 
+  Calendar,
+  Video,
+  Play,
+  Pause,
+  Volume2,
+  FileVideo,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle
+} from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { JobSeeker } from '@/types/JobSeeker';
 import { AdvancedFilterModal } from '@/components/AdvancedFilterModal';
-import { QuickFilters } from '@/components/QuickFilters';
-import { ActiveFiltersDisplay } from '@/components/ActiveFiltersDisplay';
-import { InterviewManagement } from '@/components/InterviewManagement';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { JobSeekerDetailModal } from '@/components/JobSeekerDetailModal';
-import { useAuth } from '@/contexts/AuthContext';
-import { ALL_SKILLS } from '@/constants/skills';
-import { toast } from '@/hooks/use-toast';
+import BulkDocumentGenerator from '@/components/BulkDocumentGenerator';
 
-
-// 共通のJobSeeker型を使用
-
-interface AdvancedFilters {
-  searchTerm: string;
-  ageValue: number;
-  ageCondition: 'gte' | 'lte' | 'eq';
-  gender: string;
-  nationality: string;
-  hasWorkExperience: boolean;
-  japaneseLevel: 'all' | 'N1' | 'N2' | 'N3' | 'N4' | 'N5' | 'none';
-  skillLevelFilters: { [skill: string]: 'all' | 'A' | 'B' | 'C' | 'D' };
-  // 資料作成データとの連携を強化
-  hasSelfIntroduction: boolean;
-  hasPhoto: boolean;
-  hasWorkHistory: boolean;
-  hasQualifications: boolean;
-  spouseStatus: 'all' | 'married' | 'single' | 'other';
-  commutingTime: 'all' | '30min' | '1hour' | '1.5hour' | '2hour' | '2hour+';
+interface InterviewRecording {
+  id: string;
+  sessionId: string;
+  recordingUrl: string;
+  duration: number;
+  createdAt: string;
+  status: 'completed' | 'processing' | 'failed';
 }
 
-export function AdminJobSeekers() {
+interface InterviewStatus {
+  isEnabled: boolean;
+  isUsed: boolean;
+  attemptCount: number;
+  firstAttemptAt?: string;
+  lastAttemptAt?: string;
+}
+
+interface AdvancedFilters {
+  ageRange: [number, number];
+  experienceRange: [number, number];
+  skills: string[];
+  gender: string[];
+  hasSpouse: boolean | null;
+  desiredPosition: string[];
+  address: string[];
+  registrationDateRange: [Date | null, Date | null];
+  hasSelfIntroduction: boolean | null;
+  interviewAttempts: number;
+}
+
+const AdminJobSeekers: React.FC = () => {
+  const { t } = useLanguage();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  
   const [jobSeekers, setJobSeekers] = useState<JobSeeker[]>([]);
   const [filteredJobSeekers, setFilteredJobSeekers] = useState<JobSeeker[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedJobSeekers, setSelectedJobSeekers] = useState<JobSeeker[]>([]);
-  const [showDocumentGenerator, setShowDocumentGenerator] = useState(false);
-  const [selectedJobSeeker, setSelectedJobSeeker] = useState<JobSeeker | null>(null);
-  const [activeTab, setActiveTab] = useState('jobseekers');
-  const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedJobSeekers, setSelectedJobSeekers] = useState<Set<number>>(new Set());
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [interviewStatuses, setInterviewStatuses] = useState<Record<number, InterviewStatus>>({});
+  const [interviewRecordings, setInterviewRecordings] = useState<Record<number, InterviewRecording[]>>({});
+  const [selectedJobSeekerForDetails, setSelectedJobSeekerForDetails] = useState<JobSeeker | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showRecordingsModal, setShowRecordingsModal] = useState(false);
+  const [selectedJobSeekerForRecordings, setSelectedJobSeekerForRecordings] = useState<JobSeeker | null>(null);
   
-  // 一括操作用の状態
-  const [isSelectAll, setIsSelectAll] = useState(false);
-  
-  // 面接状態管理
-  const [interviewStatuses, setInterviewStatuses] = useState<{[key: string]: any}>({});
-  const [bulkOperationLoading, setBulkOperationLoading] = useState(false);
-  
-  // 面接録画管理
-  const [interviewRecordings, setInterviewRecordings] = useState<{[key: string]: any[]}>({});
-  const [loadingRecordings, setLoadingRecordings] = useState<{[key: string]: boolean}>({});
-  
-  // スポット通知用の状態
-  const [showSpotNotificationModal, setShowSpotNotificationModal] = useState(false);
-  const [spotNotificationData, setSpotNotificationData] = useState({
-    title: '',
-    message: '',
-    type: 'info' as 'info' | 'success' | 'warning' | 'error'
+  // フィルター状態
+  const [filters, setFilters] = useState<AdvancedFilters>({
+    ageRange: [18, 65],
+    experienceRange: [0, 20],
+    skills: [],
+    gender: [],
+    hasSpouse: null,
+    desiredPosition: [],
+    address: [],
+    registrationDateRange: [null, null],
+    hasSelfIntroduction: null,
+    interviewAttempts: 0
   });
 
-  // 詳細表示モーダル用の状態
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedDetailJobSeeker, setSelectedDetailJobSeeker] = useState<JobSeeker | null>(null);
-
-  // フィルター状態を追加
-  const [currentFilters, setCurrentFilters] = useState<AdvancedFilters>({
-    searchTerm: '',
-    ageValue: 0,
-    ageCondition: 'gte',
-    gender: 'all',
-    nationality: 'all',
-    hasWorkExperience: false,
-    japaneseLevel: 'all',
-    skillLevelFilters: {},
-    hasSelfIntroduction: false,
-    hasPhoto: false,
-    hasWorkHistory: false,
-    hasQualifications: false,
-    spouseStatus: 'all',
-    commutingTime: 'all',
-  });
-  
-  const CACHE_DURATION = 10 * 60 * 1000; // 10分に延長
-
-  // 全ユーザーの書類データを一括で取得する関数
-  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
-  
-  const loadAllDocumentData = async () => {
-    if (jobSeekers.length === 0 || isLoadingDocuments) return;
-    
-    setIsLoadingDocuments(true);
-    
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.error('認証トークンが見つかりません');
-        return;
-      }
-
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      
-      console.log('Loading document data for', jobSeekers.length, 'users...');
-      
-      // 書類データ読み込み状態を表示
-      // setDocumentDataLoading(true); // この行は削除
-      
-      // 各求職者の書類データを並行して取得
-      const promises = jobSeekers.map(async (jobSeeker) => {
-        try {
-          const response = await fetch(`${apiUrl}/api/documents/${jobSeeker.user_id}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.data) {
-              console.log(`Document data loaded for user ${jobSeeker.user_id}:`, result.data);
-              console.log(`Gender data for user ${jobSeeker.user_id}:`, result.data.gender);
-              return { userId: jobSeeker.user_id, data: result.data };
-            } else {
-              console.log(`No document data for user ${jobSeeker.user_id}`);
-            }
-          } else if (response.status === 404) {
-            // 404の場合は書類データが存在しないので、スキップ
-            console.log(`No documents found for user ${jobSeeker.user_id} (404)`);
-            return null;
-          } else {
-            console.log(`Failed to load document data for user ${jobSeeker.user_id}:`, response.status);
-          }
-          return null;
-        } catch (error) {
-          console.error(`Error loading document data for user ${jobSeeker.user_id}:`, error);
-          return null;
-        }
-      });
-
-      const results = await Promise.all(promises);
-      
-      // 書類データを取得した求職者の情報を更新
-      const updatedJobSeekers = jobSeekers.map(jobSeeker => {
-        const documentData = results.find(result => result?.userId === jobSeeker.user_id)?.data;
-        if (documentData) {
-          return {
-            ...jobSeeker,
-            certificateStatus: documentData.certificateStatus,
-            gender: documentData.gender || jobSeeker.gender,
-            skillLevels: documentData.skillLevels || jobSeeker.skillLevels,
-            detailed_info: {
-              ...jobSeeker.detailed_info,
-              documentData: documentData
-            }
-            // その他の必要なデータも更新
-          };
-        }
-        return jobSeeker;
-      });
-      
-      // 更新された求職者データを状態に反映
-      setJobSeekers(updatedJobSeekers);
-      setFilteredJobSeekers(updatedJobSeekers);
-      
-      console.log('Updated job seekers with document data:', updatedJobSeekers);
-    } catch (error) {
-      console.error('Error loading all document data:', error);
-    } finally {
-      setIsLoadingDocuments(false);
-    }
-  };
-
-  const isCacheValid = () => {
-    return lastFetchTime && (Date.now() - lastFetchTime) < CACHE_DURATION;
-  };
-
-  // 面接状態を取得
-  const fetchInterviewStatus = async (userId: string) => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-      
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      const response = await fetch(`${apiUrl}/api/documents/admin/interview-status/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setInterviewStatuses(prev => ({
-            ...prev,
-            [userId]: result.data
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('面接状態取得エラー:', error);
-    }
-  };
-
-  // 面接録画を取得する関数
-  const fetchInterviewRecordings = async (userId: string) => {
-    try {
-      setLoadingRecordings(prev => ({ ...prev, [userId]: true }));
-      
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-      
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      const response = await fetch(`${apiUrl}/api/documents/admin/interview-recordings/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setInterviewRecordings(prev => ({
-            ...prev,
-            [userId]: result.data.recordings || []
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('面接録画取得エラー:', error);
+  // 管理者権限チェック
+  useEffect(() => {
+    if (user && user.role !== 'admin' && user.role !== 'super_admin') {
+      navigate('/');
       toast({
-        title: "エラー",
-        description: "面接録画の取得に失敗しました",
-        variant: "destructive",
+        title: "アクセス拒否",
+        description: "管理者権限が必要です。",
+        variant: "destructive"
       });
-    } finally {
-      setLoadingRecordings(prev => ({ ...prev, [userId]: false }));
     }
-  };
+  }, [user, navigate, toast]);
 
-  // 面接録画をダウンロードする関数
-  const downloadInterviewRecording = async (recordingId: string, fileName: string) => {
+  // 求職者データ取得
+  const fetchJobSeekers = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-      
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      const response = await fetch(`${apiUrl}/api/documents/admin/interview-recording/${recordingId}`, {
+      setLoading(true);
+      const response = await fetch('/api/admin/jobseekers', {
         headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        
-        toast({
-          title: "成功",
-          description: "面接録画のダウンロードが完了しました",
-        });
-      } else {
-        throw new Error('ダウンロードに失敗しました');
-      }
-    } catch (error) {
-      console.error('面接録画ダウンロードエラー:', error);
-      toast({
-        title: "エラー",
-        description: "面接録画のダウンロードに失敗しました",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const forceRefresh = () => {
-    setLastFetchTime(null);
-    setDocumentDataLoaded(false);
-    fetchJobSeekers(true);
-  };
-
-  const fetchJobSeekers = async (force = false) => {
-    if (!force && !isCacheValid()) {
-      return;
-    }
-
-    if (force) {
-      setDocumentDataLoaded(false);
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        setError('認証トークンが見つかりません');
-        return;
-      }
-
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      console.log('API URL:', apiUrl);
       
-      const response = await fetch(`${apiUrl}/api/admin/jobseekers`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(Array.from(response.headers.entries())));
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        throw new Error('求職者データの取得に失敗しました');
       }
-
-      const data = await response.json();
-      console.log('API Response data:', data);
       
-      if (data.success) {
-        const jobSeekersData = data.jobSeekers || [];
-        console.log('Job seekers data:', jobSeekersData);
-        setJobSeekers(jobSeekersData);
-        setFilteredJobSeekers(jobSeekersData);
-        setLastFetchTime(Date.now());
-        
-        // 各求職者の面接状態を取得
-        jobSeekersData.forEach(jobSeeker => {
-          fetchInterviewStatus(jobSeeker.user_id);
-        });
-        
-        if (jobSeekersData.length === 0) {
-          setError('求職者データが見つかりませんでした');
-        }
-      } else {
-        console.error('API returned error:', data);
-        setError(data.message || '求職者データの取得に失敗しました');
-      }
+      const data = await response.json();
+      setJobSeekers(data);
+      setFilteredJobSeekers(data);
     } catch (error) {
       console.error('求職者データ取得エラー:', error);
-      setError(`求職者データの取得中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast({
+        title: "エラー",
+        description: "求職者データの取得に失敗しました。",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchJobSeekers();
-  }, []);
-
-  // 求職者データが取得された後に書類データを読み込む（一度だけ）
-  const [documentDataLoaded, setDocumentDataLoaded] = useState(false);
-  
-  useEffect(() => {
-    if (jobSeekers.length > 0 && !documentDataLoaded) {
-      setDocumentDataLoaded(true);
-      loadAllDocumentData();
-    }
-  }, [jobSeekers, documentDataLoaded]);
-
-  // フィルターが変更されたら自動的に適用
-  useEffect(() => {
-    if (jobSeekers.length > 0) {
-      console.log('Auto-applying filters due to currentFilters change');
-      applyFilters(jobSeekers, currentFilters);
-    }
-  }, [currentFilters, jobSeekers]);
-
-  const getAge = (dateOfBirth: string | null) => {
-    if (!dateOfBirth) return null;
-    const today = new Date();
-    const birthDate = new Date(dateOfBirth);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  };
-
-  const getDisplayAge = (seeker: JobSeeker) => {
-    if (seeker.age !== undefined) return seeker.age;
-    if (seeker.date_of_birth) {
-      const age = getAge(seeker.date_of_birth);
-      return age;
-    }
-    return null;
-  };
-
-  const getGenderLabel = (gender: string) => {
-    // 英語の性別データ
-    switch (gender) {
-      case 'male': return '男性';
-      case 'female': return '女性';
-      case 'other': return 'その他';
-      default: break;
-    }
-    
-    // 日本語の性別データ
-    switch (gender) {
-      case '男性': return '男性';
-      case '女性': return '女性';
-      case 'その他': return 'その他';
-      default: return '未設定';
-    }
-  };
-
-  // 生年月日から年齢を計算する関数
-  const calculateAge = (birthDateStr: string): number | null => {
-    if (!birthDateStr) return null;
-    
+  // 面接状態一括取得
+  const fetchAllInterviewStatuses = async () => {
     try {
-      const birthDate = new Date(birthDateStr);
-      const today = new Date();
+      const statusPromises = jobSeekers.map(async (jobSeeker) => {
+        try {
+          const response = await fetch(`/api/documents/admin/interview-status/${jobSeeker.user_id}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          
+          if (response.ok) {
+            const status = await response.json();
+            return { [jobSeeker.user_id]: status };
+          }
+        } catch (error) {
+          console.warn(`面接状態取得エラー (ID: ${jobSeeker.user_id}):`, error);
+        }
+        return null;
+      });
       
-      if (isNaN(birthDate.getTime())) return null;
+      const results = await Promise.all(statusPromises);
+      const statusMap: Record<number, InterviewStatus> = {};
       
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
+      results.forEach(result => {
+        if (result) {
+          Object.assign(statusMap, result);
+        }
+      });
       
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      
-      return age;
+      setInterviewStatuses(statusMap);
     } catch (error) {
-      console.error('年齢計算エラー:', error);
-      return null;
+      console.error('面接状態一括取得エラー:', error);
     }
   };
 
-  const openDocumentGenerator = (jobSeeker: JobSeeker) => {
-    setSelectedJobSeeker(jobSeeker);
-    setShowDocumentGenerator(true);
-    
-    // DocumentGeneratorからデータを取得するために、既存のデータを読み込む
-    // loadDocumentDataForJobSeeker(jobSeeker.user_id); // この行は削除
-  };
-
-  // 特定の求職者の書類データを読み込む
-  const loadDocumentDataForJobSeeker = async (userId: string) => {
+  // 面接録画データ取得
+  const fetchInterviewRecordings = async (userId: number) => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.error('認証トークンが見つかりません');
-        return;
-      }
-
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      const response = await fetch(`${apiUrl}/api/documents/${userId}`, {
+      const response = await fetch(`/api/documents/admin/interview-recordings/${userId}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
       
       if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          // setDocumentData(prev => ({ // この行は削除
-          //   ...prev, // この行は削除
-          //   [userId]: result.data // この行は削除
-          // })); // この行は削除
-        }
+        const recordings = await response.json();
+        setInterviewRecordings(prev => ({
+          ...prev,
+          [userId]: recordings
+        }));
+      } else if (response.status === 404) {
+        // 録画データがない場合は空配列を設定
+        setInterviewRecordings(prev => ({
+          ...prev,
+          [userId]: []
+        }));
       }
     } catch (error) {
-      console.error('書類データ読み込みエラー:', error);
+      console.error('面接録画取得エラー:', error);
+      // エラーの場合も空配列を設定
+      setInterviewRecordings(prev => ({
+        ...prev,
+        [userId]: []
+      }));
     }
   };
 
-  const closeDocumentGenerator = () => {
-    setShowDocumentGenerator(false);
-    setSelectedJobSeeker(null);
-    
-    // 書類生成が閉じられた後に、全データを再読み込み
-    setTimeout(() => {
-      // loadAllDocumentData(); // この行は削除
-    }, 500);
-  };
-
-  // 詳細表示モーダルの開閉
-  const openDetailModal = (jobSeeker: JobSeeker) => {
-    setSelectedDetailJobSeeker(jobSeeker);
-    setShowDetailModal(true);
-  };
-
-  const closeDetailModal = () => {
-    setShowDetailModal(false);
-    setSelectedDetailJobSeeker(null);
-  };
-
-  const handleApplyAdvancedFilters = (filters: AdvancedFilters) => {
-    setCurrentFilters(filters);
-    applyFilters(jobSeekers, filters); // フィルターが変更されたら求職者リストを更新
-  };
-
-  const handleClearAdvancedFilters = () => {
-    const emptyFilters: AdvancedFilters = {
-      searchTerm: '',
-      ageValue: 0,
-      ageCondition: 'gte',
-      gender: 'all',
-      nationality: 'all',
-      hasWorkExperience: false,
-      japaneseLevel: 'all',
-      skillLevelFilters: {},
-      hasSelfIntroduction: false,
-      hasPhoto: false,
-      hasWorkHistory: false,
-      hasQualifications: false,
-      spouseStatus: 'all',
-      commutingTime: 'all',
-    };
-    setCurrentFilters(emptyFilters);
-    applyFilters(jobSeekers, emptyFilters); // フィルタークリア時も求職者リストを更新
-  };
-
-  // フィルタリングロジック
-  const applyFilters = (jobSeekers: JobSeeker[], filters: AdvancedFilters): JobSeeker[] => {
-    console.log('Applying filters:', filters);
-    
-    const filteredResult = jobSeekers.filter(jobSeeker => {
-      // 検索語フィルター
-      if (filters.searchTerm) {
-        const searchTerm = filters.searchTerm.toLowerCase();
-        const searchableText = [
-          jobSeeker.full_name,
-          jobSeeker.email,
-          jobSeeker.user_email,
-          jobSeeker.phone,
-          jobSeeker.nationality,
-          jobSeeker.desired_job_title,
-          jobSeeker.self_introduction
-        ].filter(Boolean).join(' ').toLowerCase();
-        
-        if (!searchableText.includes(searchTerm)) {
-          return false;
-        }
-      }
-
-      // 年齢フィルター
-      if (filters.ageValue > 0) {
-        const age = getDisplayAge(jobSeeker);
-        if (age !== null) {
-          switch (filters.ageCondition) {
-            case 'gte':
-              if (age < filters.ageValue) return false;
-              break;
-            case 'lte':
-              if (age > filters.ageValue) return false;
-              break;
-            case 'eq':
-              if (age !== filters.ageValue) return false;
-              break;
-          }
-        }
-      }
-
-      // 性別フィルター
-      if (filters.gender !== 'all') {
-        const gender = jobSeeker.gender as string;
-        const filterGender = filters.gender;
-        
-        console.log(`Gender filter: ${filterGender}, user gender: ${gender}`);
-        
-        // 英語と日本語の性別データを正しく処理
-        const genderMatches = 
-          (filterGender === 'male' && (gender === 'male' || gender === '男性')) ||
-          (filterGender === 'female' && (gender === 'female' || gender === '女性')) ||
-          (filterGender === 'other' && (gender === 'other' || gender === 'その他'));
-        
-        if (!genderMatches) {
-          console.log(`Gender filter failed for user: ${jobSeeker.full_name}`);
-          return false;
-        }
-      }
-
-      // 国籍フィルター
-      if (filters.nationality !== 'all' && jobSeeker.nationality !== filters.nationality) {
-        return false;
-      }
-
-      // 日本語レベルフィルター
-      if (filters.japaneseLevel !== 'all') {
-        const japaneseLevel = jobSeeker.certificateStatus?.name || jobSeeker.japaneseLevel || jobSeeker.japanese_level;
-        
-        console.log(`Japanese level filter: ${filters.japaneseLevel}, user level: ${japaneseLevel}`);
-        
-        if (filters.japaneseLevel === 'none') {
-          if (japaneseLevel && japaneseLevel !== 'none' && japaneseLevel !== 'なし') return false;
-        } else {
-          // レベル別フィルタリング（N1 > N2 > N3 > N4 > N5 > なし）
-          const levelOrder = { 'N1': 5, 'N2': 4, 'N3': 3, 'N4': 2, 'N5': 1, 'none': 0, 'なし': 0 };
-          const userLevel = levelOrder[japaneseLevel as keyof typeof levelOrder] || 0;
-          const filterLevel = levelOrder[filters.japaneseLevel as keyof typeof levelOrder] || 0;
-          
-          console.log(`Japanese level comparison: user=${userLevel}, filter=${filterLevel}`);
-          
-          if (userLevel < filterLevel) {
-            console.log(`Japanese level filter failed for user: ${jobSeeker.full_name}`);
-            return false;
-          }
-        }
-      }
-
-      // 職歴フィルター
-      if (filters.hasWorkExperience && (!jobSeeker.experience_years || jobSeeker.experience_years === 0)) {
-        return false;
-      }
-
-      // 自己紹介フィルター
-      if (filters.hasSelfIntroduction && !jobSeeker.self_introduction) {
-        return false;
-      }
-
-      // 写真フィルター
-      if (filters.hasPhoto && !jobSeeker.profile_photo) {
-        return false;
-      }
-
-      // 職歴書フィルター
-      if (filters.hasWorkHistory) {
-        // 職務経歴の有無をチェック（APIから取得した書類データを使用）
-        const workExperience = jobSeeker.detailed_info?.documentData?.resume?.workExperience;
-        const hasWorkHistory = workExperience && 
-                              Array.isArray(workExperience) &&
-                              workExperience.length > 0 &&
-                              workExperience.some((exp: any) => 
-                                exp.year && exp.month && exp.content
-                              );
-        
-        if (!hasWorkHistory) {
-          return false;
-        }
-      }
-
-      // 資格フィルター
-      if (filters.hasQualifications) {
-        // 資格の有無をチェック（実装が必要）
-        // 現在はスキップ
-      }
-
-      // 配偶者フィルター
-      if (filters.spouseStatus !== 'all') {
-        const spouse = jobSeeker.spouse;
-        if (filters.spouseStatus === 'married' && spouse !== 'married') return false;
-        if (filters.spouseStatus === 'single' && spouse !== 'single') return false;
-        if (filters.spouseStatus === 'other' && spouse !== 'other') return false;
-      }
-
-      // 通勤時間フィルター
-      if (filters.commutingTime !== 'all') {
-        const commutingTime = jobSeeker.commuting_time;
-        if (filters.commutingTime === '30min' && commutingTime !== '30min') return false;
-        if (filters.commutingTime === '1hour' && commutingTime !== '1hour') return false;
-        if (filters.commutingTime === '1.5hour' && commutingTime !== '1.5hour') return false;
-        if (filters.commutingTime === '2hour' && commutingTime !== '2hour') return false;
-        if (filters.commutingTime === '2hour+' && commutingTime !== '2hour+') return false;
-      }
-
-      // スキルレベルフィルター
-      const skillLevelFilters = filters.skillLevelFilters;
-      if (Object.keys(skillLevelFilters).length > 0) {
-        // 書類データからスキルレベルを取得
-        const skillSheet = jobSeeker.detailed_info?.documentData?.skillSheet?.skills || {};
-        
-        console.log(`Skill level filters:`, skillLevelFilters);
-        console.log(`User skill sheet:`, skillSheet);
-        
-        for (const [skillName, requiredLevel] of Object.entries(skillLevelFilters)) {
-          if (requiredLevel === 'all') continue;
-          
-          const skillData = skillSheet[skillName];
-          const userLevel = skillData?.evaluation;
-          
-          console.log(`Checking skill ${skillName}: required=${requiredLevel}, user=${userLevel}`);
-          
-          // スキルレベルが存在しない場合は除外
-          if (!userLevel) {
-            console.log(`Skill ${skillName} not found for user: ${jobSeeker.full_name}`);
-            return false;
-          }
-          
-          // レベル順序: A > B > C > D > E
-          const levelOrder = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1 };
-          const userLevelValue = levelOrder[userLevel] || 0;
-          const requiredLevelValue = levelOrder[requiredLevel as keyof typeof levelOrder] || 0;
-          
-          console.log(`Skill level comparison for ${skillName}: user=${userLevelValue}, required=${requiredLevelValue}`);
-          
-          if (userLevelValue < requiredLevelValue) {
-            console.log(`Skill level filter failed for ${skillName} in user: ${jobSeeker.full_name}`);
-            return false;
-          }
-        }
-      }
-
-      return true;
-    });
-    
-        console.log(`Filtering result: ${filteredResult.length} users out of ${jobSeekers.length}`);
-    return filteredResult;
-  };
-
-  // フィルタ変更時に求職者リストを更新
-  useEffect(() => {
-    if (jobSeekers.length > 0) {
-      const filtered = applyFilters(jobSeekers, currentFilters);
-      setFilteredJobSeekers(filtered);
-    }
-  }, [jobSeekers, currentFilters]);
-
-  // 利用可能なスキルを取得
-  const getAvailableSkills = (): string[] => {
-    return ALL_SKILLS;
-  };
-
-  const toggleJobSeekerSelection = (jobSeeker: JobSeeker) => {
-    setSelectedJobSeekers(prev => {
-      const isSelected = prev.some(selected => selected.id === jobSeeker.id);
-      if (isSelected) {
-        return prev.filter(selected => selected.id !== jobSeeker.id);
-      } else {
-        return [...prev, jobSeeker];
-      }
-    });
-  };
-
-  const toggleAllJobSeekers = () => {
-    if (selectedJobSeekers.length === filteredJobSeekers.length) {
-      setSelectedJobSeekers([]);
-    } else {
-      setSelectedJobSeekers([...filteredJobSeekers]);
-    }
-  };
-
-  const deleteJobSeeker = async (id: string, name: string) => {
-    if (!confirm(`求職者「${name}」を削除しますか？この操作は取り消せません。`)) {
-      return;
-    }
-
+  // 面接再有効化
+  const resetInterview = async (userId: number) => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        alert('認証トークンが見つかりません');
-        return;
-      }
-
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      const response = await fetch(`${apiUrl}/api/admin/jobseekers/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setJobSeekers(prev => prev.filter(seeker => seeker.id !== id));
-        setFilteredJobSeekers(prev => prev.filter(seeker => seeker.id !== id));
-        setSelectedJobSeekers(prev => prev.filter(seeker => seeker.id !== id));
-        alert('求職者を削除しました');
-      } else {
-        alert('削除に失敗しました: ' + result.error);
-      }
-    } catch (error) {
-      console.error('削除エラー:', error);
-      alert('削除に失敗しました');
-    }
-  };
-
-  // 一括選択の処理
-  const handleSelectAll = () => {
-    if (isSelectAll) {
-      setSelectedJobSeekers([]);
-      setIsSelectAll(false);
-    } else {
-      setSelectedJobSeekers([...filteredJobSeekers]);
-      setIsSelectAll(true);
-    }
-  };
-
-  const handleSelectJobSeeker = (jobSeeker: JobSeeker) => {
-    setSelectedJobSeekers(prev => {
-      const isSelected = prev.some(js => js.id === jobSeeker.id);
-      if (isSelected) {
-        return prev.filter(js => js.id !== jobSeeker.id);
-      } else {
-        return [...prev, jobSeeker];
-      }
-    });
-  };
-
-  const isJobSeekerSelected = (jobSeeker: JobSeeker) => {
-    return selectedJobSeekers.some(js => js.id === jobSeeker.id);
-  };
-
-  // 一次面接開始機能
-  const startBulkInterview = async () => {
-    if (selectedJobSeekers.length === 0) {
-      toast({
-        title: "エラー",
-        description: "面接を開始する求職者を選択してください",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setBulkOperationLoading(true);
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        throw new Error('認証トークンが見つかりません');
-      }
-
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      
-      // 各求職者に対して面接トークンを生成
-      const results = await Promise.allSettled(
-        selectedJobSeekers.map(async (jobSeeker) => {
-          const response = await fetch(`${apiUrl}/api/documents/interview-token/${jobSeeker.user_id}`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            return { success: true, jobSeeker, token: result.data.token };
-          } else {
-            return { success: false, jobSeeker, error: 'トークン生成に失敗' };
-          }
-        })
-      );
-
-      const successfulInterviews = results
-        .filter((result): result is PromiseFulfilledResult<{ success: true; jobSeeker: JobSeeker; token: string }> => 
-          result.status === 'fulfilled' && result.value.success
-        )
-        .map(result => result.value);
-
-      const failedInterviews = results
-        .filter((result): result is PromiseFulfilledResult<{ success: false; jobSeeker: JobSeeker; error: string }> => 
-          result.status === 'fulfilled' && !result.value.success
-        )
-        .map(result => result.value);
-
-      // 成功した面接のURLを表示
-      if (successfulInterviews.length > 0) {
-        const urls = successfulInterviews.map(item => 
-          `${item.jobSeeker.full_name}: https://interview.justjoin.jp?token=${item.token}`
-        ).join('\n');
-        
-        // クリップボードにコピー
-        await navigator.clipboard.writeText(urls);
-        
-        // 面接開始URLをアラートで表示
-        const interviewUrls = successfulInterviews.map(item => 
-          `【${item.jobSeeker.full_name}】\nhttps://interview.justjoin.jp?token=${item.token}\n`
-        ).join('\n');
-        
-        alert(`面接開始URLをクリップボードにコピーしました。\n\n${interviewUrls}\n\n※求職者はログインしていないとinterview.justjoin.jpにアクセスできません。`);
-        
-        toast({
-          title: "面接開始URL生成完了",
-          description: `${successfulInterviews.length}件の面接URLをクリップボードにコピーしました。`,
-        });
-      }
-
-      if (failedInterviews.length > 0) {
-        toast({
-          title: "一部の面接開始に失敗",
-          description: `${failedInterviews.length}件の面接開始に失敗しました。`,
-          variant: "destructive",
-        });
-      }
-
-    } catch (error) {
-      console.error('面接開始エラー:', error);
-      toast({
-        title: "エラー",
-        description: "面接開始中にエラーが発生しました",
-        variant: "destructive",
-      });
-    } finally {
-      setBulkOperationLoading(false);
-    }
-  };
-
-  // スポット通知一括送信
-  const sendBulkSpotNotification = async () => {
-    const targetJobSeekers = selectedJobSeekers.length > 0 ? selectedJobSeekers : filteredJobSeekers;
-    
-    if (targetJobSeekers.length === 0) {
-      toast({
-        title: "エラー",
-        description: "通知を送信する求職者が見つかりません",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!spotNotificationData.title || !spotNotificationData.message) {
-      toast({
-        title: "エラー",
-        description: "通知のタイトルとメッセージを入力してください",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setBulkOperationLoading(true);
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        throw new Error('認証トークンが見つかりません');
-      }
-
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      
-      // スポット通知を送信（履歴も保存される）
-      const response = await fetch(`${apiUrl}/api/notifications/admin/send-spot`, {
+      const response = await fetch(`/api/documents/admin/interview-reset/${userId}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: spotNotificationData.title,
-          message: spotNotificationData.message,
-          type: spotNotificationData.type,
-          targetUsers: selectedJobSeekers.length > 0 ? 'selected' : 'all',
-          selectedUserIds: selectedJobSeekers.length > 0 ? selectedJobSeekers.map(js => js.user_id) : undefined
-        }),
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
       });
       
-      if (!response.ok) {
-        throw new Error('スポット通知の送信に失敗しました');
-      }
-      
-      const result = await response.json();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'スポット通知の送信に失敗しました');
-      }
-
-      // 成功メッセージを表示
-      const targetType = selectedJobSeekers.length > 0 ? '選択された求職者' : 'フィルタ結果の全員';
-      const recipientCount = selectedJobSeekers.length > 0 ? selectedJobSeekers.length : filteredJobSeekers.length;
-      
-      toast({
-        title: "スポット通知送信完了",
-        description: `${recipientCount}件の通知を${targetType}に送信しました`,
-      });
-
-      // モーダルを閉じる
-      setShowSpotNotificationModal(false);
-      setSpotNotificationData({ title: '', message: '', type: 'info' });
-
-    } catch (error) {
-      console.error('通知送信エラー:', error);
-      toast({
-        title: "エラー",
-        description: "通知送信中にエラーが発生しました",
-        variant: "destructive",
-      });
-    } finally {
-      setBulkOperationLoading(false);
-    }
-  };
-
-  // Excel一覧抽出
-  const exportToExcel = () => {
-    if (filteredJobSeekers.length === 0) {
-      toast({
-        title: "エラー",
-        description: "エクスポートするデータがありません",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      // CSVデータの作成
-      const headers = ['名前', '年齢', '性別', '国籍', 'メールアドレス', '電話番号', '希望職種', '経験年数'];
-      const csvData = [
-        headers.join(','),
-        ...filteredJobSeekers.map(seeker => [
-          seeker.full_name || '',
-          getDisplayAge(seeker) || '',
-          getGenderLabel(seeker.gender || ''),
-          seeker.nationality || '',
-          seeker.email || seeker.user_email || '',
-          seeker.phone || '',
-          seeker.desired_job_title || '',
-          seeker.experience_years || 0
-        ].join(','))
-      ].join('\n');
-
-      // BOMを追加して日本語文字化けを防ぐ
-      const bom = '\uFEFF';
-      const blob = new Blob([bom + csvData], { type: 'text/csv;charset=utf-8;' });
-      
-      // ダウンロード
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `求職者一覧_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      toast({
-        title: "エクスポート完了",
-        description: `${filteredJobSeekers.length}件のデータをCSVファイルでダウンロードしました`,
-      });
-
-    } catch (error) {
-      console.error('エクスポートエラー:', error);
-      toast({
-        title: "エラー",
-        description: "エクスポート中にエラーが発生しました",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // 面接状態表示のヘルパー関数
-  const getInterviewStatusDisplay = (userId: string) => {
-    const status = interviewStatuses[userId];
-    if (!status) return { text: '読み込み中...', color: 'bg-gray-100 text-gray-600' };
-    
-    switch (status.status) {
-      case 'not_public':
-        return { text: '公開前', color: 'bg-gray-100 text-gray-600' };
-      case 'not_created':
-        return { text: '受験前', color: 'bg-blue-100 text-blue-700' };
-      case 'available':
-        return { text: '受験前', color: 'bg-blue-100 text-blue-700' };
-      case 'completed':
-        return { text: '受験完了', color: 'bg-green-100 text-green-700' };
-      default:
-        return { text: '不明', color: 'bg-gray-100 text-gray-600' };
-    }
-  };
-
-  // 面接のオンオフ機能
-  const toggleInterviewVisibility = async (enabled: boolean) => {
-    if (selectedJobSeekers.length === 0) {
-      toast({
-        title: "エラー",
-        description: "面接表示を制御する求職者を選択してください",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setBulkOperationLoading(true);
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        throw new Error('認証トークンが見つかりません');
-      }
-
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      
-      // 各求職者に対して面接表示設定を更新
-      const results = await Promise.allSettled(
-        selectedJobSeekers.map(async (jobSeeker) => {
-          const response = await fetch(`${apiUrl}/api/documents/admin/jobseekers/${jobSeeker.id}/interview-visibility`, {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              interviewEnabled: enabled
-            }),
-          });
-          
-          if (response.ok) {
-            return { success: true, jobSeeker };
-          } else {
-            return { success: false, jobSeeker, error: '設定更新に失敗' };
-          }
-        })
-      );
-
-      const successfulUpdates = results
-        .filter((result): result is PromiseFulfilledResult<{ success: true; jobSeeker: JobSeeker }> => 
-          result.status === 'fulfilled' && result.value.success
-        )
-        .map(result => result.value);
-
-      const failedUpdates = results
-        .filter((result): result is PromiseFulfilledResult<{ success: false; jobSeeker: JobSeeker; error: string }> => 
-          result.status === 'fulfilled' && !result.value.success
-        )
-        .map(result => result.value);
-
-      if (successfulUpdates.length > 0) {
+      if (response.ok) {
         toast({
-          title: "面接表示設定更新完了",
-          description: `${successfulUpdates.length}件の面接表示設定を${enabled ? '有効' : '無効'}にしました`,
+          title: "成功",
+          description: "面接が再有効化されました。",
         });
         
-        // 求職者データを再取得
-        fetchJobSeekers(true);
+        // 面接状態を更新
+        fetchAllInterviewStatuses();
+      } else {
+        throw new Error('面接再有効化に失敗しました');
       }
-
-      if (failedUpdates.length > 0) {
-        toast({
-          title: "一部の設定更新に失敗",
-          description: `${failedUpdates.length}件の設定更新に失敗しました`,
-          variant: "destructive",
-        });
-      }
-
     } catch (error) {
-      console.error('面接表示設定更新エラー:', error);
+      console.error('面接再有効化エラー:', error);
       toast({
         title: "エラー",
-        description: "面接表示設定の更新中にエラーが発生しました",
-        variant: "destructive",
+        description: "面接再有効化に失敗しました。",
+        variant: "destructive"
       });
-    } finally {
-      setBulkOperationLoading(false);
     }
   };
 
-  // フィルターコンポーネントの状態を管理
-  const [showAdvancedFilterModal, setShowAdvancedFilterModal] = useState(false);
-  const [filterChange, setFilterChange] = useState(0); // フィルターが変更されたことを検知
-
-  const handleFilterChange = (key: keyof AdvancedFilters, value: any) => {
-    setCurrentFilters(prev => ({
-      ...prev,
-      [key]: value
-    }));
-    setFilterChange(prev => prev + 1); // フィルターが変更されたことを検知
+  // 面接状態表示用の関数
+  const getInterviewStatusDisplay = (userId: number) => {
+    const status = interviewStatuses[userId];
+    if (!status) return { text: '確認中...', color: 'bg-gray-100 text-gray-800' };
+    
+    if (!status.isEnabled) {
+      return { text: '無効', color: 'bg-gray-100 text-gray-800' };
+    }
+    
+    if (status.isUsed) {
+      return { text: `完了 (${status.attemptCount}回)`, color: 'bg-green-100 text-green-800' };
+    }
+    
+    return { text: `有効 (${status.attemptCount}回)`, color: 'bg-blue-100 text-blue-800' };
   };
 
-  const handleClearFilters = () => {
-    const emptyFilters: AdvancedFilters = {
-      searchTerm: '',
-      ageValue: 0,
-      ageCondition: 'gte',
-      gender: 'all',
-      nationality: 'all',
-      hasWorkExperience: false,
-      japaneseLevel: 'all',
-      skillLevelFilters: {},
-      hasSelfIntroduction: false,
-      hasPhoto: false,
-      hasWorkHistory: false,
-      hasQualifications: false,
-      spouseStatus: 'all',
-      commutingTime: 'all',
-    };
-    setCurrentFilters(emptyFilters);
-    setFilterChange(prev => prev + 1); // フィルターが変更されたことを検知
+  // 初期データ取得
+  useEffect(() => {
+    if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+      fetchJobSeekers();
+    }
+  }, [user]);
+
+  // 面接状態取得
+  useEffect(() => {
+    if (jobSeekers.length > 0) {
+      fetchAllInterviewStatuses();
+      // 面接録画も同時に取得
+      jobSeekers.forEach(jobSeeker => {
+        fetchInterviewRecordings(jobSeeker.user_id);
+      });
+    }
+  }, [jobSeekers]);
+
+  // 検索・フィルタリング
+  useEffect(() => {
+    let filtered = jobSeekers;
+    
+    // 検索語によるフィルタリング
+    if (searchTerm) {
+      filtered = filtered.filter(jobSeeker => 
+        jobSeeker.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        jobSeeker.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        jobSeeker.phone?.includes(searchTerm)
+      );
+    }
+    
+    // 詳細フィルター適用
+    if (filters.skills.length > 0) {
+      filtered = filtered.filter(jobSeeker => 
+        filters.skills.some(skill => 
+          jobSeeker.skills && JSON.stringify(jobSeeker.skills).toLowerCase().includes(skill.toLowerCase())
+        )
+      );
+    }
+    
+    if (filters.gender.length > 0) {
+      filtered = filtered.filter(jobSeeker => 
+        jobSeeker.gender && filters.gender.includes(jobSeeker.gender)
+      );
+    }
+    
+    if (filters.hasSpouse !== null) {
+      filtered = filtered.filter(jobSeeker => 
+        jobSeeker.hasSpouse === filters.hasSpouse
+      );
+    }
+    
+    if (filters.desiredPosition.length > 0) {
+      filtered = filtered.filter(jobSeeker => 
+        jobSeeker.desiredPosition && 
+        filters.desiredPosition.some(position => 
+          jobSeeker.desiredPosition?.toLowerCase().includes(position.toLowerCase())
+        )
+      );
+    }
+    
+    if (filters.address.length > 0) {
+      filtered = filtered.filter(jobSeeker => 
+        jobSeeker.address && 
+        filters.address.some(addr => 
+          jobSeeker.address?.toLowerCase().includes(addr.toLowerCase())
+        )
+      );
+    }
+    
+    if (filters.interviewAttempts > 0) {
+      filtered = filtered.filter(jobSeeker => {
+        const status = interviewStatuses[jobSeeker.user_id];
+        return status && status.attemptCount >= filters.interviewAttempts;
+      });
+    }
+    
+    setFilteredJobSeekers(filtered);
+  }, [jobSeekers, searchTerm, filters, interviewStatuses]);
+
+  // 全選択・全解除
+  const toggleSelectAll = () => {
+    if (selectedJobSeekers.size === filteredJobSeekers.length) {
+      setSelectedJobSeekers(new Set());
+    } else {
+      setSelectedJobSeekers(new Set(filteredJobSeekers.map(js => js.user_id)));
+    }
   };
 
-  const handleRemoveFilter = (key: keyof AdvancedFilters, value: any) => {
-    setCurrentFilters(prev => ({
-      ...prev,
-      [key]: value
-    }));
-    setFilterChange(prev => prev + 1);
+  // 個別選択・解除
+  const toggleSelection = (userId: number) => {
+    const newSelected = new Set(selectedJobSeekers);
+    if (newSelected.has(userId)) {
+      newSelected.delete(userId);
+    } else {
+      newSelected.add(userId);
+    }
+    setSelectedJobSeekers(newSelected);
   };
+
+  // 詳細表示モーダルを開く
+  const openDetailsModal = (jobSeeker: JobSeeker) => {
+    setSelectedJobSeekerForDetails(jobSeeker);
+    setShowDetailsModal(true);
+  };
+
+  // 録画表示モーダルを開く
+  const openRecordingsModal = async (jobSeeker: JobSeeker) => {
+    setSelectedJobSeekerForRecordings(jobSeeker);
+    setShowRecordingsModal(true);
+    
+    // 録画データを取得
+    await fetchInterviewRecordings(jobSeeker.user_id);
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <AdminPageLayout title="管理者ダッシュボード">
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">求職者管理</h1>
-            <p className="text-muted-foreground">求職者の管理と書類生成を行います</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                console.log('Current jobSeekers:', jobSeekers);
-                // console.log('Current documentData:', documentData); // この行は削除
-                console.log('Current filteredJobSeekers:', filteredJobSeekers);
-              }}
-            >
-              デバッグ情報
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={forceRefresh}
-              disabled={isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              更新
-            </Button>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">求職者管理</h1>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setShowAdvancedFilters(true)}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <Filter className="h-4 w-4" />
+            詳細フィルター
+          </Button>
+          <Button
+            onClick={fetchJobSeekers}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            更新
+          </Button>
+        </div>
+      </div>
+
+      {/* 検索・フィルター */}
+      <div className="mb-6">
+        <div className="flex gap-4 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="名前、メール、電話番号で検索..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
         </div>
+      </div>
 
-        {/* フィルタセクション */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              フィルタ
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* クイックフィルター */}
-              <QuickFilters
-                filters={currentFilters}
-                onFilterChange={handleFilterChange}
+      {/* 選択された求職者に対する操作 */}
+      {selectedJobSeekers.size > 0 && (
+        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+          <div className="flex items-center justify-between">
+            <p className="text-blue-800">
+              {selectedJobSeekers.size}人の求職者が選択されています
+            </p>
+            <div className="flex gap-2">
+              <BulkDocumentGenerator 
+                selectedJobSeekers={Array.from(selectedJobSeekers)}
+                onComplete={() => setSelectedJobSeekers(new Set())}
               />
-              
-              {/* アクティブフィルター表示 */}
-              <ActiveFiltersDisplay
-                filters={currentFilters}
-                onClearFilter={handleRemoveFilter}
-                onClearAll={handleClearFilters}
-              />
-              
-              {/* 詳細フィルター */}
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAdvancedFilterModal(true)}
-                >
-                  <Filter className="h-4 w-4 mr-2" />
-                  詳細フィルター
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearFilters}
-                >
-                  フィルタークリア
-                </Button>
-              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+      )}
 
-        {/* 一括操作バー */}
-        {filteredJobSeekers.length > 0 && selectedJobSeekers.length > 0 && (
-          <Card className="mb-6 border-blue-200 bg-blue-50">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-medium text-blue-800">
-                    {selectedJobSeekers.length}件の求職者が選択されています
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => toggleInterviewVisibility(true)}
-                    disabled={bulkOperationLoading}
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <Play className="h-4 w-4 mr-2" />
-                    面接有効化
-                  </Button>
-                  <Button
-                    onClick={() => toggleInterviewVisibility(false)}
-                    disabled={bulkOperationLoading}
-                    size="sm"
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    面接無効化
-                  </Button>
-
-                  <Button
-                    onClick={() => setShowSpotNotificationModal(true)}
-                    disabled={bulkOperationLoading}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    スポット通知
-                  </Button>
-                  <Button
-                    onClick={() => setShowDocumentGenerator(true)}
-                    disabled={bulkOperationLoading}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
-                    書類一括作成
-                  </Button>
-                  <Button
-                    onClick={exportToExcel}
-                    disabled={bulkOperationLoading}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <FileSpreadsheet className="h-4 w-4 mr-2" />
-                    Excel抽出
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* フィルタ結果に対する一括操作バー */}
-        {filteredJobSeekers.length > 0 && selectedJobSeekers.length === 0 && (
-          <Card className="mb-6 border-orange-200 bg-orange-50">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-medium text-orange-800">
-                    フィルタ結果: {filteredJobSeekers.length}件の求職者が表示されています
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => setShowSpotNotificationModal(true)}
-                    disabled={bulkOperationLoading}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    全員にスポット通知
-                  </Button>
-                  <Button
-                    onClick={exportToExcel}
-                    disabled={bulkOperationLoading}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <FileSpreadsheet className="h-4 w-4 mr-2" />
-                    フィルタ結果をExcel抽出
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 求職者一覧 */}
-        <div className="space-y-4">
-          {loading ? (
-            <div className="flex justify-center items-center py-8">
-              <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-              <span className="ml-2 text-gray-600">データを読み込み中...</span>
-            </div>
-          ) : error ? (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : filteredJobSeekers.length === 0 ? (
-            <Alert>
-              <Users className="h-4 w-4" />
-              <AlertDescription>
-                条件に一致する求職者が見つかりませんでした。
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-4">
-              {/* 一括選択ヘッダー */}
-              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSelectAll}
-                  className="flex items-center gap-2"
-                >
-                  {isSelectAll ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                  {isSelectAll ? '全選択解除' : '全選択'}
-                </Button>
-                <span className="text-sm text-gray-600">
-                  {selectedJobSeekers.length} / {filteredJobSeekers.length} 選択中
-                </span>
-              </div>
-
-              {/* 求職者カード */}
-              {filteredJobSeekers.map((jobSeeker) => (
-                <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4 flex-1">
-                        {/* 選択チェックボックス */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleSelectJobSeeker(jobSeeker)}
-                          className={`flex items-center gap-2 ${
-                            isJobSeekerSelected(jobSeeker) 
-                              ? 'bg-blue-100 border-blue-300' 
-                              : 'bg-white'
-                          }`}
-                        >
-                          {isJobSeekerSelected(jobSeeker) ? (
-                            <CheckSquare className="h-4 w-4 text-blue-600" />
-                          ) : (
-                            <Square className="h-4 w-4" />
-                          )}
-                        </Button>
-
-                        {/* 顔写真 */}
-                        <div className="flex-shrink-0">
-                          {jobSeeker.profile_photo ? (
-                            <div className="w-[76px] h-[102px]">
-                              <img
-                                src={jobSeeker.profile_photo}
-                                alt={`${jobSeeker.full_name}の写真`}
-                                className="w-full h-full object-cover rounded-lg border"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-[76px] h-[102px] bg-gray-200 rounded-lg border flex items-center justify-center">
-                              <span className="text-gray-500 text-xs">写真なし</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 求職者情報 */}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-4 mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {jobSeeker.full_name || '名前未設定'}
-                            </h3>
-                            <Badge variant="secondary">
-                              {getDisplayAge(jobSeeker) ? `${getDisplayAge(jobSeeker)}歳` : '年齢未設定'}
-                            </Badge>
-                            <Badge variant="outline">
-                              {getGenderLabel(jobSeeker.gender || '')}
-                            </Badge>
-                            {jobSeeker.nationality && (
-                              <Badge variant="outline">
-                                {jobSeeker.nationality}
-                              </Badge>
-                            )}
-                            {/* 面接表示状態バッジ */}
-                            <Badge 
-                              variant={jobSeeker.interviewEnabled ? "default" : "secondary"}
-                              className={jobSeeker.interviewEnabled ? "bg-green-500" : "bg-gray-400"}
-                            >
-                              {jobSeeker.interviewEnabled ? "面接有効" : "面接無効"}
-                            </Badge>
-                            
-                            {/* 面接状態バッジ */}
-                            <Badge 
-                              variant="outline"
-                              className={`${getInterviewStatusDisplay(jobSeeker.user_id).color}`}
-                            >
-                              {getInterviewStatusDisplay(jobSeeker.user_id).text}
-                            </Badge>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                            <div>
-                              <p><strong>生年月日:</strong> {jobSeeker.date_of_birth ? new Date(jobSeeker.date_of_birth).toLocaleDateString('ja-JP') : '未設定'}</p>
-                              <p><strong>国籍:</strong> {jobSeeker.nationality || '未設定'}</p>
-                              <p><strong>日本語資格:</strong> {jobSeeker.certificateStatus?.name || '未設定'}</p>
-                              <p><strong>メール:</strong> {jobSeeker.email || jobSeeker.user_email || '未設定'}</p>
-                            </div>
-                            <div>
-                              <p><strong>電話:</strong> {jobSeeker.phone || '未設定'}</p>
-                              <p><strong>登録日:</strong> {new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</p>
-                            </div>
-                          </div>
-                        </div>
+      {/* 求職者一覧 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filteredJobSeekers.map((jobSeeker) => {
+          const interviewStatus = getInterviewStatusDisplay(jobSeeker.user_id);
+          const recordings = interviewRecordings[jobSeeker.user_id] || [];
+          
+          return (
+            <Card key={jobSeeker.user_id} className="hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg font-semibold text-gray-900 mb-2">
+                      {jobSeeker.name || '名前未設定'}
+                    </CardTitle>
+                    <div className="space-y-1 text-sm text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-3 w-3" />
+                        <span className="truncate">{jobSeeker.email}</span>
                       </div>
-
-                      {/* アクションボタン */}
-                      <div className="flex flex-col gap-2 ml-4">
-                        <Button
-                          onClick={() => openDetailModal(jobSeeker)}
-                          size="sm"
-                          variant="outline"
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          詳細表示
-                        </Button>
-                        <Button
-                          onClick={() => openDocumentGenerator(jobSeeker)}
-                          size="sm"
-                          variant="outline"
-                        >
-                          <FileText className="h-4 w-4 mr-2" />
-                          書類作成
-                        </Button>
-                        <Button
-                          onClick={() => deleteJobSeeker(jobSeeker.id, jobSeeker.full_name)}
-                          size="sm"
-                          variant="destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          削除
-                        </Button>
-                      </div>
+                      {jobSeeker.phone && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-3 w-3" />
+                          <span>{jobSeeker.phone}</span>
+                        </div>
+                      )}
+                      {jobSeeker.address && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3 w-3" />
+                          <span className="truncate">{jobSeeker.address}</span>
+                        </div>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                  
+                  {/* 選択チェックボックス */}
+                  <Checkbox
+                    checked={selectedJobSeekers.has(jobSeeker.user_id)}
+                    onCheckedChange={() => toggleSelection(jobSeeker.user_id)}
+                  />
+                </div>
+              </CardHeader>
+              
+              <CardContent className="pt-0">
+                {/* 面接状態 */}
+                <div className="mb-3">
+                  <Badge className={interviewStatus.color}>
+                    {interviewStatus.text}
+                  </Badge>
+                </div>
+                
+                {/* 面接受験回数 */}
+                {interviewStatuses[jobSeeker.user_id]?.attemptCount > 0 && (
+                  <div className="mb-3">
+                    <Badge variant="secondary" className="text-xs">
+                      面接{interviewStatuses[jobSeeker.user_id]?.attemptCount}回
+                    </Badge>
+                  </div>
+                )}
+                
+                {/* 録画データ */}
+                {recordings.length > 0 && (
+                  <div className="mb-3">
+                    <Badge variant="outline" className="text-xs flex items-center gap-1">
+                      <FileVideo className="h-3 w-3" />
+                      録画{recordings.length}件
+                    </Badge>
+                  </div>
+                )}
+                
+                {/* アクションボタン */}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openDetailsModal(jobSeeker)}
+                    className="flex-1"
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    詳細
+                  </Button>
+                  
+                  {recordings.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openRecordingsModal(jobSeeker)}
+                      className="flex-1"
+                    >
+                      <Video className="h-3 w-3 mr-1" />
+                      録画
+                    </Button>
+                  )}
+                  
+                  {interviewStatuses[jobSeeker.user_id]?.isUsed && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => resetInterview(jobSeeker.user_id)}
+                      className="flex-1"
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      面接再有効化
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* 詳細表示モーダル */}
+      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>求職者詳細</DialogTitle>
+          </DialogHeader>
+          
+          {selectedJobSeekerForDetails && (
+            <div className="space-y-6">
+              {/* 基本情報 */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">基本情報</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">名前</label>
+                    <p className="text-gray-900">{selectedJobSeekerForDetails.name || '未設定'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">メール</label>
+                    <p className="text-gray-900">{selectedJobSeekerForDetails.email}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">電話番号</label>
+                    <p className="text-gray-900">{selectedJobSeekerForDetails.phone || '未設定'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">住所</label>
+                    <p className="text-gray-900">{selectedJobSeekerForDetails.address || '未設定'}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              {/* 面接情報 */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">面接情報</h3>
+                {(() => {
+                  const status = interviewStatuses[selectedJobSeekerForDetails.user_id];
+                  if (!status) return <p className="text-gray-500">確認中...</p>;
+                  
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">面接状態</label>
+                        <Badge className={getInterviewStatusDisplay(selectedJobSeekerForDetails.user_id).color}>
+                          {getInterviewStatusDisplay(selectedJobSeekerForDetails.user_id).text}
+                        </Badge>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">受験回数</label>
+                        <p className="text-gray-900">{status.attemptCount}回</p>
+                      </div>
+                      {status.firstAttemptAt && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">初回受験日</label>
+                          <p className="text-gray-900">{new Date(status.firstAttemptAt).toLocaleDateString('ja-JP')}</p>
+                        </div>
+                      )}
+                      {status.lastAttemptAt && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">最終受験日</label>
+                          <p className="text-gray-900">{new Date(status.lastAttemptAt).toLocaleDateString('ja-JP')}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+              
+              <Separator />
+              
+              {/* スキル情報 */}
+              {selectedJobSeekerForDetails.skills && (
+                <>
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">スキル</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(selectedJobSeekerForDetails.skills).map(([skill, level]) => (
+                        <Badge key={skill} variant="secondary">
+                          {skill}: {level}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+              
+              {/* その他の情報 */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">その他の情報</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">性別</label>
+                    <p className="text-gray-900">{selectedJobSeekerForDetails.gender || '未設定'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">配偶者</label>
+                    <p className="text-gray-900">{selectedJobSeekerForDetails.hasSpouse ? 'あり' : 'なし'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">希望職種</label>
+                    <p className="text-gray-900">{selectedJobSeekerForDetails.desiredPosition || '未設定'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">登録日</label>
+                    <p className="text-gray-900">
+                      {selectedJobSeekerForDetails.created_at 
+                        ? new Date(selectedJobSeekerForDetails.created_at).toLocaleDateString('ja-JP')
+                        : '未設定'
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
-        </div>
+        </DialogContent>
+      </Dialog>
 
-        {/* 書類生成モーダル */}
-        {showDocumentGenerator && selectedJobSeeker && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">書類作成 - {selectedJobSeeker.full_name}</h3>
-                <Button
-                  onClick={closeDocumentGenerator}
-                  variant="outline"
-                  size="sm"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+      {/* 録画表示モーダル */}
+      <Dialog open={showRecordingsModal} onOpenChange={setShowRecordingsModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>面接録画</DialogTitle>
+          </DialogHeader>
+          
+          {selectedJobSeekerForRecordings && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-2">求職者情報</h4>
+                <p className="text-gray-700">
+                  {selectedJobSeekerForRecordings.name || '名前未設定'} ({selectedJobSeekerForRecordings.email})
+                </p>
               </div>
               
-              <DocumentGenerator
-                isAdminMode={true}
-                jobSeekerData={selectedJobSeeker}
-                onClose={closeDocumentGenerator}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* スポット通知モーダル */}
-        {showSpotNotificationModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold mb-4">スポット通知作成</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="notification-title">タイトル</Label>
-                  <Input
-                    id="notification-title"
-                    value={spotNotificationData.title}
-                    onChange={(e) => setSpotNotificationData(prev => ({
-                      ...prev,
-                      title: e.target.value
-                    }))}
-                    placeholder="通知のタイトルを入力"
-                  />
-                </div>
+              {(() => {
+                const recordings = interviewRecordings[selectedJobSeekerForRecordings.user_id] || [];
                 
-                <div>
-                  <Label htmlFor="notification-message">メッセージ</Label>
-                  <textarea
-                    id="notification-message"
-                    value={spotNotificationData.message}
-                    onChange={(e) => setSpotNotificationData(prev => ({
-                      ...prev,
-                      message: e.target.value
-                    }))}
-                    placeholder="通知のメッセージを入力"
-                    className="w-full p-2 border border-gray-300 rounded-md resize-none h-24"
-                  />
-                </div>
+                if (recordings.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <FileVideo className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-500">録画データがありません</p>
+                    </div>
+                  );
+                }
                 
-                <div>
-                  <Label htmlFor="notification-type">タイプ</Label>
-                  <Select
-                    value={spotNotificationData.type}
-                    onValueChange={(value: 'info' | 'success' | 'warning' | 'error') => 
-                      setSpotNotificationData(prev => ({ ...prev, type: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="info">情報</SelectItem>
-                      <SelectItem value="success">成功</SelectItem>
-                      <SelectItem value="warning">警告</SelectItem>
-                      <SelectItem value="error">エラー</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              <div className="flex gap-2 mt-6">
-                <Button
-                  onClick={sendBulkSpotNotification}
-                  disabled={bulkOperationLoading}
-                  className="flex-1"
-                >
-                  {selectedJobSeekers.length > 0 
-                    ? `${selectedJobSeekers.length}件に送信`
-                    : `フィルタ結果全員(${filteredJobSeekers.length}件)に送信`
-                  }
-                </Button>
-                <Button
-                  onClick={() => setShowSpotNotificationModal(false)}
-                  variant="outline"
-                >
-                  キャンセル
-                </Button>
-              </div>
+                return (
+                  <div className="space-y-4">
+                    {recordings.map((recording, index) => (
+                      <div key={recording.id} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h5 className="font-medium text-gray-900">
+                              面接録画 #{index + 1}
+                            </h5>
+                            <p className="text-sm text-gray-500">
+                              セッションID: {recording.sessionId}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge 
+                              variant={recording.status === 'completed' ? 'default' : 
+                                     recording.status === 'processing' ? 'secondary' : 'destructive'}
+                            >
+                              {recording.status === 'completed' ? '完了' : 
+                               recording.status === 'processing' ? '処理中' : 'エラー'}
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">録画時間</label>
+                            <p className="text-gray-900 flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              {Math.floor(recording.duration / 60)}分{recording.duration % 60}秒
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">録画日時</label>
+                            <p className="text-gray-900">
+                              {new Date(recording.createdAt).toLocaleString('ja-JP')}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {recording.status === 'completed' && recording.recordingUrl && (
+                          <div className="mt-4">
+                            <label className="text-sm font-medium text-gray-700 mb-2 block">録画プレビュー</label>
+                            <div className="bg-black rounded-lg overflow-hidden">
+                              <video 
+                                controls 
+                                className="w-full h-64 object-contain"
+                                src={recording.recordingUrl}
+                              >
+                                お使いのブラウザは動画再生をサポートしていません。
+                              </video>
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <Button size="sm" variant="outline" asChild>
+                                <a href={recording.recordingUrl} download target="_blank" rel="noopener noreferrer">
+                                  <Download className="h-4 w-4 mr-1" />
+                                  ダウンロード
+                                </a>
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
-          </div>
-        )}
+          )}
+        </DialogContent>
+      </Dialog>
 
-        {/* 一括書類生成モーダル */}
-        {showDocumentGenerator && (
-          <>
-            {(() => {
-              console.log('=== AdminJobSeekers 選択された求職者 ===');
-              console.log('selectedJobSeekers:', selectedJobSeekers);
-              selectedJobSeekers.forEach((js, index) => {
-                console.log(`${index + 1}. ID: ${js.id}, user_id: ${js.user_id}`);
-                console.log(`   fullName: "${js.fullName}"`);
-                console.log(`   full_name: "${js.full_name}"`);
-                console.log(`   kana_last_name: "${js.kana_last_name}"`);
-                console.log(`   kana_first_name: "${js.kana_first_name}"`);
-                console.log(`   メール: ${js.email || js.user_email}`);
-              });
-              return null;
-            })()}
-            <BulkDocumentGenerator
-              selectedJobSeekers={selectedJobSeekers}
-              onClose={() => setShowDocumentGenerator(false)}
-              onComplete={() => {
-                setShowDocumentGenerator(false);
-                toast({
-                  title: "完了",
-                  description: "一括書類作成が完了しました",
-                });
-              }}
-            />
-          </>
-        )}
-
-        {/* 詳細表示モーダル */}
-        <JobSeekerDetailModal
-          jobSeeker={selectedDetailJobSeeker}
-          isOpen={showDetailModal}
-          onClose={closeDetailModal}
-        />
-
-        {/* 詳細フィルターモーダル */}
-        <AdvancedFilterModal
-          currentFilters={currentFilters}
-          onApplyFilters={handleApplyAdvancedFilters}
-          onClearFilters={handleClearFilters}
-          availableSkills={ALL_SKILLS}
-          open={showAdvancedFilterModal}
-          onOpenChange={setShowAdvancedFilterModal}
-        />
-      </div>
-    </AdminPageLayout>
+      {/* 詳細フィルターモーダル */}
+      <AdvancedFilterModal
+        open={showAdvancedFilters}
+        onOpenChange={setShowAdvancedFilters}
+        filters={filters}
+        onFiltersChange={setFilters}
+      />
+    </div>
   );
-} 
+};
+
+export { AdminJobSeekers };

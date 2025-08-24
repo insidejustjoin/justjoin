@@ -1,0 +1,10 @@
+{
+  "name": "Just Join AI Interview System",
+  "short_name": "AI Interview",
+  "description": "AI面接システム",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": []
+} 

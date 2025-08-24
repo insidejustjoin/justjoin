@@ -656,7 +656,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       }
 
       // 処理済みデータを返す
-      return {
+      const processedRow = {
         ...row,
         // 写真情報をuser_documentsから取得
         profile_photo: photoUrl,
@@ -686,6 +686,39 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         commuting_time: row.commuting_time || null,
         family_number: row.family_number || null
       };
+      
+      // 面接受験回数を取得
+      try {
+        const attemptsResult = await query(`
+          SELECT attempt_count, first_attempt_at, last_attempt_at
+          FROM interview_attempts
+          WHERE user_id = $1
+        `, [row.user_id]);
+        
+        if (attemptsResult.rows.length > 0) {
+          const attemptsData = attemptsResult.rows[0];
+          processedRow.interview_attempts = {
+            count: attemptsData.attempt_count,
+            firstAttemptAt: attemptsData.first_attempt_at,
+            lastAttemptAt: attemptsData.last_attempt_at
+          };
+        } else {
+          processedRow.interview_attempts = {
+            count: 0,
+            firstAttemptAt: null,
+            lastAttemptAt: null
+          };
+        }
+      } catch (error) {
+        console.warn(`面接受験回数取得エラー (ユーザーID: ${row.user_id}):`, error);
+        processedRow.interview_attempts = {
+          count: 0,
+          firstAttemptAt: null,
+          lastAttemptAt: null
+        };
+      }
+      
+      return processedRow;
     }));
     
     console.log(`管理者求職者一覧取得: ${processedRows.length}件`);
@@ -1863,7 +1896,7 @@ app.get('/api/health', (req, res) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 本番環境ではdistディレクトリから静的ファイルを配信
+// 本番環境でのみ静的ファイルを配信
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../dist')));
   
@@ -1875,6 +1908,14 @@ if (process.env.NODE_ENV === 'production') {
     }
     
     res.sendFile(path.join(__dirname, '../../dist/index.html'));
+  });
+} else {
+  // 開発環境ではAPIルートのみ処理
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    res.status(404).json({ error: 'Route not found' });
   });
 }
 
