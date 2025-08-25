@@ -141,13 +141,13 @@ export function JobSeekerMyPage() {
   const getInterviewStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /><FuriganaText text="完了" showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.completed')} showFurigana={showFurigana} /></Badge>;
       case 'in_progress':
-        return <Badge variant="default" className="bg-blue-500"><Clock className="h-3 w-3 mr-1" /><FuriganaText text="進行中" showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="default" className="bg-blue-500"><Clock className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.inProgress')} showFurigana={showFurigana} /></Badge>;
       case 'cancelled':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /><FuriganaText text="中断" showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.cancelled')} showFurigana={showFurigana} /></Badge>;
       default:
-        return <Badge variant="outline"><FuriganaText text="未受験" showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="outline"><FuriganaText text={t('myPage.notTaken')} showFurigana={showFurigana} /></Badge>;
     }
   };
 
@@ -550,7 +550,7 @@ export function JobSeekerMyPage() {
                         <div>
                           <p className="text-sm font-medium">
                             <FuriganaText 
-                              text="面接ステータス" 
+                              text={t('myPage.interviewStatus')} 
                               showFurigana={showFurigana}
                             />
                           </p>
@@ -563,7 +563,7 @@ export function JobSeekerMyPage() {
                       <div className="text-right">
                         <p className="text-sm text-gray-600">
                           <FuriganaText 
-                            text="受験回数" 
+                            text={t('myPage.examCount')} 
                             showFurigana={showFurigana}
                           />
                         </p>
@@ -575,7 +575,7 @@ export function JobSeekerMyPage() {
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <h4 className="text-sm font-medium mb-2">
                           <FuriganaText 
-                            text="最新の面接結果" 
+                            text={t('myPage.latestInterviewResults')} 
                             showFurigana={showFurigana}
                           />
                         </h4>
@@ -583,7 +583,7 @@ export function JobSeekerMyPage() {
                           <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                             <span className="text-gray-600">
                               <FuriganaText 
-                                text="完了日時:" 
+                                text={t('myPage.completionDateTime')} 
                                 showFurigana={showFurigana}
                               />
                             </span>
@@ -593,7 +593,7 @@ export function JobSeekerMyPage() {
                             <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                               <span className="text-gray-600">
                                 <FuriganaText 
-                                  text="総合スコア:" 
+                                  text={t('myPage.totalScore')} 
                                   showFurigana={showFurigana}
                                 />
                               </span>
