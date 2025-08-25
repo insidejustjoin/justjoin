@@ -305,7 +305,9 @@ export function JobSeekerMyPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">{t('loadingData')}</p>
+          <p className="text-gray-600">
+            <FuriganaText text={t('loadingData')} showFurigana={showFurigana} />
+          </p>
         </div>
       </div>
     );
@@ -319,7 +321,9 @@ export function JobSeekerMyPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">ログインページにリダイレクト中...</p>
+          <p className="text-gray-600">
+            <FuriganaText text="ログインページにリダイレクト中..." showFurigana={showFurigana} />
+          </p>
         </div>
       </div>
     );
@@ -331,7 +335,9 @@ export function JobSeekerMyPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">{t('loadingData')}</p>
+          <p className="text-gray-600">
+            <FuriganaText text={t('loadingData')} showFurigana={showFurigana} />
+          </p>
         </div>
       </div>
     );
@@ -340,7 +346,9 @@ export function JobSeekerMyPage() {
   if (user.user_type !== 'job_seeker') {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">求職者アカウントでログインしてください。</div>
+        <div className="text-lg">
+          <FuriganaText text="求職者アカウントでログインしてください。" showFurigana={showFurigana} />
+        </div>
       </div>
     );
   }
