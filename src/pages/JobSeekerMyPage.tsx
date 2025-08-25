@@ -374,7 +374,7 @@ export function JobSeekerMyPage() {
                 </h1>
                 <p className="text-gray-600 mt-2">
                   <FuriganaText 
-                    text={getMultilingualText('myPageDescription')} 
+                    text={t('myPage.myPageDescription')} 
                     showFurigana={showFurigana}
                   />
                 </p>

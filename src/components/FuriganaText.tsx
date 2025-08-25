@@ -56,7 +56,7 @@ export function FuriganaText({
         {segments.map((segment, index) => {
           if (segment.isKanji && segment.reading) {
             return (
-              <span key={index} className="inline-flex items-end">
+              <span key={index} className="inline-flex items-baseline">
                 <span>{segment.text}</span>
                 <span className="text-xs text-gray-500 ml-1 leading-none">({segment.reading})</span>
               </span>
