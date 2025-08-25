@@ -56,10 +56,10 @@ export function FuriganaText({
         {segments.map((segment, index) => {
           if (segment.isKanji && segment.reading) {
             return (
-              <ruby key={index} className="inline">
-                {segment.text}
-                <rt className="text-xs text-gray-500 leading-none">{segment.reading}</rt>
-              </ruby>
+              <span key={index} className="inline-flex items-center">
+                <span>{segment.text}</span>
+                <span className="text-xs text-gray-500 ml-1 leading-none">({segment.reading})</span>
+              </span>
             );
           } else {
             return <span key={index}>{segment.text}</span>;

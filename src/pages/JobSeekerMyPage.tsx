@@ -30,7 +30,7 @@ export function JobSeekerMyPage() {
   const [isStartingInterview, setIsStartingInterview] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   
-  // ふりがな表示設定
+  // ふりがな表示設定（デフォルトで表示）
   const [showFurigana, setShowFurigana] = useState(true);
 
   // 多言語表示用のヘルパー関数
