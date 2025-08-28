@@ -100,8 +100,8 @@ const translations: Translations = {
     'documents.addressPlaceholder': '例: 東京都渋谷区渋谷1-1-1',
     
     // 仮登録
-    'temporaryRegistration.title': '仮登録 - 新システム v3.0',
-    'temporaryRegistration.description': 'メールアドレスとお名前を入力して仮登録を開始してください（更新: 2025-08-29 00:45）',
+    'temporaryRegistration.title': '仮登録 - 新システム v4.0',
+    'temporaryRegistration.description': 'メールアドレスとお名前を入力して仮登録を開始してください（更新: 2025-08-29 01:15）',
     'temporaryRegistration.email': 'メールアドレス',
     'temporaryRegistration.firstName': '名',
     'temporaryRegistration.lastName': '姓',
@@ -1018,8 +1018,8 @@ const translations: Translations = {
     'documents.addressPlaceholder': 'e.g., 1-1-1 Shibuya, Shibuya-ku, Tokyo',
     
     // Temporary Registration
-    'temporaryRegistration.title': 'Temporary Registration - New System v3.0',
-    'temporaryRegistration.description': 'Enter your email address and name to start temporary registration (Updated: 2025-08-29 00:45)',
+    'temporaryRegistration.title': 'Temporary Registration - New System v4.0',
+    'temporaryRegistration.description': 'Enter your email address and name to start temporary registration (Updated: 2025-08-29 01:15)',
     'temporaryRegistration.email': 'Email Address',
     'temporaryRegistration.firstName': 'First Name',
     'temporaryRegistration.lastName': 'Last Name',

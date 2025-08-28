@@ -19,10 +19,10 @@ const JobSeekerRegister: React.FC = () => {
         <div className="max-w-md mx-auto px-4">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              求職者仮登録 - 新システム v3.0
+              求職者仮登録 - 新システム v4.0
             </h1>
             <p className="text-gray-600">
-              メールアドレスとお名前を入力して仮登録を開始してください（更新: 2025-08-29 00:45 - 最終確認）
+              メールアドレスとお名前を入力して仮登録を開始してください（更新: 2025-08-29 01:15 - 最終解決）
             </p>
           </div>
           
