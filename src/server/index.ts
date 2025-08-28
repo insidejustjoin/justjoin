@@ -8,6 +8,7 @@ import documentsRoutes from './api/documents.js';
 import notificationsRoutes from './api/notifications.js';
 import interviewAnalyticsRoutes from './api/interviewAnalytics.js';
 import interviewRoutes from './api/interview.js';
+import temporaryRegistrationRoutes from './api/temporaryRegistration.js';
 
 import uploadImageRoutes from './api/uploadImage.js';
 import { generateHeadings } from './api/generateHeadings.js';
@@ -37,6 +38,7 @@ app.use('/api/documents', documentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin/interview', interviewAnalyticsRoutes);
 app.use('/api/interview', interviewRoutes);
+app.use('/api/register', temporaryRegistrationRoutes);
 
 app.use('/api/admin', uploadImageRoutes);
 

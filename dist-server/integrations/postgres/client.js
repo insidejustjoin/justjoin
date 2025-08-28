@@ -23,16 +23,27 @@ const getDbConfig = () => {
             console.log('DATABASE_URL:', process.env.DATABASE_URL);
             // Cloud SQL Proxy形式の場合は特別な処理
             if (process.env.DATABASE_URL.includes('/cloudsql/')) {
-                const match = process.env.DATABASE_URL.match(/postgresql:\/\/([^:]+):([^@]+)@\/([^?]+)\?host=\/cloudsql\/(.+)/);
+                console.log('Cloud SQL接続文字列を解析中:', process.env.DATABASE_URL);
+                // 正規表現でCloud SQL接続文字列を解析
+                const cloudSqlPattern = /postgresql:\/\/([^:]+):([^@]+)@([^?]+)\?host=\/cloudsql\/(.+)/;
+                const match = process.env.DATABASE_URL.match(cloudSqlPattern);
                 if (match) {
+                    console.log('Cloud SQL接続情報を解析しました:', {
+                        user: match[1],
+                        database: match[3],
+                        host: '/cloudsql/' + match[4]
+                    });
                     return {
                         host: '/cloudsql/' + match[4],
                         port: 5432,
                         user: match[1],
                         password: match[2],
-                        database: match[3],
+                        database: match[3].replace(/^\//, ''), // 先頭の/を除去
                         ssl: false
                     };
+                }
+                else {
+                    console.log('Cloud SQL接続文字列の解析に失敗しました');
                 }
             }
             throw new Error('Invalid DATABASE_URL format');

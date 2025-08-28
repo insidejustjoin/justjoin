@@ -16,6 +16,7 @@ import DeployTest from "./pages/DeployTest";
 import JobSeekerLanding from "./pages/JobSeekerLanding";
 import { JobSeekerLogin } from "./pages/JobSeekerLogin";
 import JobSeekerRegister from "./pages/JobSeekerRegister";
+import { RegistrationVerification } from "./components/RegistrationVerification";
 import { JobSeekerDashboard } from "./pages/JobSeekerDashboard";
 import { JobSeekerMyPage } from "./pages/JobSeekerMyPage";
 import JobSeekerAuth from "./pages/JobSeekerAuth";
@@ -80,6 +81,7 @@ function App() {
               <Route path="/jobseeker" element={<JobSeekerLogin />} />
               <Route path="/jobseeker/login" element={<JobSeekerLogin />} />
               <Route path="/jobseeker/register" element={<JobSeekerRegister />} />
+              <Route path="/register/verify/:token" element={<RegistrationVerification />} />
               <Route path="/jobseeker/auth" element={<JobSeekerAuth />} />
               <Route path="/jobseeker/dashboard" element={<JobSeekerDashboard />} />
               <Route path="/jobseeker/my-page" element={<JobSeekerMyPage />} />

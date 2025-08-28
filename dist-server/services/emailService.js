@@ -32,6 +32,77 @@ class EmailService {
         this.apiKey = EMAIL_CONFIG.apiKey;
         this.apiUrl = EMAIL_CONFIG.apiUrl;
     }
+    // 仮登録確認メール（日本語・英語両方）
+    async sendTemporaryRegistrationConfirmation(to, firstName, lastName, verificationUrl) {
+        const fullName = `${lastName} ${firstName}`;
+        const template = {
+            subject: `${this.subjectPrefix}仮登録確認 - JustJoin / Temporary Registration Confirmation`,
+            body: `
+仮登録確認 / Temporary Registration Confirmation
+
+${fullName} 様 / Dear ${fullName},
+
+JustJoinへの仮登録ありがとうございます。
+Thank you for your temporary registration with JustJoin.
+
+以下のリンクをクリックして、登録手続きを完了してください。
+Please click the link below to complete your registration process.
+
+このリンクは30分間有効です。
+This link is valid for 30 minutes.
+
+登録手続きを完了する / Complete Registration:
+${verificationUrl}
+
+リンクがクリックできない場合は、以下のURLをコピーしてブラウザに貼り付けてください：
+If the link doesn't work, please copy and paste the following URL into your browser:
+${verificationUrl}
+
+30分以内に手続きを完了しない場合、仮登録データは自動的に削除されます。
+If you don't complete the process within 30 minutes, your temporary registration data will be automatically deleted.
+
+--
+${this.fromName}
+${this.fromEmail}
+      `,
+            html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>仮登録確認 / Temporary Registration Confirmation</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h2 style="color: #2563eb;">仮登録確認 / Temporary Registration Confirmation</h2>
+    <p>${fullName} 様 / Dear ${fullName},</p>
+    <p>JustJoinへの仮登録ありがとうございます。<br>Thank you for your temporary registration with JustJoin.</p>
+    
+    <p>以下のリンクをクリックして、登録手続きを完了してください。<br>Please click the link below to complete your registration process.</p>
+    
+    <p><strong>このリンクは30分間有効です。<br>This link is valid for 30 minutes.</strong></p>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${verificationUrl}" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">登録手続きを完了する / Complete Registration</a>
+    </div>
+    
+    <p>リンクがクリックできない場合は、以下のURLをコピーしてブラウザに貼り付けてください：<br>If the link doesn't work, please copy and paste the following URL into your browser:</p>
+    <p style="background: #f8fafc; padding: 15px; border-radius: 5px; font-family: monospace; word-break: break-all;">${verificationUrl}</p>
+    
+    <p style="color: #dc2626; font-size: 14px;">30分以内に手続きを完了しない場合、仮登録データは自動的に削除されます。<br>If you don't complete the process within 30 minutes, your temporary registration data will be automatically deleted.</p>
+    
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+    <p style="font-size: 14px; color: #6b7280;">
+      ${this.fromName}<br>
+      ${this.fromEmail}
+    </p>
+  </div>
+</body>
+</html>
+      `
+        };
+        return await this.sendEmail(to, template);
+    }
     // 求職者登録時のパスワード送信メール（日本語・英語両方）
     async sendJobSeekerPassword(to, fullName, password) {
         const template = {

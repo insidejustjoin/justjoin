@@ -125,6 +125,10 @@ interface DocumentData {
 interface DocumentGeneratorProps {
   // 管理者画面用のプロパティ
   isAdminMode?: boolean;
+  // 仮登録用のプロパティ
+  isRegistrationMode?: boolean;
+  onDocumentsComplete?: (documentsData: any) => void;
+  prefillData?: any;
   jobSeekerData?: Partial<{
     id: string;
     user_id: string;
@@ -191,6 +195,9 @@ const UN_MEMBER_COUNTRIES = [
 
 const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({ 
   isAdminMode = false, 
+  isRegistrationMode = false,
+  onDocumentsComplete,
+  prefillData,
   jobSeekerData, 
   onClose 
 }) => {
@@ -401,6 +408,18 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     // この関数は非推奨です
     // 代わりにloadFromDatabaseByUserIdを使用してください
   };
+
+  // 仮登録モードでprefillDataから初期データを設定
+  useEffect(() => {
+    if (isRegistrationMode && prefillData) {
+      setDocumentData(prevData => ({
+        ...prevData,
+        firstName: prefillData.resume?.basicInfo?.firstName || prevData.firstName,
+        lastName: prefillData.resume?.basicInfo?.lastName || prevData.lastName,
+        liveMail: prefillData.resume?.basicInfo?.email || prevData.liveMail,
+      }));
+    }
+  }, [isRegistrationMode, prefillData]);
 
   // 管理者モードで求職者データから初期データを設定
   useEffect(() => {
@@ -3978,6 +3997,19 @@ whiteCells.forEach(cell => {
                 </>
               )}
             </Button>
+            
+            {/* 仮登録モードで次へボタンを表示 */}
+            {isRegistrationMode && onDocumentsComplete && (
+              <Button
+                onClick={() => onDocumentsComplete(documentData)}
+                disabled={!documentData.lastName || !documentData.firstName}
+                className="w-full"
+                size="lg"
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                次へ（パスワード設定）
+              </Button>
+            )}
             
             {/* 管理者モードで閉じるボタンを表示 */}
             {isAdminMode && onClose && (
