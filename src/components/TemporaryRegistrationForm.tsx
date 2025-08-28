@@ -67,17 +67,17 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
           <Mail className="w-6 h-6 text-blue-600" />
         </div>
         <CardTitle className="text-2xl font-bold">
-          {t('temporaryRegistration.title', '仮登録 - 新システム')}
+          {t('temporaryRegistration.title')}
         </CardTitle>
         <CardDescription>
-          {t('temporaryRegistration.description', 'メールアドレスとお名前を入力して仮登録を開始してください（更新: 2025-08-29 00:35）')}
+          {t('temporaryRegistration.description')}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">
-              {t('temporaryRegistration.email', 'メールアドレス')} *
+              {t('temporaryRegistration.email')} *
             </Label>
             <Input
               id="email"
@@ -92,7 +92,7 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
 
           <div className="space-y-2">
             <Label htmlFor="firstName">
-              {t('temporaryRegistration.firstName', '名')} *
+              {t('temporaryRegistration.firstName')} *
             </Label>
             <Input
               id="firstName"
@@ -107,7 +107,7 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
 
           <div className="space-y-2">
             <Label htmlFor="lastName">
-              {t('temporaryRegistration.lastName', '姓')} *
+              {t('temporaryRegistration.lastName')} *
             </Label>
             <Input
               id="lastName"
@@ -145,19 +145,19 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t('temporaryRegistration.submitting', '送信中...')}
+                {t('temporaryRegistration.submitting')}
               </>
             ) : (
-              t('temporaryRegistration.submit', '仮登録を開始')
+              t('temporaryRegistration.submit')
             )}
           </Button>
 
           <div className="text-center text-sm text-gray-600">
             <p>
-              {t('temporaryRegistration.note', '※ 仮登録後、確認メールが送信されます')}
+              {t('temporaryRegistration.note')}
             </p>
             <p>
-              {t('temporaryRegistration.expiry', '※ メール内のリンクは30分間有効です')}
+              {t('temporaryRegistration.expiry')}
             </p>
           </div>
         </form>
