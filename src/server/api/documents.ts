@@ -497,18 +497,19 @@ const calculateCompletionRate = (documentData: any): number => {
     // 職歴（ない場合はチェックボックスで完了とみなす）
     documentData.resume?.noWorkExperience ? true : (documentData.resume?.workExperience && documentData.resume.workExperience.length > 0),
     // 資格（ない場合はチェックボックスで完了とみなす）
-    documentData.resume?.noQualifications ? true : (documentData.resume?.qualifications && documentData.resume.qualifications.length > 0),
+    documentData.resume?.noQualifications ? true : (documentData.resume?.qualifications && documentData.resume?.qualifications.length > 0),
     // 職務経歴書（ない場合はチェックボックスで完了とみなす）
-    documentData.workHistory?.noWorkHistory ? true : (documentData.workHistory?.workExperiences && documentData.workHistory.workExperiences.length > 0),
+    documentData.workHistory?.noWorkHistory ? true : (documentData.workHistory?.workExperiences && documentData.workHistory?.workExperiences.length > 0),
     // スキルシート（主要スキル）- 評価が設定されているかチェック
     documentData.skillSheet?.skills?.Windows?.evaluation && documentData.skillSheet?.skills?.Windows?.evaluation !== '-',
     documentData.skillSheet?.skills?.MacOS?.evaluation && documentData.skillSheet?.skills?.MacOS?.evaluation !== '-',
     documentData.skillSheet?.skills?.Linux?.evaluation && documentData.skillSheet?.skills?.Linux?.evaluation !== '-',
-    // 日本語関連
+    // 日本語関連（300文字以上の場合のみ完了とみなす）
     documentData.certificateStatus?.name, 
-    documentData.whyJapan, documentData.whyInterestJapan,
-    // 追加情報
-    documentData.selfIntroduction,
+    documentData.whyJapan && documentData.whyJapan.length >= 300 ? true : false,
+    documentData.whyInterestJapan && documentData.whyInterestJapan.length >= 300 ? true : false,
+    // 追加情報（300文字以上の場合のみ完了とみなす）
+    documentData.selfIntroduction && documentData.selfIntroduction.length >= 300 ? true : false,
     documentData.spouse, documentData.spouseSupport
   ];
 
@@ -558,11 +559,11 @@ const calculateCompletionRate = (documentData: any): number => {
   });
   console.log('日本語関連:', {
     certificateStatus: !!documentData.certificateStatus?.name,
-    whyJapan: !!documentData.whyJapan,
-    whyInterestJapan: !!documentData.whyInterestJapan
+    whyJapan: documentData.whyJapan && documentData.whyJapan.length >= 300,
+    whyInterestJapan: documentData.whyInterestJapan && documentData.whyInterestJapan.length >= 300
   });
   console.log('追加情報:', {
-    selfIntroduction: !!documentData.selfIntroduction,
+    selfIntroduction: documentData.selfIntroduction && documentData.selfIntroduction.length >= 300,
     spouse: !!documentData.spouse,
     spouseSupport: !!documentData.spouseSupport
   });

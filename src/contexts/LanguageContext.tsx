@@ -170,6 +170,8 @@ const translations: Translations = {
     'documents.personalPreference': '希望・要望',
     'documents.personalPreferencePlaceholder': '勤務時間、勤務地、給与、その他の希望や要望があれば記入してください',
     'documents.personalPreferenceDescription': '任意項目です。入力率には反映されません。',
+    'documents.characterCountRecommended': '300〜500文字推奨',
+    'documents.characterCount': '{count}文字',
     'documents.additionalInformation': '追加情報',
     'documents.noWorkExperienceCheck': '職歴がない場合はチェックしてください',
     'documents.noEducationCheck': '学歴がない場合はチェックしてください',
@@ -242,7 +244,7 @@ const translations: Translations = {
     
     // プレースホルダー
     'auth.lastNamePlaceholder': '山田',
-    'documents.characterCount': '文字数: {current}/{max}',
+    'documents.characterCountWithLimit': '文字数: {current}/{max}',
     'documents.required': '必須',
     'documents.optional': '任意',
     
@@ -268,8 +270,8 @@ const translations: Translations = {
     'documents.textLengthMinError': '{minLength}文字以上で入力してください（現在：{current}文字）',
     'documents.textLengthMaxError': '{maxLength}文字以下で入力してください（現在：{current}文字）',
     'documents.textLengthValid': '{current}文字（{minLength}〜{maxLength}文字）',
-    'documents.whyJapanPlaceholder': 'を書いてください（300〜500文字）...',
-    'documents.whyInterestJapanPlaceholder': 'を書いてください（300〜500文字）...',
+    'documents.whyJapanPlaceholder': 'を書いてください（300〜500文字推奨）...',
+    'documents.whyInterestJapanPlaceholder': 'を書いてください（300〜500文字推奨）...',
     'documents.noCountriesFound': '該当する国が見つかりません。',
     'documents.nameRequired': '姓と名を入力してください',
     
@@ -1153,7 +1155,7 @@ const translations: Translations = {
     
     // Placeholders
     'auth.lastNamePlaceholder': 'Yamada',
-    'documents.characterCount': 'Characters: {current}/{max}',
+    'documents.characterCountWithLimit': 'Characters: {current}/{max}',
     'documents.required': 'Required',
     'documents.optional': 'Optional',
     
@@ -1179,8 +1181,10 @@ const translations: Translations = {
     'documents.textLengthMinError': 'Please enter at least {minLength} characters (current: {current} characters)',
     'documents.textLengthMaxError': 'Please enter no more than {maxLength} characters (current: {current} characters)',
     'documents.textLengthValid': '{current} characters ({minLength}~{maxLength} characters)',
-    'documents.whyJapanPlaceholder': 'Please write (300-500 characters)...',
-    'documents.whyInterestJapanPlaceholder': 'Please write (300-500 characters)...',
+    'documents.whyJapanPlaceholder': 'Please write (300-500 characters recommended)...',
+    'documents.whyInterestJapanPlaceholder': 'Please write (300-500 characters recommended)...',
+    'documents.characterCountRecommended': '300-500 characters recommended',
+    'documents.characterCount': '{count} characters',
     'documents.noCountriesFound': 'No countries found.',
     'documents.nameRequired': 'Please enter your first name and last name',
     'documents.profileCompletionMessage': 'Please complete your profile to achieve better job matching!',

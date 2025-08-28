@@ -1043,20 +1043,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       errors.push(t('documents.nameRequired'));
     }
     
-    const selfIntroValidation = validateTextLength(documentData.selfIntroduction);
-    if (!selfIntroValidation.isValid) {
-              errors.push(`${t('documents.selfPR')}: ${selfIntroValidation.message}`);
-    }
-    
-    const whyJapanValidation = validateTextLength(documentData.whyJapan);
-    if (!whyJapanValidation.isValid) {
-              errors.push(`${t('documents.whyJapanError')}: ${whyJapanValidation.message}`);
-    }
-    
-    const whyInterestJapanValidation = validateTextLength(documentData.whyInterestJapan);
-    if (!whyInterestJapanValidation.isValid) {
-              errors.push(`${t('documents.whyInterestJapanError')}: ${whyInterestJapanValidation.message}`);
-    }
+    // 自己PR、日本で働きたい理由、日本に興味を持った理由は任意項目のため、文字数チェックは行わない
     
     return {
       isValid: errors.length === 0,
@@ -1134,11 +1121,13 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       data.skillSheet.skills.MacOS?.evaluation && data.skillSheet.skills.MacOS.evaluation !== '-',
       data.skillSheet.skills.Linux?.evaluation && data.skillSheet.skills.Linux.evaluation !== '-',
       
-      // 日本語関連
-      data.certificateStatus.name, data.whyJapan, data.whyInterestJapan,
+      // 日本語関連（300文字以上の場合のみ完了とみなす）
+      data.certificateStatus.name, 
+      data.whyJapan && data.whyJapan.length >= 300 ? true : false,
+      data.whyInterestJapan && data.whyInterestJapan.length >= 300 ? true : false,
       
-      // 追加情報
-      data.selfIntroduction,
+      // 追加情報（300文字以上の場合のみ完了とみなす）
+      data.selfIntroduction && data.selfIntroduction.length >= 300 ? true : false,
       data.spouse, data.spouseSupport
     ];
 
@@ -1188,11 +1177,11 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     });
     console.log('日本語関連:', {
       certificateStatus: !!data.certificateStatus.name,
-      whyJapan: !!data.whyJapan,
-      whyInterestJapan: !!data.whyInterestJapan
+      whyJapan: data.whyJapan && data.whyJapan.length >= 300,
+      whyInterestJapan: data.whyInterestJapan && data.whyInterestJapan.length >= 300
     });
     console.log('追加情報:', {
-      selfIntroduction: !!data.selfIntroduction,
+      selfIntroduction: data.selfIntroduction && data.selfIntroduction.length >= 300,
       spouse: !!data.spouse,
       spouseSupport: !!data.spouseSupport
     });
@@ -3299,21 +3288,23 @@ whiteCells.forEach(cell => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-sm font-medium">{t('documents.selfPR')} <span className="text-red-500">*</span></Label>
+                <Label className="text-sm font-medium">{t('documents.selfPR')}</Label>
                 <Textarea
                   value={documentData.selfIntroduction}
                   onChange={(e) => setDocumentData(prev => ({ ...prev, selfIntroduction: e.target.value }))}
                   placeholder={t('documents.selfPRPlaceholder')}
                   rows={6}
                   className="text-sm"
-                  required
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('documents.characterCountRecommended')}
+                </p>
                 <p className={`text-xs mt-1 ${
-                  validateTextLength(documentData.selfIntroduction).isValid 
-                    ? 'text-green-600' 
-                    : 'text-red-500'
+                  documentData.selfIntroduction && documentData.selfIntroduction.length > 0
+                    ? 'text-blue-600' 
+                    : 'text-gray-500'
                 }`}>
-                  {validateTextLength(documentData.selfIntroduction).message}
+                  {t('documents.characterCount').replace('{count}', (documentData.selfIntroduction ? documentData.selfIntroduction.length : 0).toString())}
                 </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3422,39 +3413,43 @@ whiteCells.forEach(cell => {
                 </div>
               </div>
               <div>
-                <Label className="text-sm font-medium">{t('documents.whyJapan')} <span className="text-red-500">*</span></Label>
+                <Label className="text-sm font-medium">{t('documents.whyJapan')}</Label>
                 <Textarea
                   value={documentData.whyJapan}
                   onChange={(e) => setDocumentData(prev => ({ ...prev, whyJapan: e.target.value }))}
-                                      placeholder={t('documents.whyJapan') + t('documents.whyJapanPlaceholder')}
+                  placeholder={t('documents.whyJapan') + t('documents.whyJapanPlaceholder')}
                   rows={6}
                   className="text-sm"
-                  required
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('documents.characterCountRecommended')}
+                </p>
                 <p className={`text-xs mt-1 ${
-                  validateTextLength(documentData.whyJapan).isValid 
-                    ? 'text-green-600' 
-                    : 'text-red-500'
+                  documentData.whyJapan && documentData.whyJapan.length > 0
+                    ? 'text-blue-600' 
+                    : 'text-gray-500'
                 }`}>
-                  {validateTextLength(documentData.whyJapan).message}
+                  {t('documents.characterCount').replace('{count}', (documentData.whyJapan ? documentData.whyJapan.length : 0).toString())}
                 </p>
               </div>
               <div>
-                <Label className="text-sm font-medium">{t('documents.whyInterestJapan')} <span className="text-red-500">*</span></Label>
+                <Label className="text-sm font-medium">{t('documents.whyInterestJapan')}</Label>
                 <Textarea
                   value={documentData.whyInterestJapan}
                   onChange={(e) => setDocumentData(prev => ({ ...prev, whyInterestJapan: e.target.value }))}
-                                      placeholder={t('documents.whyInterestJapan') + t('documents.whyInterestJapanPlaceholder')}
+                  placeholder={t('documents.whyInterestJapan') + t('documents.whyInterestJapanPlaceholder')}
                   rows={6}
                   className="text-sm"
-                  required
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('documents.characterCountRecommended')}
+                </p>
                 <p className={`text-xs mt-1 ${
-                  validateTextLength(documentData.whyInterestJapan).isValid 
-                    ? 'text-green-600' 
-                    : 'text-red-500'
+                  documentData.whyInterestJapan && documentData.whyInterestJapan.length > 0
+                    ? 'text-blue-600' 
+                    : 'text-gray-500'
                 }`}>
-                  {validateTextLength(documentData.whyInterestJapan).message}
+                  {t('documents.characterCount').replace('{count}', (documentData.whyInterestJapan ? documentData.whyInterestJapan.length : 0).toString())}
                 </p>
               </div>
               <div>
@@ -3947,7 +3942,7 @@ whiteCells.forEach(cell => {
             {/* データベース保存ボタン */}
             <Button
               onClick={saveToDatabase}
-              disabled={isSaving || (!isAdminMode && !user) || !validateAllTextLengths().isValid}
+              disabled={isSaving || (!isAdminMode && !user)}
               variant="outline"
               size="lg"
               className="w-full"
@@ -3967,7 +3962,7 @@ whiteCells.forEach(cell => {
             
             <Button
               onClick={generateExcelFile} 
-              disabled={isGenerating || !documentData.lastName || !documentData.firstName || !validateAllTextLengths().isValid}
+              disabled={isGenerating || !documentData.lastName || !documentData.firstName}
               className="w-full"
               size="lg"
             >
@@ -3997,21 +3992,27 @@ whiteCells.forEach(cell => {
             )}
           </div>
           
-          {/* 文字数エラーメッセージ */}
-          {!validateAllTextLengths().isValid && (
+          {/* エラーメッセージ */}
+          {(!documentData.lastName || !documentData.firstName) && (
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="text-sm font-medium text-red-800 mb-1">{t('documents.characterLimitError')}</h4>
-                  <p className="text-sm text-red-700 mb-2">{t('documents.characterLimitDescription')}</p>
+                  <h4 className="text-sm font-medium text-red-800 mb-1">必須項目が未入力です</h4>
+                  <p className="text-sm text-red-700 mb-2">以下の項目は必須です：</p>
                   <ul className="text-sm text-red-700 space-y-1">
-                    {validateAllTextLengths().errors.map((error, index) => (
-                      <li key={index} className="flex items-start gap-1">
+                    {!documentData.lastName && (
+                      <li className="flex items-start gap-1">
                         <span className="text-red-500 mt-1 flex-shrink-0">•</span>
-                        <span>{error}</span>
+                        <span>姓</span>
                       </li>
-                    ))}
+                    )}
+                    {!documentData.firstName && (
+                      <li className="flex items-start gap-1">
+                        <span className="text-red-500 mt-1 flex-shrink-0">•</span>
+                        <span>名</span>
+                      </li>
+                    )}
                   </ul>
                 </div>
               </div>
