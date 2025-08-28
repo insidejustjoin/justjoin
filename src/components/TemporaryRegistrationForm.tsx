@@ -67,10 +67,10 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
           <Mail className="w-6 h-6 text-blue-600" />
         </div>
         <CardTitle className="text-2xl font-bold">
-          {t('temporaryRegistration.title', '仮登録')}
+          {t('temporaryRegistration.title', '仮登録 - 新システム')}
         </CardTitle>
         <CardDescription>
-          {t('temporaryRegistration.description', 'メールアドレスとお名前を入力して仮登録を開始してください')}
+          {t('temporaryRegistration.description', 'メールアドレスとお名前を入力して仮登録を開始してください（更新: 2025-08-29 00:35）')}
         </CardDescription>
       </CardHeader>
       <CardContent>
