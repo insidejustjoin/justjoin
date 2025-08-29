@@ -59,8 +59,8 @@ Thank you for your temporary registration with JustJoin.
 以下のリンクをクリックして、登録手続きを完了してください。
 Please click the link below to complete your registration process.
 
-このリンクは30分間有効です。
-This link is valid for 30 minutes.
+このリンクは1時間有効です。
+This link is valid for 1 hour.
 
 登録手続きを完了する / Complete Registration:
 ${verificationUrl}
@@ -69,8 +69,8 @@ ${verificationUrl}
 If the link doesn't work, please copy and paste the following URL into your browser:
 ${verificationUrl}
 
-30分以内に手続きを完了しない場合、仮登録データは自動的に削除されます。
-If you don't complete the process within 30 minutes, your temporary registration data will be automatically deleted.
+1時間以内に手続きを完了しない場合、仮登録データは自動的に削除されます。
+If you don't complete the process within 1 hour, your temporary registration data will be automatically deleted.
 
 --
 ${this.fromName}
@@ -91,7 +91,7 @@ ${this.fromEmail}
     
     <p>以下のリンクをクリックして、登録手続きを完了してください。<br>Please click the link below to complete your registration process.</p>
     
-    <p><strong>このリンクは30分間有効です。<br>This link is valid for 30 minutes.</strong></p>
+    <p><strong>このリンクは1時間有効です。<br>This link is valid for 1 hour.</strong></p>
     
     <div style="text-align: center; margin: 30px 0;">
       <a href="${verificationUrl}" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">登録手続きを完了する / Complete Registration</a>
@@ -100,7 +100,7 @@ ${this.fromEmail}
     <p>リンクがクリックできない場合は、以下のURLをコピーしてブラウザに貼り付けてください：<br>If the link doesn't work, please copy and paste the following URL into your browser:</p>
     <p style="background: #f8fafc; padding: 15px; border-radius: 5px; font-family: monospace; word-break: break-all;">${verificationUrl}</p>
     
-    <p style="color: #dc2626; font-size: 14px;">30分以内に手続きを完了しない場合、仮登録データは自動的に削除されます。<br>If you don't complete the process within 30 minutes, your temporary registration data will be automatically deleted.</p>
+    <p style="color: #dc2626; font-size: 14px;">1時間以内に手続きを完了しない場合、仮登録データは自動的に削除されます。<br>If you don't complete the process within 1 hour, your temporary registration data will be automatically deleted.</p>
     
     <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
     <p style="font-size: 14px; color: #6b7280;">

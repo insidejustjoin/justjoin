@@ -52,7 +52,7 @@ router.post('/temporary', async (req, res) => {
     if (existingTemp.rows.length > 0) {
       return res.status(400).json({ 
         success: false, 
-        message: 'このメールアドレスは既に仮登録中です。30分後に再度お試しください。' 
+        message: 'このメールアドレスは既に仮登録中です。1時間後に再度お試しください。' 
       });
     }
 
@@ -72,7 +72,7 @@ router.post('/temporary', async (req, res) => {
 
     // 仮登録トークン生成
     const verificationToken = uuidv4();
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30分後
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1時間後
 
     // 仮登録データ保存
     await query(
