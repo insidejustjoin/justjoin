@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { LoginGuidance } from '@/components/LoginGuidance';
 import { BetaNotice } from '@/components/BetaNotice';
+import { TemporaryRegistrationForm } from '@/components/TemporaryRegistrationForm';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { User, Mail, Lock, UserPlus, ArrowLeft, Briefcase, Key } from 'lucide-react';
@@ -23,21 +24,15 @@ const loginSchema = z.object({
   password: z.string().min(6)
 });
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1)
-});
-
 type LoginFormData = z.infer<typeof loginSchema>;
-type RegisterFormData = z.infer<typeof registerSchema>;
 
 export function JobSeekerLogin() {
-  const { login, registerJobSeeker } = useAuth();
+  const { login } = useAuth();
   const { t, language } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const [showGuidance, setShowGuidance] = useState(false);
   const [currentTab, setCurrentTab] = useState<'login' | 'register'>('login');
+  const [showTemporaryRegistration, setShowTemporaryRegistration] = useState(false);
   const navigate = useNavigate();
 
   // 初回訪問時にガイダンスを表示（少し遅延させて表示）
@@ -55,6 +50,11 @@ export function JobSeekerLogin() {
 
   const handleTabChange = (tab: 'login' | 'register') => {
     setCurrentTab(tab);
+    if (tab === 'register') {
+      setShowTemporaryRegistration(true);
+    } else {
+      setShowTemporaryRegistration(false);
+    }
   };
 
   // 動的バリデーションメッセージ
@@ -63,18 +63,8 @@ export function JobSeekerLogin() {
     password: z.string().min(6, t('auth.validation.passwordMin'))
   });
 
-  const registerSchemaWithTranslation = z.object({
-    email: z.string().email(t('auth.validation.emailRequired')),
-    firstName: z.string().min(1, t('auth.validation.firstNameRequired')),
-    lastName: z.string().min(1, t('auth.validation.lastNameRequired'))
-  });
-
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchemaWithTranslation)
-  });
-
-  const registerForm = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchemaWithTranslation)
   });
 
   const onLoginSubmit = async (data: LoginFormData) => {
@@ -89,33 +79,28 @@ export function JobSeekerLogin() {
     }
   };
 
-  const onRegisterSubmit = async (data: RegisterFormData) => {
-    setIsLoading(true);
-    try {
-      const success = await registerJobSeeker(data.email, data.firstName, data.lastName, language);
-      if (success) {
-        toast.success(t('auth.registerSuccess') || '求職者として登録しました。パスワードがメールで送信されます。');
-        const tabsElement = document.querySelector('[data-value="login"]') as HTMLElement;
-        if (tabsElement) {
-          tabsElement.click();
-        }
-        loginForm.setValue('email', data.email);
-      }
-    } finally {
-      setIsLoading(false);
+  const handleTemporaryRegistrationSuccess = () => {
+    toast.success(t('temporaryRegistration.successMessage') || '仮登録が完了しました。確認メールをご確認ください。');
+    // ログインタブに切り替え
+    setCurrentTab('login');
+    setShowTemporaryRegistration(false);
+    // メールアドレスをログインフォームに設定
+    const emailInput = document.getElementById('login-email') as HTMLInputElement;
+    if (emailInput) {
+      emailInput.focus();
     }
   };
 
   return (
     <>
       <Helmet>
-        <title>registration form for job seeker</title>
-        <meta name="description" content="registration form for job seeker" />
-        <meta name="keywords" content="registration form for job seeker" />
-        <meta property="og:title" content="registration form for job seeker" />
-        <meta property="og:description" content="registration form for job seeker" />
-        <meta name="twitter:title" content="registration form for job seeker" />
-        <meta name="twitter:description" content="registration form for job seeker" />
+        <title>求職者ログイン・仮登録 | JustJoin</title>
+        <meta name="description" content="求職者のログインと仮登録。安全で簡単な求職者登録システム。" />
+        <meta name="keywords" content="求職者,ログイン,登録,転職,就職" />
+        <meta property="og:title" content="求職者ログイン・仮登録 | JustJoin" />
+        <meta property="og:description" content="求職者のログインと仮登録。安全で簡単な求職者登録システム。" />
+        <meta name="twitter:title" content="求職者ログイン・仮登録 | JustJoin" />
+        <meta name="twitter:description" content="求職者のログインと仮登録。安全で簡単な求職者登録システム。" />
       </Helmet>
       
       {/* メインコンテナ */}
@@ -150,7 +135,7 @@ export function JobSeekerLogin() {
               </p>
             </div>
 
-            <Tabs defaultValue="login" className="w-full" onValueChange={(value) => setCurrentTab(value as 'login' | 'register')}>
+            <Tabs defaultValue="login" className="w-full" onValueChange={(value) => handleTabChange(value as 'login' | 'register')}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login" className="flex items-center gap-2">
                   <Key className="h-4 w-4" />
@@ -228,70 +213,34 @@ export function JobSeekerLogin() {
               </TabsContent>
 
               <TabsContent value="register">
-                <Card>
-                  <CardHeader className="text-center">
-                    <CardTitle className="flex items-center justify-center gap-2">
-                      <UserPlus className="h-5 w-5 text-blue-600" />
-                      {t('auth.jobSeekerRegisterTitle')}
-                    </CardTitle>
-                    <CardDescription>
-                      {t('auth.jobSeekerRegisterDescription')}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="register-email" className="flex items-center gap-2">
-                          <Mail className="h-4 w-4" />
-                          {t('auth.email')}
-                        </Label>
-                        <Input
-                          id="register-email"
-                          type="email"
-                          {...registerForm.register('email')}
-                          placeholder={t('auth.emailPlaceholder')}
-                        />
-                        {registerForm.formState.errors.email && (
-                          <p className="text-sm text-red-500">{registerForm.formState.errors.email.message}</p>
-                        )}
+                {showTemporaryRegistration ? (
+                  <TemporaryRegistrationForm onSuccess={handleTemporaryRegistrationSuccess} />
+                ) : (
+                  <Card>
+                    <CardHeader className="text-center">
+                      <CardTitle className="flex items-center justify-center gap-2">
+                        <UserPlus className="h-5 w-5 text-blue-600" />
+                        {t('auth.jobSeekerRegisterTitle')}
+                      </CardTitle>
+                      <CardDescription>
+                        {t('auth.jobSeekerRegisterDescription')}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-center space-y-4">
+                        <p className="text-sm text-gray-600">
+                          安全で簡単な仮登録システムをご利用いただけます。
+                        </p>
+                        <Button 
+                          onClick={() => setShowTemporaryRegistration(true)}
+                          className="w-full"
+                        >
+                          仮登録を開始
+                        </Button>
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="register-lastName">
-                            {t('auth.lastName')}
-                          </Label>
-                          <Input
-                            id="register-lastName"
-                            {...registerForm.register('lastName')}
-                            placeholder={t('auth.lastNamePlaceholder')}
-                          />
-                          {registerForm.formState.errors.lastName && (
-                            <p className="text-sm text-red-500">{registerForm.formState.errors.lastName.message}</p>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="register-firstName">
-                            {t('auth.firstName')}
-                          </Label>
-                          <Input
-                            id="register-firstName"
-                            {...registerForm.register('firstName')}
-                            placeholder={t('auth.firstNamePlaceholder')}
-                          />
-                          {registerForm.formState.errors.firstName && (
-                            <p className="text-sm text-red-500">{registerForm.formState.errors.firstName.message}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      <Button type="submit" className="w-full" disabled={isLoading}>
-                        {isLoading ? t('auth.registering') : t('auth.registerButton')}
-                      </Button>
-                    </form>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
             </Tabs>
             

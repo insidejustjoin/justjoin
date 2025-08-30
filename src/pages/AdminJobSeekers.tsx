@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { RefreshCw, AlertTriangle, Users, Search, FileText, Download, X, Trash2, Filter, Bell, Send, CheckSquare, Square, Play, MessageSquare, FileSpreadsheet, Eye } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Users, Search, FileText, Download, X, Trash2, Filter, Bell, Send, CheckSquare, Square, Play, MessageSquare, FileSpreadsheet, Eye, Building2, UserPlus, UserMinus } from 'lucide-react';
 import { AdminPageLayout } from '@/components/AdminPageLayout';
 import DocumentGenerator from '@/components/DocumentGenerator';
 import BulkDocumentGenerator from '@/components/BulkDocumentGenerator';
@@ -17,6 +17,7 @@ import { ActiveFiltersDisplay } from '@/components/ActiveFiltersDisplay';
 import { InterviewManagement } from '@/components/InterviewManagement';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { JobSeekerDetailModal } from '@/components/JobSeekerDetailModal';
+import { JobSeekerStatusModal } from '@/components/JobSeekerStatusModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { ALL_SKILLS } from '@/constants/skills';
 import { toast } from '@/hooks/use-toast';
@@ -52,9 +53,19 @@ export function AdminJobSeekers() {
   const [selectedJobSeekers, setSelectedJobSeekers] = useState<JobSeeker[]>([]);
   const [showDocumentGenerator, setShowDocumentGenerator] = useState(false);
   const [selectedJobSeeker, setSelectedJobSeeker] = useState<JobSeeker | null>(null);
-  const [activeTab, setActiveTab] = useState('jobseekers');
+  const [activeTab, setActiveTab] = useState('active');
   const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // 求職者ステータス管理用の状態
+  const [jobSeekerStatuses, setJobSeekerStatuses] = useState<{[key: string]: any[]}>({
+    active: [],
+    employed: [],
+    withdrawn: []
+  });
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedStatusJobSeeker, setSelectedStatusJobSeeker] = useState<any>(null);
   
   // 一括操作用の状態
   const [isSelectAll, setIsSelectAll] = useState(false);
@@ -396,11 +407,58 @@ export function AdminJobSeekers() {
     }
   };
 
+  // 求職者ステータスデータを取得する関数
+  const fetchJobSeekerStatuses = async () => {
+    setStatusLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.error('認証トークンが見つかりません');
+        return;
+      }
+
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      
+      // 各ステータスの求職者データを取得
+      const [activeResponse, employedResponse, withdrawnResponse] = await Promise.all([
+        fetch(`${apiUrl}/api/job-seeker-status/admin/status?status=active`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${apiUrl}/api/job-seeker-status/admin/status?status=employed`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${apiUrl}/api/job-seeker-status/admin/status?status=withdrawn`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+
+      const activeData = activeResponse.ok ? await activeResponse.json() : { data: [] };
+      const employedData = employedResponse.ok ? await employedResponse.json() : { data: [] };
+      const withdrawnData = withdrawnResponse.ok ? await withdrawnResponse.json() : { data: [] };
+
+      setJobSeekerStatuses({
+        active: activeData.data || [],
+        employed: employedData.data || [],
+        withdrawn: withdrawnData.data || []
+      });
+
+    } catch (error) {
+      console.error('求職者ステータス取得エラー:', error);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
   // 求職者データを取得（キャッシュが無効または未取得時に実行）
   useEffect(() => {
     if (!isCacheValid()) {
       fetchJobSeekers();
     }
+  }, []);
+
+  // 求職者ステータスデータを取得
+  useEffect(() => {
+    fetchJobSeekerStatuses();
   }, []);
 
   // 面接状態を自動取得
@@ -833,6 +891,9 @@ export function AdminJobSeekers() {
         setFilteredJobSeekers(prev => prev.filter(seeker => seeker.id !== id));
         setSelectedJobSeekers(prev => prev.filter(seeker => seeker.id !== id));
         alert('求職者を削除しました');
+        
+        // ステータスデータも更新
+        fetchJobSeekerStatuses();
       } else {
         alert('削除に失敗しました: ' + result.error);
       }
@@ -840,6 +901,18 @@ export function AdminJobSeekers() {
       console.error('削除エラー:', error);
       alert('削除に失敗しました');
     }
+  };
+
+  // ステータス変更モーダルを開く
+  const openStatusModal = (jobSeeker: any) => {
+    setSelectedStatusJobSeeker(jobSeeker);
+    setShowStatusModal(true);
+  };
+
+  // ステータス変更後の処理
+  const handleStatusChange = () => {
+    fetchJobSeekerStatuses();
+    fetchJobSeekers(true);
   };
 
   // 一括選択の処理
@@ -1476,8 +1549,16 @@ export function AdminJobSeekers() {
           </Card>
         )}
 
-        {/* 求職者一覧 */}
-        <div className="space-y-4">
+        {/* 求職者管理タブ */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="active">求職者一覧</TabsTrigger>
+            <TabsTrigger value="employed">就職済み一覧</TabsTrigger>
+            <TabsTrigger value="withdrawn">退会済み一覧</TabsTrigger>
+          </TabsList>
+
+          {/* 求職者一覧タブ */}
+          <TabsContent value="active" className="space-y-4">
           {loading ? (
             <div className="flex justify-center items-center py-8">
               <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
@@ -1656,6 +1737,15 @@ export function AdminJobSeekers() {
                           面接再有効化
                         </Button>
                         <Button
+                          onClick={() => openStatusModal(jobSeeker)}
+                          size="sm"
+                          variant="outline"
+                          className="bg-green-100 hover:bg-green-200 border-green-300"
+                        >
+                          <Building2 className="h-4 w-4 mr-2" />
+                          就職済み
+                        </Button>
+                        <Button
                           onClick={() => deleteJobSeeker(jobSeeker.id, jobSeeker.full_name)}
                           size="sm"
                           variant="destructive"
@@ -1670,7 +1760,130 @@ export function AdminJobSeekers() {
               ))}
             </div>
           )}
-        </div>
+          </TabsContent>
+
+          {/* 就職済み一覧タブ */}
+          <TabsContent value="employed" className="space-y-4">
+            {statusLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+                <span className="ml-2 text-gray-600">データを読み込み中...</span>
+              </div>
+            ) : jobSeekerStatuses.employed.length === 0 ? (
+              <Alert>
+                <Users className="h-4 w-4" />
+                <AlertDescription>
+                  就職済みの求職者が見つかりませんでした。
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                {jobSeekerStatuses.employed.map((jobSeeker) => (
+                  <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                            <Building2 className="h-6 w-6 text-blue-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-lg">
+                              {jobSeeker.full_name || `${jobSeeker.first_name} ${jobSeeker.last_name}`}
+                            </h3>
+                            <p className="text-gray-600">{jobSeeker.email}</p>
+                            <div className="flex items-center gap-4 mt-2">
+                              <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                就職済み
+                              </Badge>
+                              <span className="text-sm text-gray-600">
+                                就職先: {jobSeeker.company_name}
+                              </span>
+                              <span className="text-sm text-gray-600">
+                                就職日: {new Date(jobSeeker.employment_date).toLocaleDateString('ja-JP')}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => openStatusModal(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            求職者に復帰
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* 退会済み一覧タブ */}
+          <TabsContent value="withdrawn" className="space-y-4">
+            {statusLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+                <span className="ml-2 text-gray-600">データを読み込み中...</span>
+              </div>
+            ) : jobSeekerStatuses.withdrawn.length === 0 ? (
+              <Alert>
+                <Users className="h-4 w-4" />
+                <AlertDescription>
+                  退会済みの求職者が見つかりませんでした。
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                {jobSeekerStatuses.withdrawn.map((jobSeeker) => (
+                  <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                            <UserMinus className="h-6 w-6 text-red-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-lg">
+                              {jobSeeker.full_name || `${jobSeeker.first_name} ${jobSeeker.last_name}`}
+                            </h3>
+                            <p className="text-gray-600">{jobSeeker.email}</p>
+                            <div className="flex items-center gap-4 mt-2">
+                              <Badge variant="secondary" className="bg-red-100 text-red-800">
+                                退会済み
+                              </Badge>
+                              <span className="text-sm text-gray-600">
+                                退会日: {new Date(jobSeeker.withdrawal_date).toLocaleDateString('ja-JP')}
+                              </span>
+                              {jobSeeker.reason && (
+                                <span className="text-sm text-gray-600">
+                                  理由: {jobSeeker.reason}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => openStatusModal(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            求職者に復帰
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
 
         {/* 書類生成モーダル */}
         {showDocumentGenerator && selectedJobSeeker && (
@@ -1818,6 +2031,14 @@ export function AdminJobSeekers() {
           availableSkills={ALL_SKILLS}
           open={showAdvancedFilterModal}
           onOpenChange={setShowAdvancedFilterModal}
+        />
+
+        {/* 求職者ステータス変更モーダル */}
+        <JobSeekerStatusModal
+          isOpen={showStatusModal}
+          onClose={() => setShowStatusModal(false)}
+          jobSeeker={selectedStatusJobSeeker}
+          onStatusChange={handleStatusChange}
         />
       </div>
     </AdminPageLayout>

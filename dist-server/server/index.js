@@ -9,6 +9,7 @@ import notificationsRoutes from './api/notifications.js';
 import interviewAnalyticsRoutes from './api/interviewAnalytics.js';
 import interviewRoutes from './api/interview.js';
 import temporaryRegistrationRoutes from './api/temporaryRegistration.js';
+import jobSeekerStatusRoutes from './api/jobSeekerStatus.js';
 import uploadImageRoutes from './api/uploadImage.js';
 import { generateHeadings } from './api/generateHeadings.js';
 import { generateSitemap } from './api/sitemap.js';
@@ -34,6 +35,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin/interview', interviewAnalyticsRoutes);
 app.use('/api/interview', interviewRoutes);
 app.use('/api/register', temporaryRegistrationRoutes);
+app.use('/api/job-seeker-status', jobSeekerStatusRoutes);
 app.use('/api/admin', uploadImageRoutes);
 // 見出し生成API
 app.post('/api/generate-headings', generateHeadings);
@@ -936,19 +938,30 @@ app.put('/api/jobseekers/:id', async (req, res) => {
     }
 });
 // --- 管理者用：求職者削除API（完全削除版） ---
-app.delete('/api/admin/jobseekers/:id', async (req, res) => {
+app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
     try {
         const { id } = req.params; // job_seekers.id
         const { query } = await import('../integrations/postgres/client.js');
         // まずjob_seekersテーブルからuser_idを取得
-        const result = await query('SELECT user_id, full_name FROM job_seekers WHERE id = $1', [id]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, message: '求職者が見つかりません' });
+        let result = await query('SELECT user_id, first_name, last_name FROM job_seekers WHERE id = $1', [id]);
+        let userId, fullName, jobSeekerId;
+        if (result.rows.length > 0) {
+            // job_seekersレコードが存在する場合
+            userId = result.rows[0].user_id;
+            fullName = `${result.rows[0].first_name || ''} ${result.rows[0].last_name || ''}`.trim();
+            jobSeekerId = id;
         }
-        const userId = result.rows[0].user_id;
-        const fullName = result.rows[0].full_name;
-        const jobSeekerId = id;
-        console.log(`求職者完全削除開始: JobSeekerID=${jobSeekerId}, UserID=${userId}, Name=${fullName}`);
+        else {
+            // job_seekersレコードが存在しない場合、直接usersテーブルから削除
+            result = await query('SELECT id, email FROM users WHERE id = $1', [id]);
+            if (result.rows.length === 0) {
+                return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
+            }
+            userId = result.rows[0].id;
+            fullName = result.rows[0].email;
+            jobSeekerId = null;
+        }
+        console.log(`ユーザー完全削除開始: UserID=${userId}, Name=${fullName}, JobSeekerID=${jobSeekerId}`);
         // トランザクション開始
         await query('BEGIN');
         try {
@@ -958,32 +971,40 @@ app.delete('/api/admin/jobseekers/:id', async (req, res) => {
             deletedRecords.documents = documentsResult.rowCount;
             console.log(`user_documents削除: ${documentsResult.rowCount}件`);
             // 2. applicationsテーブルから削除（将来的に追加される場合）
-            try {
-                const applicationsResult = await query('DELETE FROM applications WHERE job_seeker_id = $1', [jobSeekerId]);
-                deletedRecords.applications = applicationsResult.rowCount;
-                console.log(`applications削除: ${applicationsResult.rowCount}件`);
-            }
-            catch (error) {
-                // applicationsテーブルがまだ存在しない場合はスキップ
-                console.log('applicationsテーブルは存在しないか、データがありません');
-                deletedRecords.applications = 0;
+            if (jobSeekerId) {
+                try {
+                    const applicationsResult = await query('DELETE FROM applications WHERE job_seeker_id = $1', [jobSeekerId]);
+                    deletedRecords.applications = applicationsResult.rowCount;
+                    console.log(`applications削除: ${applicationsResult.rowCount}件`);
+                }
+                catch (error) {
+                    // applicationsテーブルがまだ存在しない場合はスキップ
+                    console.log('applicationsテーブルは存在しないか、データがありません');
+                    deletedRecords.applications = 0;
+                }
             }
             // 3. 他の関連テーブルからの削除（将来的な拡張用）
             // 例: job_seeker_skills, job_seeker_preferences など
-            // 4. job_seekersテーブルから削除
-            const jobSeekersResult = await query('DELETE FROM job_seekers WHERE user_id = $1', [userId]);
-            deletedRecords.jobSeeker = jobSeekersResult.rowCount;
-            console.log(`job_seekers削除: ${jobSeekersResult.rowCount}件`);
+            // 4. job_seekersテーブルから削除（存在する場合のみ）
+            if (jobSeekerId) {
+                const jobSeekersResult = await query('DELETE FROM job_seekers WHERE user_id = $1', [userId]);
+                deletedRecords.jobSeeker = jobSeekersResult.rowCount;
+                console.log(`job_seekers削除: ${jobSeekersResult.rowCount}件`);
+            }
+            else {
+                deletedRecords.jobSeeker = 0;
+                console.log('job_seekersレコードは存在しません');
+            }
             // 5. usersテーブルから削除（最後に実行）
             const usersResult = await query('DELETE FROM users WHERE id = $1', [userId]);
             deletedRecords.user = usersResult.rowCount;
             console.log(`users削除: ${usersResult.rowCount}件`);
             // トランザクションコミット
             await query('COMMIT');
-            console.log(`求職者完全削除完了: ${fullName} (JobSeekerID: ${jobSeekerId}, UserID: ${userId})`);
+            console.log(`ユーザー完全削除完了: ${fullName} (UserID: ${userId})`);
             res.json({
                 success: true,
-                message: `求職者「${fullName}」を完全に削除しました`,
+                message: `ユーザー「${fullName}」を完全に削除しました`,
                 deletedRecords
             });
         }
@@ -995,7 +1016,7 @@ app.delete('/api/admin/jobseekers/:id', async (req, res) => {
     }
     catch (error) {
         console.error('/api/admin/jobseekers/:id 完全削除エラー:', error);
-        res.status(500).json({ success: false, message: '求職者の完全削除に失敗しました' });
+        res.status(500).json({ success: false, message: 'ユーザーの完全削除に失敗しました' });
     }
 });
 // 管理者用：管理者ログインAPI
