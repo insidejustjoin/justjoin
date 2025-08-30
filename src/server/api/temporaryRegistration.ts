@@ -28,13 +28,13 @@ router.post('/temporary', async (req, res) => {
       });
     }
 
-    // 既存ユーザーチェック
-    console.log('Checking existing user for email:', email);
+    // 既存ユーザーチェック（activeなユーザーのみ）
+    console.log('Checking existing active user for email:', email);
     const existingUser = await query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
+      'SELECT id, status FROM users WHERE email = $1 AND status = $2',
+      [email, 'active']
     );
-    console.log('Existing user query result:', existingUser.rows);
+    console.log('Existing active user query result:', existingUser.rows);
 
     if (existingUser.rows.length > 0) {
       return res.status(400).json({ 
@@ -261,14 +261,39 @@ router.post('/complete/:token', async (req, res) => {
     // パスワードハッシュ化
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // ユーザー作成
-    const userResult = await query(
-      `INSERT INTO users (email, password_hash, role, created_at, updated_at) 
-       VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id`,
-      [registration.email, passwordHash, 'jobseeker']
+    // 既存のinactiveなユーザーがいるかチェック
+    const existingInactiveUser = await query(
+      'SELECT id FROM users WHERE email = $1 AND status = $2',
+      [registration.email, 'inactive']
     );
 
-    const userId = userResult.rows[0].id;
+    let userId: number;
+
+    if (existingInactiveUser.rows.length > 0) {
+      // 既存のinactiveなユーザーをactiveに更新
+      userId = existingInactiveUser.rows[0].id;
+      await query(
+        `UPDATE users 
+         SET password_hash = $1, status = $2, updated_at = NOW() 
+         WHERE id = $3`,
+        [passwordHash, 'active', userId]
+      );
+
+      // 退会履歴を記録
+      await query(
+        `INSERT INTO user_status_history (user_id, previous_status, new_status, reason, changed_by)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [userId, 'inactive', 'active', '仮登録システムによる再登録', userId]
+      );
+    } else {
+      // 新規ユーザー作成
+      const userResult = await query(
+        `INSERT INTO users (email, password_hash, user_type, created_at, updated_at) 
+         VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id`,
+        [registration.email, passwordHash, 'job_seeker']
+      );
+      userId = userResult.rows[0].id;
+    }
 
     // 求職者詳細情報作成
     await query(
@@ -284,17 +309,6 @@ router.post('/complete/:token', async (req, res) => {
        WHERE verification_token = $3`,
       ['completed', passwordHash, token]
     );
-
-      res.json({ 
-        success: true, 
-        message: '登録が完了しました。',
-        data: {
-          userId,
-          email: registration.email,
-          firstName: registration.first_name,
-          lastName: registration.last_name
-        }
-      });
 
     res.json({ 
       success: true, 

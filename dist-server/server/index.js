@@ -440,28 +440,47 @@ app.post('/api/admin/login', async (req, res) => {
 app.get('/api/admin/jobseekers', async (req, res) => {
     try {
         const { query } = await import('../integrations/postgres/client.js');
-        // 基本的な求職者データを取得（国籍フィールドを追加）
+        // クエリパラメータでステータスフィルタリング
+        const { status = 'all' } = req.query;
+        let statusFilter = '';
+        let statusParams = [];
+        if (status === 'active') {
+            statusFilter = 'WHERE u.status = $1';
+            statusParams = ['active'];
+        }
+        else if (status === 'inactive') {
+            statusFilter = 'WHERE u.status = $1';
+            statusParams = ['inactive'];
+        }
+        else if (status === 'employed') {
+            statusFilter = 'WHERE js.employment_status = $1';
+            statusParams = ['employed'];
+        }
+        // 基本的な求職者データを取得（ステータスフィルタリング対応）
         const result = await query(`
-        SELECT 
-          js.*,
-          u.email as user_email,
-          u.status as user_status,
-          u.created_at as user_created_at,
-          u.updated_at as user_updated_at,
-          -- 年齢計算用の生年月日
-          js.date_of_birth,
-          -- 性別情報
-          js.gender,
-          -- 国籍情報
-          js.nationality,
-          -- 電話番号
-          js.phone,
-          -- 住所
-          js.address
-        FROM job_seekers js
-        LEFT JOIN users u ON js.user_id = u.id
-        ORDER BY js.created_at DESC
-      `);
+      SELECT 
+        js.*,
+        u.email as user_email,
+        u.status as user_status,
+        u.created_at as user_created_at,
+        u.updated_at as user_updated_at,
+        -- 年齢計算用の生年月日
+        js.date_of_birth,
+        -- 性別情報
+        js.gender,
+        -- 国籍情報
+        js.nationality,
+        -- 電話番号
+        js.phone,
+        -- 住所
+        js.address,
+        -- 就職状況（デフォルトは未就職）
+        COALESCE(js.employment_status, 'unemployed') as employment_status
+      FROM job_seekers js
+      LEFT JOIN users u ON js.user_id = u.id
+      ${statusFilter}
+      ORDER BY js.created_at DESC
+    `, statusParams);
         // 各求職者に対して詳細情報を取得
         const processedRows = await Promise.all(result.rows.map(async (row) => {
             console.log('===DEBUG reached forEach start, user_id:', row.user_id);
