@@ -8,7 +8,7 @@ router.get('/admin/status', authenticate, async (req, res) => {
         const { status } = req.query;
         let sqlQuery = `
       SELECT 
-        js.id,
+        js.user_id as id,
         js.user_id,
         js.first_name,
         js.last_name,
@@ -50,12 +50,20 @@ router.post('/admin/employ/:userId', authenticate, async (req, res) => {
     try {
         const { userId } = req.params;
         const { company_name, company_url, employment_date } = req.body;
+        console.log('就職済み変更リクエスト:', { userId, company_name, employment_date });
         if (!company_name || !employment_date) {
             return res.status(400).json({ success: false, error: '企業名と就職日は必須です' });
+        }
+        // UUIDの形式チェック
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(userId)) {
+            console.error('無効なUUID形式:', userId);
+            return res.status(400).json({ success: false, error: '無効なユーザーID形式です' });
         }
         // 求職者が存在するかチェック
         const userCheck = await query('SELECT id FROM users WHERE id = $1', [userId]);
         if (userCheck.rows.length === 0) {
+            console.error('ユーザーが見つかりません:', userId);
             return res.status(404).json({ success: false, error: '求職者が見つかりません' });
         }
         // ステータス履歴に就職済みレコードを追加
@@ -81,12 +89,20 @@ router.post('/admin/withdraw/:userId', authenticate, async (req, res) => {
     try {
         const { userId } = req.params;
         const { reason, withdrawal_date } = req.body;
+        console.log('退会済み変更リクエスト:', { userId, reason, withdrawal_date });
         if (!withdrawal_date) {
             return res.status(400).json({ success: false, error: '退会日は必須です' });
+        }
+        // UUIDの形式チェック
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(userId)) {
+            console.error('無効なUUID形式:', userId);
+            return res.status(400).json({ success: false, error: '無効なユーザーID形式です' });
         }
         // 求職者が存在するかチェック
         const userCheck = await query('SELECT id FROM users WHERE id = $1', [userId]);
         if (userCheck.rows.length === 0) {
+            console.error('ユーザーが見つかりません:', userId);
             return res.status(404).json({ success: false, error: '求職者が見つかりません' });
         }
         // ステータス履歴に退会済みレコードを追加
@@ -112,9 +128,17 @@ router.post('/admin/reactivate/:userId', authenticate, async (req, res) => {
     try {
         const { userId } = req.params;
         const { notes } = req.body;
+        console.log('復帰変更リクエスト:', { userId, notes });
+        // UUIDの形式チェック
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(userId)) {
+            console.error('無効なUUID形式:', userId);
+            return res.status(400).json({ success: false, error: '無効なユーザーID形式です' });
+        }
         // 求職者が存在するかチェック
         const userCheck = await query('SELECT id FROM users WHERE id = $1', [userId]);
         if (userCheck.rows.length === 0) {
+            console.error('ユーザーが見つかりません:', userId);
             return res.status(404).json({ success: false, error: '求職者が見つかりません' });
         }
         // ステータス履歴にアクティブレコードを追加

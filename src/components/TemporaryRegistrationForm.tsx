@@ -15,6 +15,10 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
+  const [nationality, setNationality] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const { t } = useLanguage();
@@ -34,6 +38,10 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
           email,
           firstName,
           lastName,
+          phone,
+          dateOfBirth,
+          gender,
+          nationality,
         }),
       });
 
@@ -44,6 +52,10 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
         setEmail('');
         setFirstName('');
         setLastName('');
+        setPhone('');
+        setDateOfBirth('');
+        setGender('');
+        setNationality('');
         if (onSuccess) {
           onSuccess();
         }
@@ -120,6 +132,65 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="phone">
+              電話番号 *
+            </Label>
+            <Input
+              id="phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="090-1234-5678"
+              disabled={isLoading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="dateOfBirth">
+              生年月日 *
+            </Label>
+            <Input
+              id="dateOfBirth"
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+              disabled={isLoading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="gender">
+              性別 *
+            </Label>
+            <select
+              id="gender"
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              disabled={isLoading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">選択してください</option>
+              <option value="男性">男性</option>
+              <option value="女性">女性</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="nationality">
+              国籍 *
+            </Label>
+            <Input
+              id="nationality"
+              type="text"
+              value={nationality}
+              onChange={(e) => setNationality(e.target.value)}
+              placeholder="日本"
+              disabled={isLoading}
+            />
+          </div>
+
           {message && (
             <Alert className={message.type === 'success' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
               {message.type === 'success' ? (
@@ -140,7 +211,7 @@ export const TemporaryRegistrationForm: React.FC<TemporaryRegistrationFormProps>
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoading || !email || !firstName || !lastName}
+            disabled={isLoading || !email || !firstName || !lastName || !phone || !dateOfBirth || !gender || !nationality}
           >
             {isLoading ? (
               <>

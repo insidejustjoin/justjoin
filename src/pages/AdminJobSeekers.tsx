@@ -863,10 +863,13 @@ export function AdminJobSeekers() {
     }
   };
 
-  const deleteJobSeeker = async (id: string, name: string) => {
-    if (!confirm(`求職者「${name}」を削除しますか？この操作は取り消せません。`)) {
+  const deleteJobSeeker = async (id: string | number, name: string) => {
+    if (!confirm(`求職者「${name}」を完全に削除しますか？\n\nこの操作により：\n• ユーザーアカウントが削除されます\n• 求職者データが削除されます\n• ステータス履歴が削除されます\n• 再度仮登録から始められます\n\nこの操作は取り消せません。`)) {
       return;
     }
+
+    // デバッグログを追加
+    console.log('削除リクエスト:', { id, name, idType: typeof id, isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id)) });
 
     try {
       const token = localStorage.getItem('auth_token');
@@ -887,10 +890,11 @@ export function AdminJobSeekers() {
       const result = await response.json();
 
       if (result.success) {
-        setJobSeekers(prev => prev.filter(seeker => seeker.id !== id));
-        setFilteredJobSeekers(prev => prev.filter(seeker => seeker.id !== id));
-        setSelectedJobSeekers(prev => prev.filter(seeker => seeker.id !== id));
-        alert('求職者を削除しました');
+        // user_idでフィルタリング
+        setJobSeekers(prev => prev.filter(seeker => seeker.user_id !== id));
+        setFilteredJobSeekers(prev => prev.filter(seeker => seeker.user_id !== id));
+        setSelectedJobSeekers(prev => prev.filter(seeker => seeker.user_id !== id));
+        alert('求職者を完全に削除しました。再度仮登録から始められます。');
         
         // ステータスデータも更新
         fetchJobSeekerStatuses();
@@ -905,7 +909,12 @@ export function AdminJobSeekers() {
 
   // ステータス変更モーダルを開く
   const openStatusModal = (jobSeeker: any) => {
-    setSelectedStatusJobSeeker(jobSeeker);
+    // 正しいIDを設定
+    const jobSeekerWithCorrectId = {
+      ...jobSeeker,
+      id: jobSeeker.user_id || jobSeeker.id
+    };
+    setSelectedStatusJobSeeker(jobSeekerWithCorrectId);
     setShowStatusModal(true);
   };
 
@@ -1746,13 +1755,22 @@ export function AdminJobSeekers() {
                           就職済み
                         </Button>
                         <Button
-                          onClick={() => deleteJobSeeker(jobSeeker.id, jobSeeker.full_name)}
+                          onClick={() => {
+                            console.log('削除ボタンクリック:', { 
+                              user_id: jobSeeker.user_id, 
+                              full_name: jobSeeker.full_name,
+                              user_idType: typeof jobSeeker.user_id,
+                              isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(jobSeeker.user_id))
+                            });
+                            deleteJobSeeker(jobSeeker.user_id, jobSeeker.full_name);
+                          }}
                           size="sm"
                           variant="destructive"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           削除
                         </Button>
+
                       </div>
                     </div>
                   </CardContent>
@@ -1874,6 +1892,14 @@ export function AdminJobSeekers() {
                           >
                             <UserPlus className="h-4 w-4 mr-2" />
                             求職者に復帰
+                          </Button>
+                          <Button
+                            onClick={() => deleteJobSeeker(jobSeeker.user_id, jobSeeker.full_name)}
+                            size="sm"
+                            variant="destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            完全削除
                           </Button>
                         </div>
                       </div>

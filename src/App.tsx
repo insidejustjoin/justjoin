@@ -84,10 +84,22 @@ function App() {
               <Route path="/register/verify/:token" element={<RegistrationVerification />} />
               <Route path="/jobseeker/auth" element={<JobSeekerAuth />} />
               <Route path="/jobseeker/dashboard" element={<JobSeekerDashboard />} />
-              <Route path="/jobseeker/my-page" element={<JobSeekerMyPage />} />
-              <Route path="/jobseeker/documents" element={<Documents />} />
+              <Route path="/jobseeker/my-page" element={
+                <AuthGuard requiredUserType="job_seeker">
+                  <JobSeekerMyPage />
+                </AuthGuard>
+              } />
+              <Route path="/jobseeker/documents" element={
+                <AuthGuard requiredUserType="job_seeker">
+                  <Documents />
+                </AuthGuard>
+              } />
               <Route path="/jobseeker/forgot-password" element={<JobSeekerForgotPassword />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/notifications" element={
+                <AuthGuard>
+                  <NotificationsPage />
+                </AuthGuard>
+              } />
               
               {/* 企業関連 */}
               <Route path="/employer" element={<EmployerLanding />} />
@@ -160,7 +172,11 @@ function App() {
               {/* その他のページ */}
               <Route path="/jobs" element={<JobSearch />} />
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/settings" element={
+                <AuthGuard>
+                  <Settings />
+                </AuthGuard>
+              } />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/password-reset" element={<ForgotPassword />} />
 

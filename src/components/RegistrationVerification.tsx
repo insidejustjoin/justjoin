@@ -12,6 +12,10 @@ interface RegistrationData {
   firstName: string;
   lastName: string;
   token: string;
+  phone: string;
+  dateOfBirth: string;
+  gender: string;
+  nationality: string;
 }
 
 export const RegistrationVerification: React.FC = () => {
@@ -123,11 +127,11 @@ export const RegistrationVerification: React.FC = () => {
             </Alert>
             <div className="mt-4 text-center">
               <Button 
-                onClick={() => navigate('/register')} 
+                onClick={() => navigate('/jobseeker')} 
                 variant="outline"
                 className="w-full"
               >
-                登録ページに戻る
+                求職者登録ページに戻る
               </Button>
             </div>
           </CardContent>
@@ -189,8 +193,20 @@ export const RegistrationVerification: React.FC = () => {
                   firstName: registrationData.firstName,
                   lastName: registrationData.lastName,
                   email: registrationData.email,
+                  phone: registrationData.phone,
+                  dateOfBirth: registrationData.dateOfBirth,
+                  gender: registrationData.gender,
+                  nationality: registrationData.nationality,
                 }
-              }
+              },
+              // 基本情報も直接設定
+              firstName: registrationData.firstName,
+              lastName: registrationData.lastName,
+              liveMail: registrationData.email,
+              livePhoneNumber: registrationData.phone,
+              birthDate: registrationData.dateOfBirth,
+              gender: registrationData.gender,
+              nationality: registrationData.nationality,
             }}
           />
         </div>

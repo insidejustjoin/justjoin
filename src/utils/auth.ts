@@ -32,15 +32,16 @@ export function generateJWT(payload: any): string {
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-// JWTトークン検証（簡易版）
-export function verifyJWT(token: string): any | null {
+// JWTトークン検証
+export async function verifyJWT(token: string): Promise<any | null> {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
+    const jwt = await import('jsonwebtoken');
+    const secret = process.env.JWT_SECRET || 'justjoin-jwt-secret-2024';
     
-    const payload = JSON.parse(atob(parts[1]));
+    const payload = jwt.default.verify(token, secret);
     return payload;
   } catch (error) {
+    console.error('JWT検証エラー:', error);
     return null;
   }
 } 

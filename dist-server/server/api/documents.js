@@ -12,6 +12,39 @@ const __dirname = path.dirname(__filename);
 router.get('/test', (req, res) => {
     res.json({ message: 'Documents API is working!' });
 });
+// 仮登録用の資料保存エンドポイント
+router.post('/temporary-save', async (req, res) => {
+    try {
+        const { document_data } = req.body;
+        if (!document_data) {
+            return res.status(400).json({ error: 'document_dataが必要です' });
+        }
+        // 仮登録用の資料保存処理
+        // ここでは一時的にログに出力（実際の保存処理は後で実装）
+        logger.info('仮登録用資料保存:', {
+            firstName: document_data.firstName,
+            lastName: document_data.lastName,
+            email: document_data.liveMail,
+            japaneseLevel: document_data.japaneseLevel,
+            qualificationDate: document_data.qualificationDate
+        });
+        res.json({
+            success: true,
+            message: '仮登録用資料が保存されました',
+            data: {
+                saved: true,
+                timestamp: new Date().toISOString()
+            }
+        });
+    }
+    catch (error) {
+        logger.error('仮登録用資料保存エラー:', error);
+        res.status(500).json({
+            success: false,
+            error: '資料保存中にエラーが発生しました'
+        });
+    }
+});
 // スプレッドシートを忠実に再現した書類生成
 router.post('/generate-documents', async (req, res) => {
     try {

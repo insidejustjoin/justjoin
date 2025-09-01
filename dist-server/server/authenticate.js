@@ -1,5 +1,5 @@
 import { verifyJWT } from '../utils/auth.js';
-export function authenticate(req, res, next) {
+export async function authenticate(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({
@@ -9,7 +9,7 @@ export function authenticate(req, res, next) {
     }
     const token = authHeader.replace('Bearer ', '');
     try {
-        const payload = verifyJWT(token);
+        const payload = await verifyJWT(token);
         if (!payload || !payload.userId) {
             return res.status(401).json({
                 success: false,

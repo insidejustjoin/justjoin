@@ -116,6 +116,8 @@ interface DocumentData {
     date: string;
     name: string;
   };
+  japaneseLevel: string;
+  qualificationDate: string;
   nextJapaneseTestDate: string;
   nextJapaneseTestLevel: string;
   whyJapan: string;
@@ -332,6 +334,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       date: '',
       name: 'なし'
     },
+    japaneseLevel: '',
+    qualificationDate: '',
     nextJapaneseTestDate: '',
     nextJapaneseTestLevel: '',
     whyJapan: '',
@@ -412,14 +416,78 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   // 仮登録モードでprefillDataから初期データを設定
   useEffect(() => {
     if (isRegistrationMode && prefillData) {
-      setDocumentData(prevData => ({
-        ...prevData,
-        firstName: prefillData.resume?.basicInfo?.firstName || prevData.firstName,
-        lastName: prefillData.resume?.basicInfo?.lastName || prevData.lastName,
-        liveMail: prefillData.resume?.basicInfo?.email || prevData.liveMail,
-      }));
+      setDocumentData(prevData => {
+        // certificateStatusから日本語資格データを取得
+        const certificateStatus = prevData.certificateStatus;
+        const japaneseLevel = certificateStatus?.name && certificateStatus.name !== 'なし' ? certificateStatus.name : '';
+        const qualificationDate = certificateStatus?.date || '';
+        
+        return {
+          ...prevData,
+          // 基本情報をprefillDataから設定
+          firstName: prefillData.firstName || prefillData.resume?.basicInfo?.firstName || prevData.firstName,
+          lastName: prefillData.lastName || prefillData.resume?.basicInfo?.lastName || prevData.lastName,
+          liveMail: prefillData.liveMail || prefillData.resume?.basicInfo?.email || prevData.liveMail,
+          livePhoneNumber: prefillData.livePhoneNumber || prefillData.resume?.basicInfo?.phone || prevData.livePhoneNumber,
+          birthDate: prefillData.birthDate || prefillData.resume?.basicInfo?.dateOfBirth || prevData.birthDate,
+          gender: prefillData.gender || prefillData.resume?.basicInfo?.gender || prevData.gender,
+          nationality: prefillData.nationality || prefillData.resume?.basicInfo?.nationality || prevData.nationality,
+          // 日本語資格フィールドをcertificateStatusから同期
+          japaneseLevel: japaneseLevel,
+          qualificationDate: qualificationDate,
+          nextJapaneseTestDate: prevData.nextJapaneseTestDate || '',
+          nextJapaneseTestLevel: prevData.nextJapaneseTestLevel || '',
+        };
+      });
     }
   }, [isRegistrationMode, prefillData]);
+
+  // 必須項目チェック関数
+  const validateRequiredFields = () => {
+    const missingFields = [];
+    
+    // デバッグログ
+    console.log('=== バリデーション デバッグ ===');
+    console.log('japaneseLevel:', documentData.japaneseLevel);
+    console.log('qualificationDate:', documentData.qualificationDate);
+    console.log('certificateStatus:', documentData.certificateStatus);
+    
+    // 基本情報の必須項目
+    if (!documentData.lastName) missingFields.push('姓');
+    if (!documentData.firstName) missingFields.push('名');
+    if (!documentData.liveMail) missingFields.push('メールアドレス');
+    if (!documentData.livePhoneNumber) missingFields.push('電話番号');
+    if (!documentData.birthDate) missingFields.push('生年月日');
+    if (!documentData.liveAddress) missingFields.push('住所');
+    if (!documentData.resume?.photoUrl) missingFields.push('顔写真');
+    
+    // スキルシートの必須項目（仮登録モードでは任意）
+    if (!isRegistrationMode && (!documentData.skillSheet?.skills || Object.keys(documentData.skillSheet.skills).length === 0)) {
+      missingFields.push('スキルシート');
+    }
+    
+    // 学歴・職歴のチェック（仮登録モードでは任意）
+    if (!isRegistrationMode) {
+      if (!documentData.resume?.noEducation && (!documentData.resume?.education || documentData.resume.education.length === 0)) {
+        missingFields.push('学歴');
+      }
+      if (!documentData.resume?.noWorkExperience && (!documentData.resume?.workExperience || documentData.resume.workExperience.length === 0)) {
+        missingFields.push('職歴');
+      }
+    }
+    
+    // 日本語資格の必須項目（certificateStatusもチェック）
+    const japaneseLevel = documentData.japaneseLevel || (documentData.certificateStatus?.name && documentData.certificateStatus.name !== 'なし' ? documentData.certificateStatus.name : '');
+    const qualificationDate = documentData.qualificationDate || documentData.certificateStatus?.date || '';
+    
+    if (!japaneseLevel) missingFields.push('日本語資格');
+    if (!qualificationDate) missingFields.push('資格取得日');
+    
+    console.log('チェック後の値:', { japaneseLevel, qualificationDate });
+    console.log('missingFields:', missingFields);
+    
+    return missingFields;
+  };
 
   // 管理者モードで求職者データから初期データを設定
   useEffect(() => {
@@ -539,11 +607,13 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
             spouseSupport: savedDocumentData.spouseSupport || savedDocumentData.additionalInfo?.spouseSupport || jobSeekerData.spouse_support || '',
             
             // 日本語関連情報
-            certificateStatus: savedDocumentData.certificateStatus || savedDocumentData.japaneseInfo?.certificateStatus || { date: '', name: '' },
-            nextJapaneseTestDate: savedDocumentData.nextJapaneseTestDate || savedDocumentData.japaneseInfo?.nextJapaneseTestDate || '',
-            nextJapaneseTestLevel: savedDocumentData.nextJapaneseTestLevel || savedDocumentData.japaneseInfo?.nextJapaneseTestLevel || '',
-            whyJapan: savedDocumentData.whyJapan || savedDocumentData.japaneseInfo?.whyJapan || '',
-            whyInterestJapan: savedDocumentData.whyInterestJapan || savedDocumentData.japaneseInfo?.whyInterestJapan || ''
+                    certificateStatus: savedDocumentData.certificateStatus || savedDocumentData.japaneseInfo?.certificateStatus || { date: '', name: '' },
+        japaneseLevel: savedDocumentData.japaneseLevel || savedDocumentData.japaneseInfo?.japaneseLevel || '',
+        qualificationDate: savedDocumentData.qualificationDate || savedDocumentData.japaneseInfo?.qualificationDate || '',
+        nextJapaneseTestDate: savedDocumentData.nextJapaneseTestDate || savedDocumentData.japaneseInfo?.nextJapaneseTestDate || '',
+        nextJapaneseTestLevel: savedDocumentData.nextJapaneseTestLevel || savedDocumentData.japaneseInfo?.nextJapaneseTestLevel || '',
+        whyJapan: savedDocumentData.whyJapan || savedDocumentData.japaneseInfo?.whyJapan || '',
+        whyInterestJapan: savedDocumentData.whyInterestJapan || savedDocumentData.japaneseInfo?.whyInterestJapan || ''
           } : {
             // 基本情報
             lastName: lastName,
@@ -601,6 +671,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
               date: '',
               name: ''
             },
+            japaneseLevel: '',
+            qualificationDate: '',
             nextJapaneseTestDate: '',
             nextJapaneseTestLevel: '',
             whyJapan: '',
@@ -680,6 +752,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
               date: '',
               name: ''
             },
+            japaneseLevel: '',
+            qualificationDate: '',
             nextJapaneseTestDate: '',
             nextJapaneseTestLevel: '',
             whyJapan: '',
@@ -1558,6 +1632,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
           spouse: savedData.spouse || '',
           spouseSupport: savedData.spouseSupport || '',
           certificateStatus: savedData.certificateStatus || { date: '', name: '' },
+          japaneseLevel: savedData.japaneseLevel || '',
+          qualificationDate: savedData.qualificationDate || '',
           nextJapaneseTestDate: savedData.nextJapaneseTestDate || '',
           nextJapaneseTestLevel: savedData.nextJapaneseTestLevel || '',
           whyJapan: savedData.whyJapan || '',
@@ -2980,7 +3056,7 @@ whiteCells.forEach(cell => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Camera className="h-5 w-5" />
-                {t('documents.photo')}
+                {t('documents.photo')} <span className="text-red-500">*</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -3368,7 +3444,7 @@ whiteCells.forEach(cell => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium">{t('documents.currentJapaneseQualification')}</Label>
+                  <Label className="text-sm font-medium">{t('documents.currentJapaneseQualification')} <span className="text-red-500">*</span></Label>
                   <Select value={documentData.certificateStatus.name} onValueChange={(value) => {
                     console.log('日本語資格変更:', value);
                     setDocumentData(prev => ({ 
@@ -3395,7 +3471,7 @@ whiteCells.forEach(cell => {
                   </Select>
                 </div>
                 <div>
-                                      <Label className="text-sm font-medium">{t('documents.acquisitionDate')}</Label>
+                                      <Label className="text-sm font-medium">{t('documents.acquisitionDate')} <span className="text-red-500">*</span></Label>
                   <Input
                     type="date"
                     value={documentData.certificateStatus.date}
@@ -3406,7 +3482,7 @@ whiteCells.forEach(cell => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium">{t('documents.plannedJapaneseQualification')}</Label>
+                  <Label className="text-sm font-medium">{t('documents.plannedJapaneseQualification')} <span className="text-red-500">*</span></Label>
                   <Select value={documentData.nextJapaneseTestLevel} onValueChange={(value) => setDocumentData(prev => ({ ...prev, nextJapaneseTestLevel: value }))}>
                     <SelectTrigger className="h-10">
                       <SelectValue placeholder={t('documents.selectLevel')} />
@@ -3422,7 +3498,7 @@ whiteCells.forEach(cell => {
                   </Select>
                 </div>
                 <div>
-                                      <Label className="text-sm font-medium">{t('documents.nextExamDate')}</Label>
+                                      <Label className="text-sm font-medium">{t('documents.nextExamDate')} <span className="text-red-500">*</span></Label>
                   <Input
                     type="date"
                     value={documentData.nextJapaneseTestDate}
@@ -4001,8 +4077,54 @@ whiteCells.forEach(cell => {
             {/* 仮登録モードで次へボタンを表示 */}
             {isRegistrationMode && onDocumentsComplete && (
               <Button
-                onClick={() => onDocumentsComplete(documentData)}
-                disabled={!documentData.lastName || !documentData.firstName}
+                onClick={async () => {
+                  try {
+                    // 資料内容を保存
+                    const saveData = {
+                      document_data: documentData
+                    };
+                    
+                    const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+                    const saveResponse = await fetch(`${apiUrl}/api/documents/temporary-save`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify(saveData)
+                    });
+                    
+                    if (saveResponse.ok) {
+                      console.log('資料内容が保存されました');
+                    } else {
+                      console.error('資料保存エラー:', saveResponse.status);
+                    }
+                  } catch (error) {
+                    console.error('資料保存エラー:', error);
+                  }
+                  
+                  // temporaryRegistration.tsが期待する形式にデータを変換
+                  const convertedData = {
+                    resume: {
+                      basicInfo: {
+                        firstName: documentData.firstName,
+                        lastName: documentData.lastName,
+                        email: documentData.liveMail,
+                        phone: documentData.livePhoneNumber,
+                        dateOfBirth: documentData.birthDate,
+                        address: documentData.liveAddress
+                      },
+                      education: documentData.resume?.education || [],
+                      workExperience: documentData.resume?.workExperience || [],
+                      noEducation: documentData.resume?.noEducation || false,
+                      noWorkExperience: documentData.resume?.noWorkExperience || false
+                    },
+                    skillSheet: {
+                      skills: documentData.skillSheet?.skills || {}
+                    }
+                  };
+                  onDocumentsComplete(convertedData);
+                }}
+                disabled={validateRequiredFields().length > 0}
                 className="w-full"
                 size="lg"
               >
@@ -4025,7 +4147,7 @@ whiteCells.forEach(cell => {
           </div>
           
           {/* エラーメッセージ */}
-          {(!documentData.lastName || !documentData.firstName) && (
+          {validateRequiredFields().length > 0 && (
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
@@ -4033,18 +4155,12 @@ whiteCells.forEach(cell => {
                   <h4 className="text-sm font-medium text-red-800 mb-1">必須項目が未入力です</h4>
                   <p className="text-sm text-red-700 mb-2">以下の項目は必須です：</p>
                   <ul className="text-sm text-red-700 space-y-1">
-                    {!documentData.lastName && (
-                      <li className="flex items-start gap-1">
+                    {validateRequiredFields().map((field, index) => (
+                      <li key={index} className="flex items-start gap-1">
                         <span className="text-red-500 mt-1 flex-shrink-0">•</span>
-                        <span>姓</span>
+                        <span>{field}</span>
                       </li>
-                    )}
-                    {!documentData.firstName && (
-                      <li className="flex items-start gap-1">
-                        <span className="text-red-500 mt-1 flex-shrink-0">•</span>
-                        <span>名</span>
-                      </li>
-                    )}
+                    ))}
                   </ul>
                 </div>
               </div>
@@ -4061,9 +4177,9 @@ whiteCells.forEach(cell => {
               管理者モード：求職者データを更新します
             </p>
           )}
-          {(!documentData.lastName || !documentData.firstName) && (
+          {validateRequiredFields().length > 0 && (
             <p className="text-sm text-muted-foreground mt-2 text-center">
-              {t('documents.nameRequired')}
+              必須項目を入力してください
             </p>
           )}
         </CardContent>

@@ -9,13 +9,13 @@ const router = express.Router();
 // 仮登録API
 router.post('/temporary', async (req, res) => {
   try {
-    const { email, firstName, lastName } = req.body;
+    const { email, firstName, lastName, phone, dateOfBirth, gender, nationality } = req.body;
 
     // バリデーション
-    if (!email || !firstName || !lastName) {
+    if (!email || !firstName || !lastName || !phone || !dateOfBirth || !gender || !nationality) {
       return res.status(400).json({ 
         success: false, 
-        message: 'メールアドレス、姓、名は必須です。' 
+        message: 'メールアドレス、姓、名、電話番号、生年月日、性別、国籍は必須です。' 
       });
     }
 
@@ -43,13 +43,40 @@ router.post('/temporary', async (req, res) => {
       });
     }
 
-    // 既存の仮登録チェック
-    const existingTemp = await query(
-      'SELECT id FROM temporary_registrations WHERE email = $1 AND status != $2',
-      [email, 'completed']
+    // 削除されたユーザーの関連データをクリーンアップ
+    console.log('削除されたユーザーの関連データをクリーンアップ');
+    const deletedUser = await query(
+      'SELECT id FROM users WHERE email = $1 AND status != $2',
+      [email, 'active']
+    );
+    
+    if (deletedUser.rows.length > 0) {
+      console.log('削除されたユーザーを発見、関連データをクリーンアップ:', deletedUser.rows[0].id);
+      // 削除されたユーザーの関連データを完全にクリーンアップ
+      await query('DELETE FROM user_documents WHERE user_id = $1', [deletedUser.rows[0].id]);
+      await query('DELETE FROM job_seekers WHERE user_id = $1', [deletedUser.rows[0].id]);
+      await query('DELETE FROM user_status_history WHERE user_id = $1', [deletedUser.rows[0].id]);
+      await query('DELETE FROM users WHERE id = $1', [deletedUser.rows[0].id]);
+      console.log('削除されたユーザーの関連データをクリーンアップ完了');
+    }
+
+    // 期限切れデータの自動クリーンアップ
+    console.log('期限切れデータのクリーンアップ実行');
+    await query(
+      'DELETE FROM temporary_registrations WHERE expires_at < NOW() AND status != $1',
+      ['completed']
     );
 
+    // 既存の仮登録チェック
+    console.log('仮登録チェック - メールアドレス:', email);
+    const existingTemp = await query(
+      'SELECT id, status, created_at FROM temporary_registrations WHERE email = $1 AND status != $2',
+      [email, 'completed']
+    );
+    console.log('既存仮登録チェック結果:', existingTemp.rows);
+
     if (existingTemp.rows.length > 0) {
+      console.log('仮登録ブロック - 既存データあり:', existingTemp.rows[0]);
       return res.status(400).json({ 
         success: false, 
         message: 'このメールアドレスは既に仮登録中です。1時間後に再度お試しください。' 
@@ -77,9 +104,14 @@ router.post('/temporary', async (req, res) => {
     // 仮登録データ保存
     await query(
       `INSERT INTO temporary_registrations 
-       (email, first_name, last_name, verification_token, expires_at) 
-       VALUES ($1, $2, $3, $4, $5)`,
-      [email, firstName, lastName, verificationToken, expiresAt]
+       (email, first_name, last_name, verification_token, expires_at, documents_data) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [email, firstName, lastName, verificationToken, expiresAt, JSON.stringify({
+        phone,
+        dateOfBirth,
+        gender,
+        nationality
+      })]
     );
 
     // 確認メール送信
@@ -122,6 +154,9 @@ router.get('/verify/:token', async (req, res) => {
 
     const registration = tempReg.rows[0];
 
+    // 保存された追加データを取得
+    const documentsData = registration.documents_data ? JSON.parse(registration.documents_data) : {};
+    
     res.json({ 
       success: true, 
       data: {
@@ -129,7 +164,11 @@ router.get('/verify/:token', async (req, res) => {
         email: registration.email,
         firstName: registration.first_name,
         lastName: registration.last_name,
-        token: registration.verification_token
+        token: registration.verification_token,
+        phone: documentsData.phone || '',
+        dateOfBirth: documentsData.dateOfBirth || '',
+        gender: documentsData.gender || '',
+        nationality: documentsData.nationality || ''
       }
     });
 
@@ -225,6 +264,29 @@ router.post('/complete/:token', async (req, res) => {
     const { token } = req.params;
     const { password } = req.body;
 
+    // データベース接続テスト
+    try {
+      const testQuery = await query('SELECT 1 as test');
+      console.log('データベース接続テスト成功:', testQuery.rows[0]);
+      
+      // テーブル存在確認
+      const tableCheck = await query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN ('job_seeker_status_history', 'users', 'job_seekers')
+        ORDER BY table_name
+      `);
+      console.log('利用可能なテーブル:', tableCheck.rows.map(row => row.table_name));
+      
+    } catch (dbError) {
+      console.error('データベース接続テスト失敗:', dbError);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'データベース接続エラー: ' + dbError.message 
+      });
+    }
+
     // バリデーション
     if (!password || password.length < 8) {
       return res.status(400).json({ 
@@ -301,6 +363,20 @@ router.post('/complete/:token', async (req, res) => {
        VALUES ($1, $2, $3, NOW(), NOW())`,
       [userId, registration.first_name, registration.last_name]
     );
+
+    // 求職者ステータスを'active'で初期化
+    try {
+      await query(
+        `INSERT INTO job_seeker_status_history (user_id, status, created_at, updated_at) 
+         VALUES ($1, $2, NOW(), NOW())`,
+        [userId, 'active']
+      );
+      console.log('求職者ステータス初期化成功:', userId);
+    } catch (statusError) {
+      console.error('求職者ステータス初期化エラー:', statusError);
+      // ステータス初期化に失敗しても処理を継続
+      console.log('ステータス初期化をスキップして処理を継続');
+    }
 
     // 仮登録完了
     await query(

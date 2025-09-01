@@ -459,27 +459,39 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             statusParams = ['employed'];
         }
         // 基本的な求職者データを取得（ステータスフィルタリング対応）
+        // データの整合性を保つため、対応するusersレコードが存在するもののみ取得
         const result = await query(`
       SELECT 
-        js.*,
+        u.id as id, -- フロントエンドが期待するidフィールドをuser_id（UUID）に設定
+        js.id as js_id,
+        u.id as user_id,
+        js.first_name,
+        js.last_name,
+        CONCAT(js.first_name, ' ', js.last_name) as full_name,
+        CONCAT(js.first_name, ' ', js.last_name) as fullName,
+        js.date_of_birth,
+        js.date_of_birth as dateOfBirth,
+        js.gender,
+        js.nationality,
+        js.phone,
+        js.address,
+        js.created_at,
+        js.updated_at,
         u.email as user_email,
+        u.email as email,
         u.status as user_status,
         u.created_at as user_created_at,
+        u.created_at as registeredAt,
         u.updated_at as user_updated_at,
-        -- 年齢計算用の生年月日
-        js.date_of_birth,
-        -- 性別情報
-        js.gender,
-        -- 国籍情報
-        js.nationality,
-        -- 電話番号
-        js.phone,
-        -- 住所
-        js.address,
         -- 就職状況（デフォルトは未就職）
-        COALESCE(js.employment_status, 'unemployed') as employment_status
+        COALESCE(js.employment_status, 'unemployed') as employment_status,
+        -- フロントエンドで必要なデフォルト値
+        '[]' as skills,
+        0 as experience_years,
+        '' as desired_job_title,
+        '' as self_introduction
       FROM job_seekers js
-      LEFT JOIN users u ON js.user_id = u.id
+      INNER JOIN users u ON js.user_id = u.id
       ${statusFilter}
       ORDER BY js.created_at DESC
     `, statusParams);
@@ -940,37 +952,59 @@ app.put('/api/jobseekers/:id', async (req, res) => {
 // --- 管理者用：求職者削除API（完全削除版） ---
 app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
     try {
-        const { id } = req.params; // job_seekers.id
+        const { id } = req.params; // users.id (数値)
         const { query } = await import('../integrations/postgres/client.js');
-        // まずjob_seekersテーブルからuser_idを取得
-        let result = await query('SELECT user_id, first_name, last_name FROM job_seekers WHERE id = $1', [id]);
-        let userId, fullName, jobSeekerId;
-        if (result.rows.length > 0) {
-            // job_seekersレコードが存在する場合
-            userId = result.rows[0].user_id;
-            fullName = `${result.rows[0].first_name || ''} ${result.rows[0].last_name || ''}`.trim();
-            jobSeekerId = id;
+        console.log(`削除リクエスト受信: ID=${id}, 型=${typeof id}`);
+        // 1. usersテーブルからユーザー情報を取得
+        const userResult = await query('SELECT id, email FROM users WHERE id = $1', [id]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
         }
-        else {
-            // job_seekersレコードが存在しない場合、直接usersテーブルから削除
-            result = await query('SELECT id, email FROM users WHERE id = $1', [id]);
-            if (result.rows.length === 0) {
-                return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
-            }
-            userId = result.rows[0].id;
-            fullName = result.rows[0].email;
-            jobSeekerId = null;
-        }
-        console.log(`ユーザー完全削除開始: UserID=${userId}, Name=${fullName}, JobSeekerID=${jobSeekerId}`);
+        const userId = userResult.rows[0].id;
+        const fullName = userResult.rows[0].email;
+        // 2. job_seekersテーブルから関連レコードを取得
+        const jobSeekerResult = await query('SELECT id FROM job_seekers WHERE user_id = $1', [id]);
+        const jobSeekerId = jobSeekerResult.rows.length > 0 ? jobSeekerResult.rows[0].id : null;
+        console.log(`削除対象: UserID=${userId}, Name=${fullName}, JobSeekerID=${jobSeekerId}`);
         // トランザクション開始
         await query('BEGIN');
         try {
             const deletedRecords = {};
-            // 1. user_documentsテーブルから削除
+            // 3. job_seeker_status_historyテーブルから削除
+            try {
+                const statusHistoryResult = await query('DELETE FROM job_seeker_status_history WHERE user_id = $1', [userId]);
+                deletedRecords.statusHistory = statusHistoryResult.rowCount;
+                console.log(`job_seeker_status_history削除: ${statusHistoryResult.rowCount}件`);
+            }
+            catch (error) {
+                console.log('job_seeker_status_historyテーブルは存在しないか、データがありません:', error.message);
+                deletedRecords.statusHistory = 0;
+            }
+            // 4. temporary_registrationsテーブルから削除
+            try {
+                const tempRegResult = await query('DELETE FROM temporary_registrations WHERE email = $1', [fullName]);
+                deletedRecords.temporaryRegistrations = tempRegResult.rowCount;
+                console.log(`temporary_registrations削除: ${tempRegResult.rowCount}件`);
+            }
+            catch (error) {
+                console.log('temporary_registrationsテーブルは存在しないか、データがありません:', error.message);
+                deletedRecords.temporaryRegistrations = 0;
+            }
+            // 5. user_status_historyテーブルから削除
+            try {
+                const userStatusHistoryResult = await query('DELETE FROM user_status_history WHERE user_id = $1', [userId]);
+                deletedRecords.userStatusHistory = userStatusHistoryResult.rowCount;
+                console.log(`user_status_history削除: ${userStatusHistoryResult.rowCount}件`);
+            }
+            catch (error) {
+                console.log('user_status_historyテーブルは存在しないか、データがありません:', error.message);
+                deletedRecords.userStatusHistory = 0;
+            }
+            // 6. user_documentsテーブルから削除
             const documentsResult = await query('DELETE FROM user_documents WHERE user_id = $1', [userId]);
             deletedRecords.documents = documentsResult.rowCount;
             console.log(`user_documents削除: ${documentsResult.rowCount}件`);
-            // 2. applicationsテーブルから削除（将来的に追加される場合）
+            // 7. applicationsテーブルから削除（将来的に追加される場合）
             if (jobSeekerId) {
                 try {
                     const applicationsResult = await query('DELETE FROM applications WHERE job_seeker_id = $1', [jobSeekerId]);
@@ -978,14 +1012,11 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
                     console.log(`applications削除: ${applicationsResult.rowCount}件`);
                 }
                 catch (error) {
-                    // applicationsテーブルがまだ存在しない場合はスキップ
-                    console.log('applicationsテーブルは存在しないか、データがありません');
+                    console.log('applicationsテーブルは存在しないか、データがありません:', error.message);
                     deletedRecords.applications = 0;
                 }
             }
-            // 3. 他の関連テーブルからの削除（将来的な拡張用）
-            // 例: job_seeker_skills, job_seeker_preferences など
-            // 4. job_seekersテーブルから削除（存在する場合のみ）
+            // 8. job_seekersテーブルから削除（存在する場合のみ）
             if (jobSeekerId) {
                 const jobSeekersResult = await query('DELETE FROM job_seekers WHERE user_id = $1', [userId]);
                 deletedRecords.jobSeeker = jobSeekersResult.rowCount;
@@ -995,7 +1026,7 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
                 deletedRecords.jobSeeker = 0;
                 console.log('job_seekersレコードは存在しません');
             }
-            // 5. usersテーブルから削除（最後に実行）
+            // 9. usersテーブルから削除（最後に実行）
             const usersResult = await query('DELETE FROM users WHERE id = $1', [userId]);
             deletedRecords.user = usersResult.rowCount;
             console.log(`users削除: ${usersResult.rowCount}件`);

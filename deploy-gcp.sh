@@ -19,6 +19,18 @@ fi
 PROJECT_ID=$(gcloud config get-value project)
 echo "📋 プロジェクトID: $PROJECT_ID"
 
+# 🚨 プロジェクトIDの確認
+if [ "$PROJECT_ID" != "justjoin-platform" ]; then
+    echo "❌ 間違ったプロジェクトIDです: $PROJECT_ID"
+    echo "✅ 正しいプロジェクトID: justjoin-platform"
+    echo "🔧 以下のコマンドで修正してください:"
+    echo "   gcloud config set project justjoin-platform"
+    echo "   gcloud auth application-default set-quota-project justjoin-platform"
+    exit 1
+fi
+
+echo "✅ 正しいプロジェクトIDが設定されています: $PROJECT_ID"
+
 # 1. ビルド
 echo "📦 プロジェクトをビルド中..."
 npm run build

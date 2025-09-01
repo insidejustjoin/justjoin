@@ -55,7 +55,7 @@ export function Settings() {
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/jobseekers/${user.id}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/jobseekers/${user.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

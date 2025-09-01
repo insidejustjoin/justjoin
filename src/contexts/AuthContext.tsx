@@ -238,6 +238,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       if (result.success && result.user) {
         const user = result.user;
+        console.log('ログイン成功、ユーザー情報:', user);
         
         // ユーザー情報の検証
         if (!user.id || !user.email || !user.user_type) {
@@ -252,11 +253,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
           id: String(user.id)
         };
         
+        console.log('localStorageに保存するユーザー情報:', userForStorage);
+        console.log('JWTトークン:', result.token);
+        console.log('JWTトークンの長さ:', result.token ? result.token.length : 0);
+        
         setUser(user);
-        localStorage.setItem('auth_token', result.token || 'token-' + Date.now());
+        
+        // JWTトークンの検証
+        if (!result.token || result.token === 'token-' + Date.now()) {
+          console.error('JWTトークンが正しく生成されていません');
+          toast.error('認証トークンの生成に失敗しました');
+          return false;
+        }
+        
+        localStorage.setItem('auth_token', result.token);
         localStorage.setItem('auth_user', JSON.stringify(userForStorage));
         localStorage.setItem('auth_login_time', new Date().toISOString()); // ログイン時刻を保存
         
+        console.log('認証状態更新完了');
+        console.log('保存されたJWTトークン:', localStorage.getItem('auth_token'));
         toast.success(`${userType === 'job_seeker' ? '求職者' : userType === 'company' ? '企業' : '管理者'}としてログインしました`);
         return true;
       } else {

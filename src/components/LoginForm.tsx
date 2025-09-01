@@ -57,17 +57,28 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
+      console.log('ログイン処理開始:', { email: data.email, userType: data.userType });
       const success = await login(data.email, data.password, data.userType);
+      console.log('ログイン結果:', success);
+      
       if (success) {
+        console.log('ログイン成功、リダイレクト開始');
         // ログイン成功時は適切なダッシュボードに遷移
         if (data.userType === 'company') {
+          console.log('企業ダッシュボードにリダイレクト');
           navigate('/employer/dashboard');
         } else if (data.userType === 'admin') {
+          console.log('管理者ダッシュボードにリダイレクト');
           navigate('/admin');
         } else {
-          navigate('/jobseeker/dashboard');
+          console.log('求職者マイページにリダイレクト');
+          navigate('/jobseeker/my-page');
         }
+      } else {
+        console.log('ログイン失敗');
       }
+    } catch (error) {
+      console.error('ログイン処理エラー:', error);
     } finally {
       setIsLoading(false);
     }

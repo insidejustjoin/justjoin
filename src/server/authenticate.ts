@@ -14,7 +14,7 @@ export interface AuthenticatedRequest extends Request {
   user: AuthenticatedUser;
 }
 
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -27,7 +27,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   const token = authHeader.replace('Bearer ', '');
   
   try {
-    const payload = verifyJWT(token);
+    const payload = await verifyJWT(token);
     
     if (!payload || !payload.userId) {
       return res.status(401).json({ 

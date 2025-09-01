@@ -16,7 +16,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export function JobSeekerMyPage() {
-  const { user, logout, deleteAccount, getProfile, clearAllStorage } = useAuth();
+  const { user, logout, deleteAccount, getProfile } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -283,18 +283,7 @@ export function JobSeekerMyPage() {
     }
   }, [user]);
 
-  // 無効なユーザー情報のチェック
-  useEffect(() => {
-    if (user) {
-      // 存在しないメールアドレスのチェック
-      if (user.email === 'sonokenno25work@gmail.com') {
-        toast.error('認証情報が無効です。再度ログインしてください。');
-        clearAllStorage();
-        window.location.href = '/jobseeker';
-        return;
-      }
-    }
-  }, [user, clearAllStorage, navigate]);
+
 
   // AuthContextの状態を取得
   const { isLoading: authLoading, isInitialized } = useAuth();
@@ -868,22 +857,7 @@ export function JobSeekerMyPage() {
         </div>
       )}
 
-      {/* デバッグ用クリアボタン（開発環境のみ） */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <Button
-            onClick={clearAllStorage}
-            variant="destructive"
-            size="sm"
-            className="shadow-lg"
-          >
-            <FuriganaText 
-              text="デバッグ: 認証クリア" 
-              showFurigana={showFurigana}
-            />
-          </Button>
-        </div>
-      )}
+
     </>
   );
 }

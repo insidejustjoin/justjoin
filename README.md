@@ -366,8 +366,15 @@ interview_summaries (
 
 ## ☁️ GCP設定
 
+### 🚨 重要：プロジェクトIDの確認
+
+**必ず以下のプロジェクトIDを使用してください！**
+
+- **✅ 正しいプロジェクトID**: `justjoin-platform`
+- **❌ 間違ったプロジェクトID**: `justjoin-corporate` (使用禁止)
+
 ### プロジェクト情報
-- **プロジェクトID**: `justjoin-platform`
+- **プロジェクトID**: `justjoin-platform` ✅
 - **リージョン**: `asia-northeast1`
 - **メインサービス名**: `justjoin`
 - **面接サービス名**: `justjoin-interview`（予定）
@@ -470,6 +477,12 @@ psql -U postgres -d justjoin -f database/schema.sql
 
 ### デプロイ
 ```bash
+# 🚨 重要：デプロイ前のプロジェクトID確認
+gcloud config get-value project
+
+# 正しいプロジェクトIDでない場合は設定
+gcloud config set project justjoin-platform
+
 # メインプラットフォームデプロイ
 ./deploy-gcp.sh
 
@@ -605,6 +618,7 @@ cd interview-system
 🆕 **一括書類生成機能**: 完全実装完了  
 🆕 **ログインページUX改善**: ステップバイステップガイダンス実装完了  
 🆕 **仮登録システム**: 完全実装完了（2025-08-29）  
+🚨 **プロジェクトID管理**: 正しいプロジェクトID（`justjoin-platform`）の使用を徹底  
 
 ## 🔧 最近の修正・改善
 
@@ -956,6 +970,30 @@ cd interview-system
 
 ## 🔍 トラブルシューティング
 
+### 🚨 プロジェクトID間違いによるデプロイ失敗
+
+**症状**: 
+- `ERROR: (gcloud.run.deploy) Revision is not ready and cannot serve traffic`
+- `Permission "artifactregistry.repositories.downloadArtifacts" denied`
+- `image from project [justjoin-platform], which is not the same as this project [justjoin-corporate]`
+
+**原因**: 間違ったプロジェクトID（`justjoin-corporate`）にデプロイしようとしている
+
+**解決方法**:
+```bash
+# 1. 現在のプロジェクトIDを確認
+gcloud config get-value project
+
+# 2. 正しいプロジェクトIDに設定
+gcloud config set project justjoin-platform
+
+# 3. アプリケーション認証情報も更新
+gcloud auth application-default set-quota-project justjoin-platform
+
+# 4. 再度デプロイ
+./deploy-gcp.sh
+```
+
 ### Cloud SQL Proxy接続エラー
 ```bash
 # ポート5432が使用中の場合は別ポートを使用
@@ -1258,6 +1296,13 @@ git log --oneline -5
 ## 🎊 仮登録システム完全実装完了！
 
 **求職者登録プロセスが大幅に改善され、セキュアでユーザーフレンドリーな仮登録システムが完全実装されました！**
+
+## 🚨 プロジェクトID管理の重要性
+
+**2025-08-31の教訓**: 間違ったプロジェクトID（`justjoin-corporate`）にデプロイしたため、1日間本番環境に更新が反映されませんでした。
+
+**正しいプロジェクトID**: `justjoin-platform` ✅  
+**間違ったプロジェクトID**: `justjoin-corporate` ❌ (使用禁止)
 
 ### 新機能
 - **多段階登録プロセス**: 仮登録 → メール確認 → 書類入力 → パスワード設定 → 本登録完了
