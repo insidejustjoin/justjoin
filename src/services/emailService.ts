@@ -1,8 +1,8 @@
 // メール送信サービスの設定
 const EMAIL_CONFIG = {
   from: 'inside.justjoin@gmail.com',
-  fromName: 'JustJoin',
-  subjectPrefix: '[JustJoin] ',
+  fromName: 'justjoin',
+  subjectPrefix: '[justjoin] ',
   // メール送信サービスの設定
   service: process.env.EMAIL_SERVICE || 'console', // 'gmail', 'sendgrid', 'resend', 'console'
   apiKey: process.env.EMAIL_API_KEY || '',
@@ -47,14 +47,14 @@ class EmailService {
   async sendTemporaryRegistrationConfirmation(to: string, firstName: string, lastName: string, verificationUrl: string): Promise<boolean> {
     const fullName = `${lastName} ${firstName}`;
     const template: EmailTemplate = {
-      subject: `${this.subjectPrefix}仮登録確認 - JustJoin / Temporary Registration Confirmation`,
+      subject: `${this.subjectPrefix}仮登録確認 - justjoin / Temporary Registration Confirmation`,
       body: `
 仮登録確認 / Temporary Registration Confirmation
 
 ${fullName} 様 / Dear ${fullName},
 
-JustJoinへの仮登録ありがとうございます。
-Thank you for your temporary registration with JustJoin.
+justjoinへの仮登録ありがとうございます。
+Thank you for your temporary registration with justjoin.
 
 以下のリンクをクリックして、登録手続きを完了してください。
 Please click the link below to complete your registration process.
@@ -87,7 +87,7 @@ ${this.fromEmail}
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
     <h2 style="color: #2563eb;">仮登録確認 / Temporary Registration Confirmation</h2>
     <p>${fullName} 様 / Dear ${fullName},</p>
-    <p>JustJoinへの仮登録ありがとうございます。<br>Thank you for your temporary registration with JustJoin.</p>
+    <p>justjoinへの仮登録ありがとうございます。<br>Thank you for your temporary registration with justjoin.</p>
     
     <p>以下のリンクをクリックして、登録手続きを完了してください。<br>Please click the link below to complete your registration process.</p>
     
@@ -867,6 +867,43 @@ ${this.fromEmail}
     };
 
     return await this.sendEmail(adminEmail, template);
+  }
+
+  // 書類未完了リマインド（日本語・英語）
+  async sendDocumentsReminder(to: string, fullName: string, completionRate: number, days: number): Promise<boolean> {
+    const template: EmailTemplate = {
+      subject: `${this.subjectPrefix}書類入力のご案内（${days}日経過・完了率${completionRate}%） / Document Completion Reminder`,
+      body: `
+${fullName} 様 / Dear ${fullName},
+
+justjoin にご登録いただきありがとうございます。
+現在、書類の入力率が ${completionRate}% です。登録から ${days} 日が経過しました。
+以下のページから続きをご入力ください。
+
+https://justjoin.jp/jobseeker/documents
+
+– justjoin
+${this.fromEmail}
+      `,
+      html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>書類入力のご案内</title></head>
+<body style="font-family: Arial, sans-serif; line-height:1.7; color:#111827;">
+  <div style="max-width:600px;margin:0 auto;padding:24px;">
+    <h2 style="color:#2563eb;margin:0 0 12px;">書類入力のご案内 / Document Completion Reminder</h2>
+    <p style="margin:0 0 12px;">${fullName} 様 / Dear ${fullName},</p>
+    <p style="margin:0 0 12px;">justjoin にご登録いただきありがとうございます。<br/>現在、書類の入力率は <strong>${completionRate}%</strong> です。登録から <strong>${days}日</strong> が経過しました。</p>
+    <p style="margin:0 0 16px;">以下のページから続きをご入力ください：</p>
+    <p style="margin:0 0 20px;"><a href="https://justjoin.jp/jobseeker/documents" style="background:#2563eb;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;">書類入力を続ける / Continue</a></p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;"/>
+    <p style="font-size:14px;color:#6b7280;">– ${this.fromName}<br/>${this.fromEmail}</p>
+  </div>
+</body>
+</html>
+      `
+    };
+    return this.sendEmail(to, template);
   }
 
   // 実際のメール送信処理

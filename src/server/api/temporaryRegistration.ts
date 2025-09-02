@@ -9,13 +9,13 @@ const router = express.Router();
 // 仮登録API
 router.post('/temporary', async (req, res) => {
   try {
-    const { email, firstName, lastName, phone, dateOfBirth, gender, nationality } = req.body;
+    const { email, firstName, lastName } = req.body;
 
     // バリデーション
-    if (!email || !firstName || !lastName || !phone || !dateOfBirth || !gender || !nationality) {
+    if (!email || !firstName || !lastName) {
       return res.status(400).json({ 
         success: false, 
-        message: 'メールアドレス、姓、名、電話番号、生年月日、性別、国籍は必須です。' 
+        message: 'メールアドレス、姓、名は必須です。'
       });
     }
 
@@ -104,14 +104,9 @@ router.post('/temporary', async (req, res) => {
     // 仮登録データ保存
     await query(
       `INSERT INTO temporary_registrations 
-       (email, first_name, last_name, verification_token, expires_at, documents_data) 
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [email, firstName, lastName, verificationToken, expiresAt, JSON.stringify({
-        phone,
-        dateOfBirth,
-        gender,
-        nationality
-      })]
+       (email, first_name, last_name, verification_token, expires_at) 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [email, firstName, lastName, verificationToken, expiresAt]
     );
 
     // 確認メール送信
@@ -138,11 +133,11 @@ router.get('/verify/:token', async (req, res) => {
   try {
     const { token } = req.params;
 
-    // 仮登録データ取得
+    // 仮登録データ取得（pending または documents_completed を許可）
     const tempReg = await query(
       `SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status = $2`,
-      [token, 'pending']
+       WHERE verification_token = $1 AND expires_at > NOW() AND status IN ($2, $3)`,
+      [token, 'pending', 'documents_completed']
     );
 
     if (tempReg.rows.length === 0) {
@@ -154,9 +149,9 @@ router.get('/verify/:token', async (req, res) => {
 
     const registration = tempReg.rows[0];
 
-    // 保存された追加データを取得
-    const documentsData = registration.documents_data ? JSON.parse(registration.documents_data) : {};
-    
+    // 保存済み書類データを展開
+    const documentsData = registration.documents_data ? JSON.parse(registration.documents_data) : null;
+
     res.json({ 
       success: true, 
       data: {
@@ -165,10 +160,7 @@ router.get('/verify/:token', async (req, res) => {
         firstName: registration.first_name,
         lastName: registration.last_name,
         token: registration.verification_token,
-        phone: documentsData.phone || '',
-        dateOfBirth: documentsData.dateOfBirth || '',
-        gender: documentsData.gender || '',
-        nationality: documentsData.nationality || ''
+        documentsData
       }
     });
 
@@ -254,6 +246,55 @@ router.post('/documents/:token', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: '書類入力保存中にエラーが発生しました。' 
+    });
+  }
+});
+
+// 書類データ更新API（"次へ"ボタン押下時）
+router.post('/update-documents/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { documentsData } = req.body;
+
+    if (!documentsData) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '書類データが必要です' 
+      });
+    }
+
+    // 仮登録データの存在確認
+    const tempReg = await query(
+      `SELECT * FROM temporary_registrations 
+       WHERE verification_token = $1 AND expires_at > NOW() AND status IN ($2, $3)`,
+      [token, 'pending', 'documents_completed']
+    );
+
+    if (tempReg.rows.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '無効なトークンまたは期限切れです。' 
+      });
+    }
+
+    // 書類データを更新
+    await query(
+      `UPDATE temporary_registrations 
+       SET documents_data = $1, status = $2, updated_at = NOW() 
+       WHERE verification_token = $3`,
+      [JSON.stringify(documentsData), 'documents_completed', token]
+    );
+
+    res.json({ 
+      success: true, 
+      message: '書類データが更新されました。' 
+    });
+
+  } catch (error) {
+    console.error('書類データ更新エラー:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '書類データ更新中にエラーが発生しました。' 
     });
   }
 });
@@ -376,6 +417,96 @@ router.post('/complete/:token', async (req, res) => {
       console.error('求職者ステータス初期化エラー:', statusError);
       // ステータス初期化に失敗しても処理を継続
       console.log('ステータス初期化をスキップして処理を継続');
+    }
+
+    // 仮登録で入力された書類データをuser_documentsテーブルに移行
+    if (registration.documents_data) {
+      try {
+        const documentsData = JSON.parse(registration.documents_data);
+        
+        // 基本情報をuser_documentsに保存
+        if (documentsData.resume?.basicInfo) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'basic_info', JSON.stringify(documentsData.resume.basicInfo)]
+          );
+        }
+
+        // 履歴書データをuser_documentsに保存
+        if (documentsData.resume) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'resume', JSON.stringify(documentsData.resume)]
+          );
+        }
+
+        // 職務経歴書データをuser_documentsに保存
+        if (documentsData.workHistory) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'work_history', JSON.stringify(documentsData.workHistory)]
+          );
+        }
+
+        // スキルシートデータをuser_documentsに保存
+        if (documentsData.skillSheet) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'skill_sheet', JSON.stringify(documentsData.skillSheet)]
+          );
+        }
+
+        // その他の書類データも保存
+        if (documentsData.certificateStatus) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'certificate_status', JSON.stringify(documentsData.certificateStatus)]
+          );
+        }
+
+        if (documentsData.whyJapan) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'why_japan', JSON.stringify({ whyJapan: documentsData.whyJapan })]
+          );
+        }
+
+        if (documentsData.whyInterestJapan) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'why_interest_japan', JSON.stringify({ whyInterestJapan: documentsData.whyInterestJapan })]
+          );
+        }
+
+        if (documentsData.selfIntroduction) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'self_introduction', JSON.stringify({ selfIntroduction: documentsData.selfIntroduction })]
+          );
+        }
+
+        if (documentsData.spouse !== undefined) {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'spouse_info', JSON.stringify({ spouse: documentsData.spouse, spouseSupport: documentsData.spouseSupport })]
+          );
+        }
+
+        console.log('書類データ移行完了:', userId);
+      } catch (documentsError) {
+        console.error('書類データ移行エラー:', documentsError);
+        // 書類データ移行に失敗しても処理を継続
+        console.log('書類データ移行をスキップして処理を継続');
+      }
     }
 
     // 仮登録完了

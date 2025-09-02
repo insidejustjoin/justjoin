@@ -12,10 +12,7 @@ interface RegistrationData {
   firstName: string;
   lastName: string;
   token: string;
-  phone: string;
-  dateOfBirth: string;
-  gender: string;
-  nationality: string;
+  documentsData?: any;
 }
 
 export const RegistrationVerification: React.FC = () => {
@@ -51,25 +48,9 @@ export const RegistrationVerification: React.FC = () => {
   };
 
   const handleDocumentsComplete = async (documentsData: any) => {
-    try {
-      const response = await fetch(`/api/register/documents/${token}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(documentsData),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setStep('password');
-      } else {
-        setError(data.message);
-      }
-    } catch (error) {
-      setError('書類データの保存中にエラーが発生しました。');
-    }
+    // 書類データの保存はDocumentGeneratorの"次へ"ボタンで既に実行されているため、
+    // ここでは単純に次のステップに進む
+    setStep('password');
   };
 
   const handlePasswordComplete = async (password: string) => {
@@ -184,31 +165,28 @@ export const RegistrationVerification: React.FC = () => {
             </CardHeader>
           </Card>
           
-          <DocumentGenerator
-            isRegistrationMode={true}
-            onDocumentsComplete={handleDocumentsComplete}
-            prefillData={{
-              resume: {
-                basicInfo: {
-                  firstName: registrationData.firstName,
-                  lastName: registrationData.lastName,
-                  email: registrationData.email,
-                  phone: registrationData.phone,
-                  dateOfBirth: registrationData.dateOfBirth,
-                  gender: registrationData.gender,
-                  nationality: registrationData.nationality,
-                }
-              },
-              // 基本情報も直接設定
-              firstName: registrationData.firstName,
-              lastName: registrationData.lastName,
-              liveMail: registrationData.email,
-              livePhoneNumber: registrationData.phone,
-              birthDate: registrationData.dateOfBirth,
-              gender: registrationData.gender,
-              nationality: registrationData.nationality,
-            }}
-          />
+                      <DocumentGenerator
+              isRegistrationMode={true}
+              onDocumentsComplete={handleDocumentsComplete}
+              registrationToken={token}
+              prefillData={{
+                // 保存済みdocumentsDataがあればそれを最優先で適用
+                ...(registrationData.documentsData || {}),
+                // 最低限の基本情報はfallback
+                resume: {
+                  ...(registrationData.documentsData?.resume || {}),
+                  basicInfo: {
+                    ...(registrationData.documentsData?.resume?.basicInfo || {}),
+                    firstName: registrationData.firstName,
+                    lastName: registrationData.lastName,
+                    email: registrationData.email,
+                  }
+                },
+                firstName: registrationData.firstName,
+                lastName: registrationData.lastName,
+                liveMail: registrationData.email,
+              }}
+            />
         </div>
       </div>
     );

@@ -35,6 +35,40 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin/interview', interviewAnalyticsRoutes);
 app.use('/api/interview', interviewRoutes);
 app.use('/api/register', temporaryRegistrationRoutes);
+// リマインドAPI: 書類入力率が100%未満の求職者にメール送信（登録から指定日数経過）
+app.post('/api/reminders/incomplete-documents', async (req, res) => {
+    try {
+        const { query } = await import('../integrations/postgres/client.js');
+        const { emailService } = await import('../services/emailService.js');
+        // 対象日数（デフォルトすべて）
+        const targetDays = req.body?.days?.length ? req.body.days : [3, 7, 10, 30, 90];
+        // それぞれの対象日に一致するユーザーを抽出
+        const sent = [];
+        for (const days of targetDays) {
+            const result = await query(`
+        SELECT u.id AS user_id, u.email, COALESCE(js.completion_rate, 0) AS completion_rate,
+               COALESCE(js.first_name, '') AS first_name, COALESCE(js.last_name, '') AS last_name,
+               DATE_TRUNC('day', u.created_at) AS created_day
+        FROM users u
+        LEFT JOIN job_seekers js ON js.user_id = u.id
+        WHERE u.user_type = 'job_seeker'
+          AND u.status = 'active'
+          AND COALESCE(js.completion_rate, 0) < 100
+          AND DATE_TRUNC('day', u.created_at) = DATE_TRUNC('day', NOW() - INTERVAL '${days} days')
+      `);
+            for (const row of result.rows) {
+                const fullName = `${row.last_name} ${row.first_name}`.trim() || row.email;
+                await emailService.sendDocumentsReminder(row.email, fullName, row.completion_rate, days);
+                sent.push({ userId: row.user_id, email: row.email, days });
+            }
+        }
+        res.json({ success: true, sent });
+    }
+    catch (error) {
+        console.error('リマインド送信エラー:', error?.message || error);
+        res.status(500).json({ success: false, message: 'リマインド送信に失敗しました' });
+    }
+});
 app.use('/api/job-seeker-status', jobSeekerStatusRoutes);
 app.use('/api/admin', uploadImageRoutes);
 // 見出し生成API

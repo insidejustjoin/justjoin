@@ -131,6 +131,7 @@ interface DocumentGeneratorProps {
   isRegistrationMode?: boolean;
   onDocumentsComplete?: (documentsData: any) => void;
   prefillData?: any;
+  registrationToken?: string;
   jobSeekerData?: Partial<{
     id: string;
     user_id: string;
@@ -200,6 +201,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   isRegistrationMode = false,
   onDocumentsComplete,
   prefillData,
+  registrationToken,
   jobSeekerData, 
   onClose 
 }) => {
@@ -4078,30 +4080,6 @@ whiteCells.forEach(cell => {
             {isRegistrationMode && onDocumentsComplete && (
               <Button
                 onClick={async () => {
-                  try {
-                    // 資料内容を保存
-                    const saveData = {
-                      document_data: documentData
-                    };
-                    
-                    const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-                    const saveResponse = await fetch(`${apiUrl}/api/documents/temporary-save`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify(saveData)
-                    });
-                    
-                    if (saveResponse.ok) {
-                      console.log('資料内容が保存されました');
-                    } else {
-                      console.error('資料保存エラー:', saveResponse.status);
-                    }
-                  } catch (error) {
-                    console.error('資料保存エラー:', error);
-                  }
-                  
                   // temporaryRegistration.tsが期待する形式にデータを変換
                   const convertedData = {
                     resume: {
@@ -4120,8 +4098,46 @@ whiteCells.forEach(cell => {
                     },
                     skillSheet: {
                       skills: documentData.skillSheet?.skills || {}
-                    }
+                    },
+                    // その他の書類データも含める
+                    certificateStatus: documentData.certificateStatus,
+                    whyJapan: documentData.whyJapan,
+                    whyInterestJapan: documentData.whyInterestJapan,
+                    selfIntroduction: documentData.selfIntroduction,
+                    spouse: documentData.spouse,
+                    spouseSupport: documentData.spouseSupport
                   };
+
+                  try {
+                    // 書類データをtemporary_registrationsテーブルに保存
+                    const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+                    
+                    if (registrationToken) {
+                      const saveResponse = await fetch(`${apiUrl}/api/register/update-documents/${registrationToken}`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ documentsData: convertedData })
+                      });
+                      
+                      if (saveResponse.ok) {
+                        console.log('書類データがデータベースに保存されました');
+                        console.log('書類データが保存されました');
+                      } else {
+                        console.error('書類データ保存エラー:', saveResponse.status);
+                        console.error('書類データの保存に失敗しました');
+                      }
+                    } else {
+                      console.error('トークンが見つかりません');
+                      console.error('トークンが見つかりません');
+                    }
+                  } catch (error) {
+                    console.error('書類データ保存エラー:', error);
+                    console.error('書類データの保存に失敗しました');
+                  }
+                  
+                  // 親コンポーネントに完了を通知
                   onDocumentsComplete(convertedData);
                 }}
                 disabled={validateRequiredFields().length > 0}
