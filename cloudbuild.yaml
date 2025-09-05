@@ -1,0 +1,13 @@
+# Cloud Build configuration for justjoin
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/justjoin:$COMMIT_SHA', '-f', 'Dockerfile.gcp', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/justjoin:$COMMIT_SHA']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['tag', 'gcr.io/$PROJECT_ID/justjoin:$COMMIT_SHA', 'gcr.io/$PROJECT_ID/justjoin:latest']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/justjoin:latest']
+images:
+  - 'gcr.io/$PROJECT_ID/justjoin:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/justjoin:latest' 
