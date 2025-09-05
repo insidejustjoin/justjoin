@@ -573,6 +573,56 @@ router.post('/complete/:token', async (req, res) => {
             [userId, JSON.stringify(combinedForResume)]
           );
         }
+
+        // 入力率を算出して保存
+        const completionRate = (() => {
+          const fields: any[] = [
+            combinedForResume.lastName,
+            combinedForResume.firstName,
+            combinedForResume.kanaLastName,
+            combinedForResume.kanaFirstName,
+            combinedForResume.birthDate,
+            combinedForResume.gender,
+            combinedForResume.livePostNumber,
+            combinedForResume.liveAddress,
+            combinedForResume.kanaLiveAddress,
+            combinedForResume.livePhoneNumber,
+            combinedForResume.liveMail,
+            combinedForResume.nationality,
+            combinedForResume.contactSameAsLive ? true : combinedForResume.contactPostNumber,
+            combinedForResume.contactSameAsLive ? true : combinedForResume.contactAddress,
+            combinedForResume.contactSameAsLive ? true : combinedForResume.kanaContactAddress,
+            combinedForResume.contactSameAsLive ? true : combinedForResume.contactPhoneNumber,
+            combinedForResume.contactSameAsLive ? true : combinedForResume.contactMail,
+            combinedForResume.selfIntroduction,
+            combinedForResume.resume?.noEducation ? true : (combinedForResume.resume?.education && combinedForResume.resume.education.length > 0),
+            combinedForResume.resume?.noWorkExperience ? true : (combinedForResume.resume?.workExperience && combinedForResume.resume.workExperience.length > 0),
+            combinedForResume.resume?.noQualifications ? true : (combinedForResume.resume?.qualifications && combinedForResume.resume?.qualifications.length > 0),
+            combinedForResume.workHistory?.noWorkHistory ? true : (combinedForResume.workHistory?.workExperiences && combinedForResume.workHistory?.workExperiences.length > 0),
+            combinedForResume.skillSheet?.skills?.Windows?.evaluation && combinedForResume.skillSheet?.skills?.Windows?.evaluation !== '-',
+            combinedForResume.skillSheet?.skills?.MacOS?.evaluation && combinedForResume.skillSheet?.skills?.MacOS?.evaluation !== '-',
+            combinedForResume.skillSheet?.skills?.Linux?.evaluation && combinedForResume.skillSheet?.skills?.Linux?.evaluation !== '-',
+            combinedForResume.certificateStatus?.name,
+            combinedForResume.whyJapan && combinedForResume.whyJapan.length >= 300 ? true : false,
+            combinedForResume.whyInterestJapan && combinedForResume.whyInterestJapan.length >= 300 ? true : false,
+            combinedForResume.selfIntroduction && combinedForResume.selfIntroduction.length >= 300 ? true : false,
+            combinedForResume.spouse,
+            combinedForResume.spouseSupport,
+          ];
+          const filled = fields.filter((f: any) => {
+            if (typeof f === 'string') return f && f.trim() !== '';
+            if (typeof f === 'boolean') return f === true;
+            if (Array.isArray(f)) return f.length > 0;
+            return f;
+          });
+          return Math.round((filled.length / fields.length) * 100);
+        })();
+
+        await query(
+          'UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2',
+          [completionRate, userId]
+        );
+
       } catch (documentsError) {
         console.error('書類データ移行エラー:', documentsError);
         // 書類データ移行に失敗しても処理を継続
