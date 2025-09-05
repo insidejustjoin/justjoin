@@ -400,30 +400,23 @@ router.post('/complete/:token', async (req, res) => {
 
     // 求職者詳細情報作成
     await query(
-      `INSERT INTO job_seekers (user_id, first_name, last_name, created_at, updated_at) 
-       VALUES ($1, $2, $3, NOW(), NOW())`,
+      `INSERT INTO job_seekers (user_id, first_name, last_name, created_at, updated_at, interview_enabled) 
+       VALUES ($1, $2, $3, NOW(), NOW(), FALSE)
+       ON CONFLICT (user_id) DO UPDATE SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, updated_at = NOW(), interview_enabled = FALSE`,
       [userId, registration.first_name, registration.last_name]
     );
 
-    // 求職者ステータスを'active'で初期化
-    try {
-      await query(
-        `INSERT INTO job_seeker_status_history (user_id, status, created_at, updated_at) 
-         VALUES ($1, $2, NOW(), NOW())`,
-        [userId, 'active']
-      );
-      console.log('求職者ステータス初期化成功:', userId);
-    } catch (statusError) {
-      console.error('求職者ステータス初期化エラー:', statusError);
-      // ステータス初期化に失敗しても処理を継続
-      console.log('ステータス初期化をスキップして処理を継続');
-    }
+    // 面接を明示的に無効化
+    await query(
+      `UPDATE job_seekers SET interview_enabled = FALSE, updated_at = NOW() WHERE user_id = $1`,
+      [userId]
+    );
 
     // 仮登録で入力された書類データをuser_documentsテーブルに移行
     if (registration.documents_data) {
       try {
         const documentsData = JSON.parse(registration.documents_data);
-        
+
         // 基本情報をuser_documentsに保存
         if (documentsData.resume?.basicInfo) {
           await query(
@@ -501,7 +494,85 @@ router.post('/complete/:token', async (req, res) => {
           );
         }
 
-        console.log('書類データ移行完了:', userId);
+        // 追加: 統合済みの1レコード（resume）としても保存しておく
+        const combinedForResume = {
+          // 基本情報
+          lastName: documentsData.lastName || documentsData.resume?.basicInfo?.lastName || '',
+          firstName: documentsData.firstName || documentsData.resume?.basicInfo?.firstName || '',
+          kanaLastName: documentsData.kanaLastName || documentsData.resume?.basicInfo?.kanaLastName || '',
+          kanaFirstName: documentsData.kanaFirstName || documentsData.resume?.basicInfo?.kanaFirstName || '',
+          birthDate: documentsData.birthDate || documentsData.resume?.basicInfo?.dateOfBirth || '',
+          gender: documentsData.gender || documentsData.resume?.basicInfo?.gender || '',
+          nationality: documentsData.nationality || documentsData.resume?.basicInfo?.nationality || '',
+
+          // 現住所情報
+          livePostNumber: documentsData.livePostNumber || documentsData.addressInfo?.livePostNumber || '',
+          liveAddress: documentsData.liveAddress || documentsData.resume?.basicInfo?.address || '',
+          kanaLiveAddress: documentsData.kanaLiveAddress || documentsData.addressInfo?.kanaLiveAddress || '',
+          livePhoneNumber: documentsData.livePhoneNumber || documentsData.resume?.basicInfo?.phone || '',
+          liveMail: documentsData.liveMail || documentsData.resume?.basicInfo?.email || registration.email,
+
+          // 連絡先情報
+          contactPostNumber: documentsData.contactPostNumber || documentsData.addressInfo?.contactPostNumber || '',
+          contactAddress: documentsData.contactAddress || documentsData.addressInfo?.contactAddress || '',
+          kanaContactAddress: documentsData.kanaContactAddress || documentsData.addressInfo?.kanaContactAddress || '',
+          contactPhoneNumber: documentsData.contactPhoneNumber || documentsData.addressInfo?.contactPhoneNumber || '',
+          contactMail: documentsData.contactMail || documentsData.addressInfo?.contactMail || '',
+          contactSameAsLive: documentsData.contactSameAsLive || false,
+
+          // 履歴書
+          resume: documentsData.resume || {
+            photoUrl: '',
+            education: [{ year: '', month: '', content: '' }],
+            workExperience: [{ year: '', month: '', content: '' }],
+            qualifications: [{ year: '', month: '', name: '' }],
+            skills: [{ category: '', level: '' }],
+            selfPR: ''
+          },
+
+          // 職務経歴書
+          workHistory: documentsData.workHistory || {
+            currentDate: new Date().toLocaleDateString('ja-JP'),
+            workExperiences: [{ period: '', company: '', position: '', description: '', technologies: '', software: '', role: '' }],
+            qualifications: '',
+            noWorkHistory: false
+          },
+
+          // スキルシート
+          skillSheet: documentsData.skillSheet || { skills: {} },
+
+          // 日本語関連
+          certificateStatus: documentsData.certificateStatus || { date: '', name: '' },
+          japaneseLevel: documentsData.japaneseLevel || documentsData.certificateStatus?.name || '',
+          qualificationDate: documentsData.qualificationDate || documentsData.certificateStatus?.date || '',
+          nextJapaneseTestDate: documentsData.nextJapaneseTestDate || '',
+          nextJapaneseTestLevel: documentsData.nextJapaneseTestLevel || '',
+          whyJapan: documentsData.whyJapan || '',
+          whyInterestJapan: documentsData.whyInterestJapan || '',
+
+          // 追加情報
+          selfIntroduction: documentsData.selfIntroduction || '',
+          spouse: documentsData.spouse || '',
+          spouseSupport: documentsData.spouseSupport || ''
+        };
+
+        // 既存のresumeレコードがあれば更新、なければ作成
+        const existingResume = await query(
+          `SELECT id FROM user_documents WHERE user_id = $1 AND document_type = 'resume'`,
+          [userId]
+        );
+        if (existingResume.rows.length > 0) {
+          await query(
+            `UPDATE user_documents SET document_data = $1, updated_at = NOW() WHERE id = $2`,
+            [JSON.stringify(combinedForResume), existingResume.rows[0].id]
+          );
+        } else {
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, 'resume', $2, NOW(), NOW())`,
+            [userId, JSON.stringify(combinedForResume)]
+          );
+        }
       } catch (documentsError) {
         console.error('書類データ移行エラー:', documentsError);
         // 書類データ移行に失敗しても処理を継続
