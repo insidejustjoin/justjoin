@@ -138,7 +138,7 @@ router.get('/verify/:token', async (req, res) => {
     // 仮登録データ取得（pending または documents_completed を許可）
     const tempReg = await query(
       `SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status IN ($2, $3)`,
+       WHERE verification_token = $1 AND status IN ($2, $3)`,
       [token, 'pending', 'documents_completed']
     );
 
@@ -184,7 +184,7 @@ router.post('/documents/:token', async (req, res) => {
     // 仮登録データ取得
     const tempReg = await query(
       `SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status = $2`,
+       WHERE verification_token = $1 AND status = $2`,
       [token, 'pending']
     );
 
