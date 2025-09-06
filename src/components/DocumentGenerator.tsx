@@ -1197,7 +1197,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       }
     };
 
-    // 基本情報
+      // 基本情報
     addField(data.lastName);
     addField(data.firstName);
     addField(data.kanaLastName);
@@ -1205,31 +1205,31 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     addField(data.birthDate);
     addField(data.gender);
     addField(data.nationality);
-
-    // 現住所情報
+      
+      // 現住所情報
     addField(data.livePostNumber);
     addField(data.liveAddress);
     addField(data.kanaLiveAddress);
     addField(data.livePhoneNumber);
     addField(data.liveMail);
-
+      
     // 連絡先情報（同一の場合は自動充足）
     addField(data.contactSameAsLive ? true : data.contactPostNumber);
     addField(data.contactSameAsLive ? true : data.contactAddress);
     addField(data.contactSameAsLive ? true : data.kanaContactAddress);
     addField(data.contactSameAsLive ? true : data.contactPhoneNumber);
     addField(data.contactSameAsLive ? true : data.contactMail);
-
+      
     // 履歴書
     addField(data.resume?.photoUrl);
     // 学歴・職歴・資格（"なし"チェック時は充足とみなす）
     addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
     addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
     addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume.qualifications.length > 0));
-
+      
     // 職務経歴書
     addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
-
+      
     // スキルシート（全スキルの評価入力率を比率で加点、最大3点）
     const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
     const skillsMaxWeight = 3; // 以前はWindows/MacOS/Linuxの3項目だったため、重み3を維持
@@ -1476,21 +1476,21 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       if (savedData) {
         // データの整合性を確保するために、不足している部分を初期値で補完
         const mergedData: DocumentData = {
-          // 基本情報
-          lastName: savedData.lastName || '',
-          firstName: savedData.firstName || '',
-          kanaLastName: savedData.kanaLastName || '',
-          kanaFirstName: savedData.kanaFirstName || '',
-          birthDate: savedData.birthDate || '2000-01-01',
-          gender: savedData.gender || '',
+          // 基本情報（resume.basicInfo もフォールバック）
+          lastName: savedData.lastName || savedData.resume?.basicInfo?.lastName || '',
+          firstName: savedData.firstName || savedData.resume?.basicInfo?.firstName || '',
+          kanaLastName: savedData.kanaLastName || savedData.resume?.basicInfo?.kanaLastName || '',
+          kanaFirstName: savedData.kanaFirstName || savedData.resume?.basicInfo?.kanaFirstName || '',
+          birthDate: savedData.birthDate || savedData.resume?.basicInfo?.dateOfBirth || '2000-01-01',
+          gender: savedData.gender || savedData.resume?.basicInfo?.gender || '',
           
-          // 現住所情報
-          livePostNumber: savedData.livePostNumber || '',
-          liveAddress: savedData.liveAddress || '',
-          kanaLiveAddress: savedData.kanaLiveAddress || '',
-          livePhoneNumber: savedData.livePhoneNumber || '',
-          liveMail: savedData.liveMail || '',
-          nationality: savedData.nationality || '',
+          // 現住所情報（basicInfoにある場合はフォールバック）
+          livePostNumber: savedData.livePostNumber || savedData.addressInfo?.livePostNumber || '',
+          liveAddress: savedData.liveAddress || savedData.addressInfo?.liveAddress || savedData.resume?.basicInfo?.address || '',
+          kanaLiveAddress: savedData.kanaLiveAddress || savedData.addressInfo?.kanaLiveAddress || '',
+          livePhoneNumber: savedData.livePhoneNumber || savedData.addressInfo?.livePhoneNumber || savedData.resume?.basicInfo?.phone || '',
+          liveMail: savedData.liveMail || savedData.addressInfo?.liveMail || savedData.resume?.basicInfo?.email || '',
+          nationality: savedData.nationality || savedData.resume?.basicInfo?.nationality || '',
           
           // 連絡先情報
           contactPostNumber: savedData.contactPostNumber || '',

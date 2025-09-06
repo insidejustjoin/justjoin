@@ -1504,12 +1504,13 @@ app.get('/api/documents/:userId', async (req, res) => {
       return res.status(404).json({ success: false, message: 'ドキュメントデータが見つかりません' });
     }
 
-    const merged: any = {};
+    const merged: any = {}; const liftBasic = (d:any)=>{ if(!d) return; const b=d.resume?.basicInfo; if(b){ merged.lastName=merged.lastName||b.lastName; merged.firstName=merged.firstName||b.firstName; merged.kanaLastName=merged.kanaLastName||b.kanaLastName; merged.kanaFirstName=merged.kanaFirstName||b.kanaFirstName; merged.birthDate=merged.birthDate||b.dateOfBirth; merged.gender=merged.gender||b.gender; merged.nationality=merged.nationality||b.nationality; merged.liveAddress=merged.liveAddress||b.address; merged.livePhoneNumber=merged.livePhoneNumber||b.phone; merged.liveMail=merged.liveMail||b.email; }};
     for (const row of result.rows) {
       try {
         const data = row.document_data || {};
         // ベースを順次マージ（後勝ち）
         Object.assign(merged, data);
+        liftBasic(data);
         // ネスト構造がある場合も上書き
         if (data.resume) {
           merged.resume = { ...(merged.resume || {}), ...data.resume };
