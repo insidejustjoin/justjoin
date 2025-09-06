@@ -2168,3 +2168,46 @@ app.listen(PORT, '0.0.0.0', () => {
   logger.info(`サーバーがポート${PORT}で起動しました`);
   console.log(`🚀 サーバーがポート${PORT}で起動しました`);
 }); 
+
+// 管理者用：仮登録一覧取得API
+app.get('/api/admin/temporary-registrations', authenticate, async (req, res) => {
+  try {
+    const { query } = await import('../integrations/postgres/client.js');
+    const result = await query(`
+      SELECT id, email, first_name, last_name, verification_token, status, expires_at, created_at, updated_at
+      FROM temporary_registrations
+      ORDER BY created_at DESC
+    `);
+
+    res.json({ success: true, items: result.rows });
+  } catch (error: any) {
+    console.error('仮登録一覧取得エラー:', error?.message || error);
+    res.status(500).json({ success: false, message: '仮登録一覧の取得に失敗しました' });
+  }
+});
+
+// 管理者用：仮登録削除API
+app.delete('/api/admin/temporary-registrations/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const email = typeof req.query.email === 'string' ? req.query.email : undefined;
+    const { query } = await import('../integrations/postgres/client.js');
+
+    // id優先、email指定時はemailでも削除できる
+    let deleted = 0;
+    if (id && id !== 'by-email') {
+      const r = await query('DELETE FROM temporary_registrations WHERE id = $1', [id]);
+      deleted = r.rowCount || 0;
+    } else if (email) {
+      const r = await query('DELETE FROM temporary_registrations WHERE email = $1', [email]);
+      deleted = r.rowCount || 0;
+    } else {
+      return res.status(400).json({ success: false, message: '削除対象のidまたはemailが必要です' });
+    }
+
+    res.json({ success: true, deleted });
+  } catch (error: any) {
+    console.error('仮登録削除エラー:', error?.message || error);
+    res.status(500).json({ success: false, message: '仮登録の削除に失敗しました' });
+  }
+}); 

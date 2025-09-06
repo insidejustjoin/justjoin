@@ -1383,6 +1383,57 @@ export function AdminJobSeekers() {
     setFilterChange(prev => prev + 1);
   };
 
+  // 仮登録一覧
+  const [temporaryRegs, setTemporaryRegs] = useState<Array<any>>([]);
+  const [loadingTemp, setLoadingTemp] = useState(false);
+
+  const fetchTemporaryRegistrations = async () => {
+    try {
+      setLoadingTemp(true);
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      const res = await fetch(`${apiUrl}/api/admin/temporary-registrations`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`
+        }
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = await res.json();
+      if (json.success) setTemporaryRegs(json.items || []);
+    } catch (e) {
+      console.error('仮登録一覧取得エラー:', e);
+    } finally {
+      setLoadingTemp(false);
+    }
+  };
+
+  const deleteTemporaryRegistration = async (id?: string, email?: string) => {
+    try {
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      const url = id ? `${apiUrl}/api/admin/temporary-registrations/${id}` : `${apiUrl}/api/admin/temporary-registrations/by-email?email=${encodeURIComponent(email || '')}`;
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`
+        }
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast({ title: '削除完了', description: '仮登録を削除しました' });
+        fetchTemporaryRegistrations();
+      } else {
+        toast({ title: '削除失敗', description: json.message || '削除に失敗しました', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'エラー', description: e.message || '削除に失敗しました', variant: 'destructive' });
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'temporary') {
+      fetchTemporaryRegistrations();
+    }
+  }, [activeTab]);
+
   return (
     <AdminPageLayout title="管理者ダッシュボード">
       <div className="space-y-6">
@@ -1560,10 +1611,11 @@ export function AdminJobSeekers() {
 
         {/* 求職者管理タブ */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="active">求職者一覧</TabsTrigger>
             <TabsTrigger value="employed">就職済み一覧</TabsTrigger>
             <TabsTrigger value="withdrawn">退会済み一覧</TabsTrigger>
+            <TabsTrigger value="temporary">仮登録</TabsTrigger>
           </TabsList>
 
           {/* 求職者一覧タブ */}
@@ -1902,6 +1954,49 @@ export function AdminJobSeekers() {
                             完全削除
                           </Button>
                         </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* 仮登録タブ */}
+          <TabsContent value="temporary" className="space-y-4">
+            {loadingTemp ? (
+              <div className="flex justify-center items-center py-8">
+                <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+                <span className="ml-2 text-gray-600">読み込み中...</span>
+              </div>
+            ) : temporaryRegs.length === 0 ? (
+              <Alert>
+                <Users className="h-4 w-4" />
+                <AlertDescription>仮登録が見つかりませんでした。</AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {temporaryRegs.map((reg) => (
+                  <Card key={reg.id}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <span>{reg.last_name} {reg.first_name}</span>
+                        <Badge variant="secondary">{reg.status}</Badge>
+                      </CardTitle>
+                      <CardDescription className="break-all">{reg.email}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div className="text-sm text-gray-600">作成: {new Date(reg.created_at).toLocaleString('ja-JP')}</div>
+                      {reg.expires_at && (
+                        <div className="text-sm text-gray-600">有効期限: {new Date(reg.expires_at).toLocaleString('ja-JP')}</div>
+                      )}
+                      <div className="flex gap-2">
+                        <Button variant="destructive" size="sm" onClick={() => deleteTemporaryRegistration(reg.id)}>
+                          <Trash2 className="h-4 w-4 mr-1" />削除
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => deleteTemporaryRegistration(undefined, reg.email)}>
+                          メールで削除
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
