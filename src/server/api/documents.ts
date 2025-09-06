@@ -530,6 +530,60 @@ router.get('/:userId', async (req: express.Request, res: express.Response): Prom
     }
 
     // データが見つからない場合
+    // フォールバック: 仮登録データから統合を試みる
+    try {
+      const fallbackQuery = `
+        SELECT tr.documents_data
+        FROM temporary_registrations tr
+        JOIN users u ON u.email = tr.email
+        WHERE u.id = $1
+        ORDER BY tr.updated_at DESC NULLS LAST, tr.created_at DESC
+        LIMIT 1
+      `;
+      const fb = await query(fallbackQuery, [userId]);
+      if (fb.rows.length > 0 && fb.rows[0].documents_data) {
+        const d = typeof fb.rows[0].documents_data === 'string' ? JSON.parse(fb.rows[0].documents_data) : fb.rows[0].documents_data;
+        const combined = {
+          lastName: d.lastName || d.resume?.basicInfo?.lastName || '',
+          firstName: d.firstName || d.resume?.basicInfo?.firstName || '',
+          kanaLastName: d.kanaLastName || d.resume?.basicInfo?.kanaLastName || '',
+          kanaFirstName: d.kanaFirstName || d.resume?.basicInfo?.kanaFirstName || '',
+          birthDate: d.birthDate || d.resume?.basicInfo?.dateOfBirth || '',
+          gender: d.gender || d.resume?.basicInfo?.gender || '',
+          nationality: d.nationality || d.resume?.basicInfo?.nationality || '',
+          livePostNumber: d.livePostNumber || d.addressInfo?.livePostNumber || '',
+          liveAddress: d.liveAddress || d.resume?.basicInfo?.address || '',
+          kanaLiveAddress: d.kanaLiveAddress || d.addressInfo?.kanaLiveAddress || '',
+          livePhoneNumber: d.livePhoneNumber || d.resume?.basicInfo?.phone || '',
+          liveMail: d.liveMail || d.resume?.basicInfo?.email || '',
+          contactPostNumber: d.contactPostNumber || d.addressInfo?.contactPostNumber || '',
+          contactAddress: d.contactAddress || d.addressInfo?.contactAddress || '',
+          kanaContactAddress: d.kanaContactAddress || d.addressInfo?.kanaContactAddress || '',
+          contactPhoneNumber: d.contactPhoneNumber || d.addressInfo?.contactPhoneNumber || '',
+          contactMail: d.contactMail || d.addressInfo?.contactMail || '',
+          contactSameAsLive: d.contactSameAsLive || false,
+          resume: d.resume || { photoUrl: '', education: [{year:'',month:'',content:''}], workExperience: [{year:'',month:'',content:''}], qualifications: [{year:'',month:'',name:''}], skills: [{category:'',level:''}], selfPR: '', noEducation: false, noWorkExperience: false, noQualifications: false },
+          workHistory: d.workHistory || { currentDate: new Date().toLocaleDateString('ja-JP'), workExperiences: [{ period: '', company: '', position: '', description: '', technologies: '', software: '', role: '' }], qualifications: '', noWorkHistory: false },
+          skillSheet: d.skillSheet || { skills: {} },
+          selfIntroduction: d.selfIntroduction || '',
+          personalPreference: d.personalPreference || '',
+          spouse: d.spouse || '',
+          spouseSupport: d.spouseSupport || '',
+          certificateStatus: d.certificateStatus || { date: '', name: '' },
+          japaneseLevel: d.japaneseLevel || d.certificateStatus?.name || '',
+          qualificationDate: d.qualificationDate || d.certificateStatus?.date || '',
+          nextJapaneseTestDate: d.nextJapaneseTestDate || '',
+          nextJapaneseTestLevel: d.nextJapaneseTestLevel || '',
+          whyJapan: d.whyJapan || '',
+          whyInterestJapan: d.whyInterestJapan || ''
+        };
+        logger.info('書類取得成功（仮登録フォールバック）', { userId }, undefined, 'api_success');
+        return res.json({ success: true, data: combined, createdAt: null, updatedAt: null });
+      }
+    } catch (fbErr) {
+      logger.warn('仮登録フォールバック取得エラー', { userId, error: (fbErr as any).message }, undefined, 'db_error');
+    }
+
     logger.warn('書類取得API: 書類が見つかりません', { userId, documentType }, undefined, 'api_failure');
     return res.status(404).json({
       success: false,
