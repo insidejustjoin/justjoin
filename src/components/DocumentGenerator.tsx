@@ -1180,122 +1180,92 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
 
   // 入力率計算関数
   const calculateCompletionRate = (data: DocumentData): number => {
-    const fields = [
-      // 基本情報
-      data.lastName, data.firstName, data.kanaLastName, data.kanaFirstName,
-      data.birthDate, data.gender, data.nationality,
-      
-      // 現住所情報
-      data.livePostNumber, data.liveAddress, data.kanaLiveAddress,
-      data.livePhoneNumber, data.liveMail,
-      
-      // 連絡先情報（現住所と同じ場合は完了とみなす）
-      data.contactSameAsLive ? true : data.contactPostNumber,
-      data.contactSameAsLive ? true : data.contactAddress,
-      data.contactSameAsLive ? true : data.kanaContactAddress,
-      data.contactSameAsLive ? true : data.contactPhoneNumber,
-      data.contactSameAsLive ? true : data.contactMail,
-      
-      // 履歴書（selfIntroductionを使用）
-      data.selfIntroduction,
-      
-      // 学歴（ない場合はチェックボックスで完了とみなす）
-      data.resume.noEducation ? true : (data.resume.education && data.resume.education.length > 0),
-      
-      // 職歴（ない場合はチェックボックスで完了とみなす）
-      data.resume.noWorkExperience ? true : (data.resume.workExperience && data.resume.workExperience.length > 0),
-      
-      // 資格（ない場合はチェックボックスで完了とみなす）
-      data.resume.noQualifications ? true : (data.resume.qualifications && data.resume.qualifications.length > 0),
-      
-      // 職務経歴書（ない場合はチェックボックスで完了とみなす）
-      data.workHistory.noWorkHistory ? true : (data.workHistory.workExperiences && data.workHistory.workExperiences.length > 0),
-      
-      // スキルシート（主要スキル）- 評価が設定されているかチェック
-      data.skillSheet.skills.Windows?.evaluation && data.skillSheet.skills.Windows.evaluation !== '-',
-      data.skillSheet.skills.MacOS?.evaluation && data.skillSheet.skills.MacOS.evaluation !== '-',
-      data.skillSheet.skills.Linux?.evaluation && data.skillSheet.skills.Linux.evaluation !== '-',
-      
-      // 日本語関連（300文字以上の場合のみ完了とみなす）
-      data.certificateStatus.name, 
-      data.whyJapan && data.whyJapan.length >= 300 ? true : false,
-      data.whyInterestJapan && data.whyInterestJapan.length >= 300 ? true : false,
-      
-      // 追加情報（300文字以上の場合のみ完了とみなす）
-      data.selfIntroduction && data.selfIntroduction.length >= 300 ? true : false,
-      data.spouse, data.spouseSupport
-    ];
+    // スコア方式に変更: 各必須項目=1点、スキルは比率で最大3点。理由2項目は任意ボーナス。
+    let score = 0;
+    let maxScore = 0;
 
-    // デバッグ用：各フィールドの状態をログ出力
-    console.log('=== 入力率計算デバッグ ===');
-    console.log('基本情報:', {
-      lastName: !!data.lastName,
-      firstName: !!data.firstName,
-      kanaLastName: !!data.kanaLastName,
-      kanaFirstName: !!data.kanaFirstName,
-      birthDate: !!data.birthDate,
-      gender: !!data.gender,
-      nationality: !!data.nationality
-    });
-    console.log('現住所情報:', {
-      livePostNumber: !!data.livePostNumber,
-      liveAddress: !!data.liveAddress,
-      kanaLiveAddress: !!data.kanaLiveAddress,
-      livePhoneNumber: !!data.livePhoneNumber,
-      liveMail: !!data.liveMail
-    });
-    console.log('連絡先情報:', {
-      contactSameAsLive: data.contactSameAsLive,
-      contactPostNumber: !!data.contactPostNumber,
-      contactAddress: !!data.contactAddress,
-      kanaContactAddress: !!data.kanaContactAddress,
-      contactPhoneNumber: !!data.contactPhoneNumber,
-      contactMail: !!data.contactMail
-    });
-    console.log('履歴書:', {
-      selfPR: !!data.resume.selfPR,
-      noEducation: data.resume.noEducation,
-      noWorkExperience: data.resume.noWorkExperience,
-      noQualifications: data.resume.noQualifications,
-      education: data.resume.education?.length || 0,
-      workExperience: data.resume.workExperience?.length || 0,
-      qualifications: data.resume.qualifications?.length || 0
-    });
-    console.log('職務経歴書:', {
-      noWorkHistory: data.workHistory.noWorkHistory,
-      workExperiences: data.workHistory.workExperiences?.length || 0
-    });
-    console.log('スキルシート:', {
-      Windows: data.skillSheet.skills.Windows?.evaluation,
-      MacOS: data.skillSheet.skills.MacOS?.evaluation,
-      Linux: data.skillSheet.skills.Linux?.evaluation
-    });
-    console.log('日本語関連:', {
-      certificateStatus: !!data.certificateStatus.name,
-      whyJapan: data.whyJapan && data.whyJapan.length >= 300,
-      whyInterestJapan: data.whyInterestJapan && data.whyInterestJapan.length >= 300
-    });
-    console.log('追加情報:', {
-      selfIntroduction: data.selfIntroduction && data.selfIntroduction.length >= 300,
-      spouse: !!data.spouse,
-      spouseSupport: !!data.spouseSupport
-    });
+    const addField = (value: any) => {
+      maxScore += 1;
+      if (typeof value === 'string') {
+        if (value.trim() !== '') score += 1;
+      } else if (typeof value === 'boolean') {
+        if (value) score += 1;
+      } else if (Array.isArray(value)) {
+        if (value.length > 0) score += 1;
+      } else if (value !== null && value !== undefined) {
+        score += 1;
+      }
+    };
 
-    const filledFields = fields.filter((field: any) => {
-      if (typeof field === 'string') {
-        return field && field.trim() !== '';
-      }
-      if (typeof field === 'boolean') {
-        return field === true;
-      }
-      if (Array.isArray(field)) {
-        return (field as any[]).length > 0;
-      }
-      return field;
-    });
+    // 基本情報
+    addField(data.lastName);
+    addField(data.firstName);
+    addField(data.kanaLastName);
+    addField(data.kanaFirstName);
+    addField(data.birthDate);
+    addField(data.gender);
+    addField(data.nationality);
 
-    const totalFields = fields.length;
-    return totalFields > 0 ? Math.round((filledFields.length / totalFields) * 100) : 0;
+    // 現住所情報
+    addField(data.livePostNumber);
+    addField(data.liveAddress);
+    addField(data.kanaLiveAddress);
+    addField(data.livePhoneNumber);
+    addField(data.liveMail);
+
+    // 連絡先情報（同一の場合は自動充足）
+    addField(data.contactSameAsLive ? true : data.contactPostNumber);
+    addField(data.contactSameAsLive ? true : data.contactAddress);
+    addField(data.contactSameAsLive ? true : data.kanaContactAddress);
+    addField(data.contactSameAsLive ? true : data.contactPhoneNumber);
+    addField(data.contactSameAsLive ? true : data.contactMail);
+
+    // 履歴書
+    addField(data.resume?.photoUrl);
+    // 学歴・職歴・資格（"なし"チェック時は充足とみなす）
+    addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
+    addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
+    addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume.qualifications.length > 0));
+
+    // 職務経歴書
+    addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
+
+    // スキルシート（全スキルの評価入力率を比率で加点、最大3点）
+    const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
+    const skillsMaxWeight = 3; // 以前はWindows/MacOS/Linuxの3項目だったため、重み3を維持
+    if (skills.length > 0) {
+      const completed = skills.filter(s => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
+      maxScore += skillsMaxWeight;
+      score += skillsMaxWeight * (completed / skills.length);
+    }
+
+    // 日本語資格（必須）
+    const japaneseLevel = data.japaneseLevel || (data.certificateStatus?.name && data.certificateStatus.name !== 'なし' ? data.certificateStatus.name : '');
+    const qualificationDate = data.qualificationDate || data.certificateStatus?.date || '';
+    addField(japaneseLevel);
+    addField(qualificationDate);
+
+    // 追加情報（従来通り）
+    addField(data.selfIntroduction);
+    addField(data.spouse);
+    addField(data.spouseSupport);
+
+    // ベーススコア→百分率
+    const baseRate = maxScore > 0 ? (score / maxScore) * 100 : 0;
+
+    // 任意ボーナス: 日本で働きたい理由/日本に興味を持った理由
+    // 300文字以上で各+2%（最大+4%）、上限100%
+    let bonus = 0;
+    if (data.whyJapan && data.whyJapan.length >= 300) bonus += 2;
+    if (data.whyInterestJapan && data.whyInterestJapan.length >= 300) bonus += 2;
+
+    const finalRate = Math.min(100, Math.round(baseRate + bonus));
+
+    // デバッグログ
+    console.log('=== 入力率計算（新ロジック）===');
+    console.log('baseRate:', Math.round(baseRate) + '%', 'bonus:', bonus + '%', 'final:', finalRate + '%');
+
+    return finalRate;
   };
 
   // 入力率を更新
