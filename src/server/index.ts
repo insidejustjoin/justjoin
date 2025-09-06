@@ -888,8 +888,7 @@ app.get('/api/jobseekers/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
-
-    // 基本プロフィール（user_id or job_seekers.idで柔軟に取得）
+    
     const base = await query(`
       SELECT js.*, u.email
       FROM job_seekers js
@@ -897,28 +896,21 @@ app.get('/api/jobseekers/:id', async (req, res) => {
       WHERE js.user_id::text = $1 OR js.id::text = $1
       LIMIT 1
     `, [id]);
-
+    
     if (base.rows.length === 0) {
       return res.status(404).json({ success: false, message: '求職者が見つかりません' });
     }
 
     const row = base.rows[0];
 
-    // 最新の書類データ（統合表示用）
-    const docs = await query(`
-      SELECT document_data
-      FROM user_documents
+    // すべての書類データを取得してマージ
+    const allDocs = await query(`
+      SELECT document_type, document_data, created_at
+      FROM user_documents 
       WHERE user_id = $1
-      ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-      LIMIT 1
+      ORDER BY created_at ASC
     `, [row.user_id]);
 
-    let documentData: any = null;
-    if (docs.rows.length > 0) {
-      documentData = docs.rows[0].document_data || null;
-    }
-
-    // マージ：job_seekersをベースに、書類側にあれば優先
     const merged: any = {
       id: row.id,
       user_id: row.user_id,
@@ -937,7 +929,6 @@ app.get('/api/jobseekers/:id', async (req, res) => {
       updated_at: row.updated_at,
     };
 
-    // resume.basicInfo をトップへ反映
     const liftBasic = (d: any) => {
       const b = d?.resume?.basicInfo;
       if (!b) return;
@@ -953,25 +944,47 @@ app.get('/api/jobseekers/:id', async (req, res) => {
       merged.email = merged.email || b.email;
     };
 
-    if (documentData) {
-      liftBasic(documentData);
-      // 写真
-      if (documentData?.resume?.photoUrl) {
-        merged.profile_photo = merged.profile_photo || documentData.resume.photoUrl;
+    for (const r of allDocs.rows) {
+      const data = r.document_data || {};
+      Object.assign(merged, data);
+      liftBasic(data);
+
+      const mapBasicTop = (b: any) => {
+        if (!b) return;
+        merged.last_name = merged.last_name || b.lastName;
+        merged.first_name = merged.first_name || b.firstName;
+        merged.kana_last_name = merged.kana_last_name || b.kanaLastName;
+        merged.kana_first_name = merged.kana_first_name || b.kanaFirstName;
+        merged.date_of_birth = merged.date_of_birth || b.dateOfBirth;
+        merged.gender = merged.gender || b.gender;
+        merged.nationality = merged.nationality || b.nationality;
+        merged.address = merged.address || b.address;
+        merged.phone = merged.phone || b.phone;
+        merged.email = merged.email || b.email;
+      };
+
+      if (r.document_type === 'basic_info') {
+        mapBasicTop(data);
       }
-      // 日本語レベル
-      if (documentData?.japaneseInfo?.nextJapaneseTestLevel) {
-        merged.japanese_level = documentData.japaneseInfo.nextJapaneseTestLevel;
-      } else if (documentData?.japaneseInfo?.certificateStatus?.name) {
-        merged.japanese_level = documentData.japaneseInfo.certificateStatus.name;
-      } else if (documentData?.certificateStatus?.name) {
-        merged.japanese_level = documentData.certificateStatus.name;
+      if (data.lastName || data.firstName || data.kanaLastName || data.kanaFirstName || data.dateOfBirth) {
+        mapBasicTop(data);
+      }
+
+      if (data.resume?.photoUrl) {
+        merged.profile_photo = merged.profile_photo || data.resume.photoUrl;
+      }
+      if (data.japaneseInfo?.nextJapaneseTestLevel) {
+        merged.japanese_level = data.japaneseInfo.nextJapaneseTestLevel;
+      } else if (data.japaneseInfo?.certificateStatus?.name) {
+        merged.japanese_level = data.japaneseInfo.certificateStatus.name;
+      } else if (data.certificateStatus?.name) {
+        merged.japanese_level = data.certificateStatus.name;
       }
     }
 
-    return res.json({ success: true, data: merged });
-  } catch (error: any) {
-    console.error('求職者詳細取得エラー:', error?.message || error);
+    res.json({ success: true, data: merged });
+  } catch (error) {
+    console.error('/api/jobseekers/:id 取得エラー:', error);
     res.status(500).json({ success: false, message: '求職者詳細の取得に失敗しました' });
   }
 });
@@ -1481,19 +1494,19 @@ app.get('/api/documents/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
-
+    
     console.log('[DOCS][GET] userId =', userId);
 
     // 複数document_typeをマージして返却
     const result = await query(`
       SELECT document_type, document_data, created_at
-      FROM user_documents
-      WHERE user_id = $1
+      FROM user_documents 
+      WHERE user_id = $1 
       ORDER BY created_at ASC
     `, [userId]);
 
     console.log('[DOCS][GET] rows =', result.rows.length, 'types =', result.rows.map(r => r.document_type));
-
+    
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'ドキュメントデータが見つかりません' });
     }
