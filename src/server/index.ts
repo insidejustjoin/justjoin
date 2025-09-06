@@ -887,102 +887,92 @@ app.get('/api/admin/jobseekers', async (req, res) => {
 app.get('/api/jobseekers/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
     const { query } = await import('../integrations/postgres/client.js');
-    
-    // まずuser_idで検索、見つからない場合はidで検索
-    let result = await query(`
-      SELECT 
-        js.*,
-        u.email as user_email,
-        u.status as user_status,
-        u.created_at as user_created_at,
-        u.updated_at as user_updated_at
+
+    // 基本プロフィール（user_id or job_seekers.idで柔軟に取得）
+    const base = await query(`
+      SELECT js.*, u.email
       FROM job_seekers js
-      LEFT JOIN users u ON js.user_id = u.id
-      WHERE js.user_id = $1
+      LEFT JOIN users u ON u.id = js.user_id
+      WHERE js.user_id::text = $1 OR js.id::text = $1
+      LIMIT 1
     `, [id]);
-    
-    // user_idで見つからない場合はidで検索
-    if (result.rows.length === 0) {
-      result = await query(`
-        SELECT 
-          js.*,
-          u.email as user_email,
-          u.status as user_status,
-          u.created_at as user_created_at,
-          u.updated_at as user_updated_at
-        FROM job_seekers js
-        LEFT JOIN users u ON js.user_id = u.id
-        WHERE js.id = $1
-      `, [id]);
+
+    if (base.rows.length === 0) {
+      return res.status(404).json({ success: false, message: '求職者が見つかりません' });
     }
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: '求職者が見つかりません'
-      });
+
+    const row = base.rows[0];
+
+    // 最新の書類データ（統合表示用）
+    const docs = await query(`
+      SELECT document_data
+      FROM user_documents
+      WHERE user_id = $1
+      ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+      LIMIT 1
+    `, [row.user_id]);
+
+    let documentData: any = null;
+    if (docs.rows.length > 0) {
+      documentData = docs.rows[0].document_data || null;
     }
-    
-    // skillsフィールドを配列に変換し、追加情報を設定
-    const jobSeeker = result.rows[0];
-    if (jobSeeker.skills && typeof jobSeeker.skills === 'string') {
-      try {
-        jobSeeker.skills = JSON.parse(jobSeeker.skills);
-      } catch (e) {
-        console.warn('Skills JSON parse error:', e);
-        jobSeeker.skills = [];
-      }
-    } else if (!jobSeeker.skills) {
-      jobSeeker.skills = [];
-    }
-    
-    // user_documentsから写真データを取得
-    let photoUrl = null;
-    try {
-      const docResult = await query(`
-        SELECT document_data
-        FROM user_documents 
-        WHERE user_id = $1 
-        ORDER BY created_at DESC 
-        LIMIT 1
-      `, [jobSeeker.user_id]);
-      
-      if (docResult.rows.length > 0) {
-        const documentData = docResult.rows[0].document_data;
-        if (documentData && documentData.resume && documentData.resume.photoUrl) {
-          photoUrl = documentData.resume.photoUrl;
-        }
-      }
-    } catch (error) {
-      console.warn('写真データ取得エラー:', error);
-    }
-    
-    // 追加フィールドの設定
-    const processedJobSeeker = {
-      ...jobSeeker,
-      // 写真情報をuser_documentsから取得
-      profile_photo: photoUrl,
-      // 配偶者情報はデータベースから取得
-      spouse: jobSeeker.spouse || null,
-      spouse_support: jobSeeker.spouse_support || null,
-      commuting_time: jobSeeker.commuting_time || null,
-      family_number: jobSeeker.family_number || null
+
+    // マージ：job_seekersをベースに、書類側にあれば優先
+    const merged: any = {
+      id: row.id,
+      user_id: row.user_id,
+      email: row.email,
+      full_name: row.full_name,
+      first_name: row.first_name,
+      last_name: row.last_name,
+      phone: row.phone,
+      address: row.address,
+      date_of_birth: row.date_of_birth,
+      gender: row.gender,
+      nationality: row.nationality,
+      profile_photo: row.profile_photo,
+      completion_rate: row.completion_rate || 0,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
     };
-    
-    console.log(`求職者詳細取得: ID ${id}`);
-    
-    res.json({
-      success: true,
-      data: processedJobSeeker
-    });
-  } catch (error) {
-    console.error('求職者詳細取得エラー:', error);
-    res.status(500).json({
-      success: false,
-      message: '求職者詳細の取得に失敗しました'
-    });
+
+    // resume.basicInfo をトップへ反映
+    const liftBasic = (d: any) => {
+      const b = d?.resume?.basicInfo;
+      if (!b) return;
+      merged.last_name = merged.last_name || b.lastName;
+      merged.first_name = merged.first_name || b.firstName;
+      merged.kana_last_name = merged.kana_last_name || b.kanaLastName;
+      merged.kana_first_name = merged.kana_first_name || b.kanaFirstName;
+      merged.date_of_birth = merged.date_of_birth || b.dateOfBirth;
+      merged.gender = merged.gender || b.gender;
+      merged.nationality = merged.nationality || b.nationality;
+      merged.address = merged.address || b.address;
+      merged.phone = merged.phone || b.phone;
+      merged.email = merged.email || b.email;
+    };
+
+    if (documentData) {
+      liftBasic(documentData);
+      // 写真
+      if (documentData?.resume?.photoUrl) {
+        merged.profile_photo = merged.profile_photo || documentData.resume.photoUrl;
+      }
+      // 日本語レベル
+      if (documentData?.japaneseInfo?.nextJapaneseTestLevel) {
+        merged.japanese_level = documentData.japaneseInfo.nextJapaneseTestLevel;
+      } else if (documentData?.japaneseInfo?.certificateStatus?.name) {
+        merged.japanese_level = documentData.japaneseInfo.certificateStatus.name;
+      } else if (documentData?.certificateStatus?.name) {
+        merged.japanese_level = documentData.certificateStatus.name;
+      }
+    }
+
+    return res.json({ success: true, data: merged });
+  } catch (error: any) {
+    console.error('求職者詳細取得エラー:', error?.message || error);
+    res.status(500).json({ success: false, message: '求職者詳細の取得に失敗しました' });
   }
 });
 
