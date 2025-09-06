@@ -1383,57 +1383,6 @@ export function AdminJobSeekers() {
     setFilterChange(prev => prev + 1);
   };
 
-  // 仮登録一覧用の状態
-  const [tempRegs, setTempRegs] = useState<Array<{id: string; email: string; first_name: string; last_name: string; status: string; expires_at: string; created_at: string;}>>([]);
-  const [loadingTemp, setLoadingTemp] = useState(false);
-
-  const fetchTemporaryRegistrations = async () => {
-    setLoadingTemp(true);
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) throw new Error('認証トークンが見つかりません');
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      const res = await fetch(`${apiUrl}/api/register/admin/temporary`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setTempRegs(data.data || []);
-      }
-    } catch (e) {
-      console.error('仮登録一覧取得エラー:', e);
-    } finally {
-      setLoadingTemp(false);
-    }
-  };
-
-  const deleteTemporaryRegistration = async (id: string) => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) throw new Error('認証トークンが見つかりません');
-      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-      const res = await fetch(`${apiUrl}/api/register/admin/temporary/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setTempRegs(prev => prev.filter(r => r.id !== id));
-        toast({ title: '削除完了', description: '仮登録を削除しました' });
-      } else {
-        toast({ title: 'エラー', description: data.message || '削除に失敗しました', variant: 'destructive' });
-      }
-    } catch (e: any) {
-      toast({ title: 'エラー', description: e.message || '削除に失敗しました', variant: 'destructive' });
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab === 'temporary') {
-      fetchTemporaryRegistrations();
-    }
-  }, [activeTab]);
-
   return (
     <AdminPageLayout title="管理者ダッシュボード">
       <div className="space-y-6">
@@ -1611,232 +1560,233 @@ export function AdminJobSeekers() {
 
         {/* 求職者管理タブ */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList>
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="active">求職者一覧</TabsTrigger>
             <TabsTrigger value="employed">就職済み一覧</TabsTrigger>
             <TabsTrigger value="withdrawn">退会済み一覧</TabsTrigger>
-            <TabsTrigger value="temporary">仮登録</TabsTrigger>
           </TabsList>
-          
-          {/* 既存のタブ */}
+
+          {/* 求職者一覧タブ */}
           <TabsContent value="active" className="space-y-4">
-            {loading ? (
-              <div className="flex justify-center items-center py-8">
-                <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-                <span className="ml-2 text-gray-600">データを読み込み中...</span>
+          {loading ? (
+            <div className="flex justify-center items-center py-8">
+              <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+              <span className="ml-2 text-gray-600">データを読み込み中...</span>
+            </div>
+          ) : error ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : filteredJobSeekers.length === 0 ? (
+            <Alert>
+              <Users className="h-4 w-4" />
+              <AlertDescription>
+                条件に一致する求職者が見つかりませんでした。
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="space-y-4">
+              {/* 一括選択ヘッダー */}
+              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAll}
+                  className="flex items-center gap-2"
+                >
+                  {isSelectAll ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                  {isSelectAll ? '全選択解除' : '全選択'}
+                </Button>
+                <span className="text-sm text-gray-600">
+                  {selectedJobSeekers.length} / {filteredJobSeekers.length} 選択中
+                </span>
               </div>
-            ) : error ? (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : filteredJobSeekers.length === 0 ? (
-              <Alert>
-                <Users className="h-4 w-4" />
-                <AlertDescription>
-                  条件に一致する求職者が見つかりませんでした。
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-4">
-                {/* 一括選択ヘッダー */}
-                <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSelectAll}
-                    className="flex items-center gap-2"
-                  >
-                    {isSelectAll ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                    {isSelectAll ? '全選択解除' : '全選択'}
-                  </Button>
-                  <span className="text-sm text-gray-600">
-                    {selectedJobSeekers.length} / {filteredJobSeekers.length} 選択中
-                  </span>
-                </div>
 
-                {/* 求職者カード */}
-                {filteredJobSeekers.map((jobSeeker) => (
-                  <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-4 flex-1">
-                          {/* 選択チェックボックス */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSelectJobSeeker(jobSeeker)}
-                            className={`flex items-center gap-2 ${
-                              isJobSeekerSelected(jobSeeker) 
-                                ? 'bg-blue-100 border-blue-300' 
-                                : 'bg-white'
-                            }`}
-                          >
-                            {isJobSeekerSelected(jobSeeker) ? (
-                              <CheckSquare className="h-4 w-4 text-blue-600" />
-                            ) : (
-                              <Square className="h-4 w-4" />
-                            )}
-                          </Button>
+              {/* 求職者カード */}
+              {filteredJobSeekers.map((jobSeeker) => (
+                <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-4 flex-1">
+                        {/* 選択チェックボックス */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSelectJobSeeker(jobSeeker)}
+                          className={`flex items-center gap-2 ${
+                            isJobSeekerSelected(jobSeeker) 
+                              ? 'bg-blue-100 border-blue-300' 
+                              : 'bg-white'
+                          }`}
+                        >
+                          {isJobSeekerSelected(jobSeeker) ? (
+                            <CheckSquare className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </Button>
 
-                          {/* 顔写真 */}
-                          <div className="flex-shrink-0">
-                            {jobSeeker.profile_photo ? (
-                              <div className="w-[76px] h-[102px]">
-                                <img
-                                  src={jobSeeker.profile_photo}
-                                  alt={`${jobSeeker.full_name}の写真`}
-                                  className="w-full h-full object-cover rounded-lg border"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <div className="w-[76px] h-[102px] bg-gray-200 rounded-lg border flex items-center justify-center">
-                                <span className="text-gray-500 text-xs">写真なし</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* 求職者情報 */}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-4 mb-2">
-                              <h3 className="text-lg font-semibold text-gray-900">
-                                {jobSeeker.full_name || '名前未設定'}
-                              </h3>
-                              <Badge variant="secondary">
-                                {getDisplayAge(jobSeeker) ? `${getDisplayAge(jobSeeker)}歳` : '年齢未設定'}
-                              </Badge>
-                              <Badge variant="outline">
-                                {getGenderLabel(jobSeeker.gender || '')}
-                              </Badge>
-                              {jobSeeker.nationality && (
-                                <Badge variant="outline">
-                                  {jobSeeker.nationality}
-                                </Badge>
-                              )}
-                              {/* 面接表示状態バッジ */}
-                              <Badge 
-                                variant={jobSeeker.interviewEnabled ? "default" : "secondary"}
-                                className={jobSeeker.interviewEnabled ? "bg-green-500" : "bg-gray-400"}
-                              >
-                                {jobSeeker.interviewEnabled ? "面接有効" : "面接無効"}
-                              </Badge>
-                              
-                              {/* 面接状態バッジ */}
-                              <Badge 
-                                variant="outline"
-                                className={`${getInterviewStatusDisplay(jobSeeker.user_id).color}`}
-                              >
-                                {getInterviewStatusDisplay(jobSeeker.user_id).text}
-                              </Badge>
-                              
-                              {/* 面接受験回数バッジ */}
-                              {jobSeeker.interview_attempts && jobSeeker.interview_attempts.count > 0 && (
-                                <Badge variant="outline" className="bg-blue-100 text-blue-700">
-                                  面接{jobSeeker.interview_attempts.count}回
-                                </Badge>
-                              )}
-                              
-                              {/* 面接再有効化ボタン（面接完了時のみ表示） */}
-                              {getInterviewStatusDisplay(jobSeeker.user_id).text === '受験完了' && (
-                                <Button
-                                  onClick={() => resetInterview(jobSeeker)}
-                                  size="sm"
-                                  variant="outline"
-                                  className="bg-yellow-100 hover:bg-yellow-200 border-yellow-300 text-yellow-800"
-                                >
-                                  <RefreshCw className="h-3 w-3 mr-1" />
-                                  再有効化
-                                </Button>
-                              )}
+                        {/* 顔写真 */}
+                        <div className="flex-shrink-0">
+                          {jobSeeker.profile_photo ? (
+                            <div className="w-[76px] h-[102px]">
+                              <img
+                                src={jobSeeker.profile_photo}
+                                alt={`${jobSeeker.full_name}の写真`}
+                                className="w-full h-full object-cover rounded-lg border"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                }}
+                              />
                             </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                              <div>
-                                <p><strong>生年月日:</strong> {jobSeeker.date_of_birth ? new Date(jobSeeker.date_of_birth).toLocaleDateString('ja-JP') : '未設定'}</p>
-                                <p><strong>国籍:</strong> {jobSeeker.nationality || '未設定'}</p>
-                                <p><strong>日本語資格:</strong> {jobSeeker.certificateStatus?.name || '未設定'}</p>
-                                <p><strong>メール:</strong> {jobSeeker.email || jobSeeker.user_email || '未設定'}</p>
-                              </div>
-                              <div>
-                                <p><strong>電話:</strong> {jobSeeker.phone || '未設定'}</p>
-                                <p><strong>登録日:</strong> {new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</p>
-                              </div>
+                          ) : (
+                            <div className="w-[76px] h-[102px] bg-gray-200 rounded-lg border flex items-center justify-center">
+                              <span className="text-gray-500 text-xs">写真なし</span>
                             </div>
-                          </div>
+                          )}
                         </div>
 
-                        {/* アクションボタン */}
-                        <div className="flex flex-col gap-2 ml-4">
-                          <Button
-                            onClick={() => openDetailModal(jobSeeker)}
-                            size="sm"
-                            variant="outline"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            詳細表示
-                          </Button>
-                          <Button
-                            onClick={() => openDocumentGenerator(jobSeeker)}
-                            size="sm"
-                            variant="outline"
-                          >
-                            <FileText className="h-4 w-4 mr-2" />
-                            書類作成
-                          </Button>
-                          {/* 面接再有効化ボタン */}
-                          <Button
-                            onClick={() => resetInterview(jobSeeker)}
-                            size="sm"
-                            variant="outline"
-                            className="bg-yellow-100 hover:bg-yellow-200 border-yellow-300"
-                          >
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            面接再有効化
-                          </Button>
-                          <Button
-                            onClick={() => openStatusModal(jobSeeker)}
-                            size="sm"
-                            variant="outline"
-                            className="bg-green-100 hover:bg-green-200 border-green-300"
-                          >
-                            <Building2 className="h-4 w-4 mr-2" />
-                            就職済み
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              console.log('削除ボタンクリック:', { 
-                                user_id: jobSeeker.user_id, 
-                                full_name: jobSeeker.full_name,
-                                user_idType: typeof jobSeeker.user_id,
-                                isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(jobSeeker.user_id))
-                              });
-                              deleteJobSeeker(jobSeeker.user_id, jobSeeker.full_name);
-                            }}
-                            size="sm"
-                            variant="destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            削除
-                          </Button>
-
+                        {/* 求職者情報 */}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-4 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {jobSeeker.full_name || '名前未設定'}
+                            </h3>
+                            <Badge variant="secondary">
+                              {getDisplayAge(jobSeeker) ? `${getDisplayAge(jobSeeker)}歳` : '年齢未設定'}
+                            </Badge>
+                            <Badge variant="outline">
+                              {getGenderLabel(jobSeeker.gender || '')}
+                            </Badge>
+                            {jobSeeker.nationality && (
+                              <Badge variant="outline">
+                                {jobSeeker.nationality}
+                              </Badge>
+                            )}
+                            {/* 面接表示状態バッジ */}
+                            <Badge 
+                              variant={jobSeeker.interviewEnabled ? "default" : "secondary"}
+                              className={jobSeeker.interviewEnabled ? "bg-green-500" : "bg-gray-400"}
+                            >
+                              {jobSeeker.interviewEnabled ? "面接有効" : "面接無効"}
+                            </Badge>
+                            
+                            {/* 面接状態バッジ */}
+                            <Badge 
+                              variant="outline"
+                              className={`${getInterviewStatusDisplay(jobSeeker.user_id).color}`}
+                            >
+                              {getInterviewStatusDisplay(jobSeeker.user_id).text}
+                            </Badge>
+                            
+                            {/* 面接受験回数バッジ */}
+                            {jobSeeker.interview_attempts && jobSeeker.interview_attempts.count > 0 && (
+                              <Badge variant="outline" className="bg-blue-100 text-blue-700">
+                                面接{jobSeeker.interview_attempts.count}回
+                              </Badge>
+                            )}
+                            
+                            {/* 面接再有効化ボタン（面接完了時のみ表示） */}
+                            {getInterviewStatusDisplay(jobSeeker.user_id).text === '受験完了' && (
+                              <Button
+                                onClick={() => resetInterview(jobSeeker)}
+                                size="sm"
+                                variant="outline"
+                                className="bg-yellow-100 hover:bg-yellow-200 border-yellow-300 text-yellow-800"
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                再有効化
+                              </Button>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                            <div>
+                              <p><strong>生年月日:</strong> {jobSeeker.date_of_birth ? new Date(jobSeeker.date_of_birth).toLocaleDateString('ja-JP') : '未設定'}</p>
+                              <p><strong>国籍:</strong> {jobSeeker.nationality || '未設定'}</p>
+                              <p><strong>日本語資格:</strong> {jobSeeker.certificateStatus?.name || '未設定'}</p>
+                              <p><strong>メール:</strong> {jobSeeker.email || jobSeeker.user_email || '未設定'}</p>
+                            </div>
+                            <div>
+                              <p><strong>電話:</strong> {jobSeeker.phone || '未設定'}</p>
+                              <p><strong>登録日:</strong> {new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</p>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
+
+                      {/* アクションボタン */}
+                      <div className="flex flex-col gap-2 ml-4">
+                        <Button
+                          onClick={() => openDetailModal(jobSeeker)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          詳細表示
+                        </Button>
+                        <Button
+                          onClick={() => openDocumentGenerator(jobSeeker)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          書類作成
+                        </Button>
+                        {/* 面接再有効化ボタン */}
+                        <Button
+                          onClick={() => resetInterview(jobSeeker)}
+                          size="sm"
+                          variant="outline"
+                          className="bg-yellow-100 hover:bg-yellow-200 border-yellow-300"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          面接再有効化
+                        </Button>
+                        <Button
+                          onClick={() => openStatusModal(jobSeeker)}
+                          size="sm"
+                          variant="outline"
+                          className="bg-green-100 hover:bg-green-200 border-green-300"
+                        >
+                          <Building2 className="h-4 w-4 mr-2" />
+                          就職済み
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            console.log('削除ボタンクリック:', { 
+                              user_id: jobSeeker.user_id, 
+                              full_name: jobSeeker.full_name,
+                              user_idType: typeof jobSeeker.user_id,
+                              isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(jobSeeker.user_id))
+                            });
+                            deleteJobSeeker(jobSeeker.user_id, jobSeeker.full_name);
+                          }}
+                          size="sm"
+                          variant="destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          削除
+                        </Button>
+
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
           </TabsContent>
+
+          {/* 就職済み一覧タブ */}
           <TabsContent value="employed" className="space-y-4">
             {statusLoading ? (
               <div className="flex justify-center items-center py-8">
                 <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
                 <span className="ml-2 text-gray-600">データを読み込み中...</span>
-              </div>
+        </div>
             ) : jobSeekerStatuses.employed.length === 0 ? (
               <Alert>
                 <Users className="h-4 w-4" />
@@ -1889,6 +1839,8 @@ export function AdminJobSeekers() {
               </div>
             )}
           </TabsContent>
+
+          {/* 退会済み一覧タブ */}
           <TabsContent value="withdrawn" className="space-y-4">
             {statusLoading ? (
               <div className="flex justify-center items-center py-8">
@@ -1954,52 +1906,6 @@ export function AdminJobSeekers() {
                     </CardContent>
                   </Card>
                 ))}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* 仮登録タブ */}
-          <TabsContent value="temporary" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">仮登録一覧</h2>
-              <Button variant="outline" size="sm" onClick={fetchTemporaryRegistrations} disabled={loadingTemp}>
-                再読み込み
-              </Button>
-            </div>
-            {loadingTemp ? (
-              <div className="text-sm text-muted-foreground">読み込み中...</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b">
-                      <th className="py-2 px-2">氏名</th>
-                      <th className="py-2 px-2">メール</th>
-                      <th className="py-2 px-2">ステータス</th>
-                      <th className="py-2 px-2">期限</th>
-                      <th className="py-2 px-2">作成日時</th>
-                      <th className="py-2 px-2">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tempRegs.length === 0 ? (
-                      <tr><td className="py-4 px-2" colSpan={6}>データがありません</td></tr>
-                    ) : tempRegs.map(r => (
-                      <tr key={r.id} className="border-b">
-                        <td className="py-2 px-2">{r.last_name} {r.first_name}</td>
-                        <td className="py-2 px-2">{r.email}</td>
-                        <td className="py-2 px-2">{r.status}</td>
-                        <td className="py-2 px-2">{r.expires_at ? new Date(r.expires_at).toLocaleString('ja-JP') : '-'}</td>
-                        <td className="py-2 px-2">{r.created_at ? new Date(r.created_at).toLocaleString('ja-JP') : '-'}</td>
-                        <td className="py-2 px-2">
-                          <Button variant="destructive" size="sm" onClick={() => deleteTemporaryRegistration(r.id)}>
-                            削除
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             )}
           </TabsContent>

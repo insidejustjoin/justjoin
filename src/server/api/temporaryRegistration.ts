@@ -3,7 +3,6 @@ import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../../integrations/postgres/client.js';
 import { emailService } from '../../services/emailService.js';
-import { authenticate } from '../authenticate.js';
 
 const router = express.Router();
 
@@ -16,7 +15,7 @@ router.post('/temporary', async (req, res) => {
     if (!email || !firstName || !lastName) {
       return res.status(400).json({ 
         success: false, 
-        message: 'メールアドレス、姓、名は必須です。'
+        message: 'メールアドレス、姓、名は必須です。' 
       });
     }
 
@@ -400,37 +399,31 @@ router.post('/complete/:token', async (req, res) => {
     }
 
     // 求職者詳細情報作成
-    const existingJobSeeker = await query(
-      `SELECT id FROM job_seekers WHERE user_id = $1`,
-      [userId]
-    );
-
-    if (existingJobSeeker.rows.length > 0) {
-      await query(
-        `UPDATE job_seekers 
-         SET first_name = $1, last_name = $2, interview_enabled = FALSE, updated_at = NOW() 
-         WHERE user_id = $3`,
-        [registration.first_name, registration.last_name, userId]
-      );
-    } else {
-      await query(
-        `INSERT INTO job_seekers (user_id, first_name, last_name, interview_enabled, created_at, updated_at) 
-         VALUES ($1, $2, $3, FALSE, NOW(), NOW())`,
-        [userId, registration.first_name, registration.last_name]
-      );
-    }
-
-    // 面接を明示的に無効化
     await query(
-      `UPDATE job_seekers SET interview_enabled = FALSE, updated_at = NOW() WHERE user_id = $1`,
-      [userId]
+      `INSERT INTO job_seekers (user_id, first_name, last_name, created_at, updated_at) 
+       VALUES ($1, $2, $3, NOW(), NOW())`,
+      [userId, registration.first_name, registration.last_name]
     );
+
+    // 求職者ステータスを'active'で初期化
+    try {
+      await query(
+        `INSERT INTO job_seeker_status_history (user_id, status, created_at, updated_at) 
+         VALUES ($1, $2, NOW(), NOW())`,
+        [userId, 'active']
+      );
+      console.log('求職者ステータス初期化成功:', userId);
+    } catch (statusError) {
+      console.error('求職者ステータス初期化エラー:', statusError);
+      // ステータス初期化に失敗しても処理を継続
+      console.log('ステータス初期化をスキップして処理を継続');
+    }
 
     // 仮登録で入力された書類データをuser_documentsテーブルに移行
     if (registration.documents_data) {
       try {
         const documentsData = JSON.parse(registration.documents_data);
-
+        
         // 基本情報をuser_documentsに保存
         if (documentsData.resume?.basicInfo) {
           await query(
@@ -508,135 +501,7 @@ router.post('/complete/:token', async (req, res) => {
           );
         }
 
-        // 追加: 統合済みの1レコード（resume）としても保存しておく
-        const combinedForResume = {
-          // 基本情報
-          lastName: documentsData.lastName || documentsData.resume?.basicInfo?.lastName || '',
-          firstName: documentsData.firstName || documentsData.resume?.basicInfo?.firstName || '',
-          kanaLastName: documentsData.kanaLastName || documentsData.resume?.basicInfo?.kanaLastName || '',
-          kanaFirstName: documentsData.kanaFirstName || documentsData.resume?.basicInfo?.kanaFirstName || '',
-          birthDate: documentsData.birthDate || documentsData.resume?.basicInfo?.dateOfBirth || '',
-          gender: documentsData.gender || documentsData.resume?.basicInfo?.gender || '',
-          nationality: documentsData.nationality || documentsData.resume?.basicInfo?.nationality || '',
-
-          // 現住所情報
-          livePostNumber: documentsData.livePostNumber || documentsData.addressInfo?.livePostNumber || '',
-          liveAddress: documentsData.liveAddress || documentsData.resume?.basicInfo?.address || '',
-          kanaLiveAddress: documentsData.kanaLiveAddress || documentsData.addressInfo?.kanaLiveAddress || '',
-          livePhoneNumber: documentsData.livePhoneNumber || documentsData.resume?.basicInfo?.phone || '',
-          liveMail: documentsData.liveMail || documentsData.resume?.basicInfo?.email || registration.email,
-
-          // 連絡先情報
-          contactPostNumber: documentsData.contactPostNumber || documentsData.addressInfo?.contactPostNumber || '',
-          contactAddress: documentsData.contactAddress || documentsData.addressInfo?.contactAddress || '',
-          kanaContactAddress: documentsData.kanaContactAddress || documentsData.addressInfo?.kanaContactAddress || '',
-          contactPhoneNumber: documentsData.contactPhoneNumber || documentsData.addressInfo?.contactPhoneNumber || '',
-          contactMail: documentsData.contactMail || documentsData.addressInfo?.contactMail || '',
-          contactSameAsLive: documentsData.contactSameAsLive || false,
-
-          // 履歴書
-          resume: documentsData.resume || {
-            photoUrl: '',
-            education: [{ year: '', month: '', content: '' }],
-            workExperience: [{ year: '', month: '', content: '' }],
-            qualifications: [{ year: '', month: '', name: '' }],
-            skills: [{ category: '', level: '' }],
-            selfPR: ''
-          },
-
-          // 職務経歴書
-          workHistory: documentsData.workHistory || {
-            currentDate: new Date().toLocaleDateString('ja-JP'),
-            workExperiences: [{ period: '', company: '', position: '', description: '', technologies: '', software: '', role: '' }],
-            qualifications: '',
-            noWorkHistory: false
-          },
-
-          // スキルシート
-          skillSheet: documentsData.skillSheet || { skills: {} },
-
-          // 日本語関連
-          certificateStatus: documentsData.certificateStatus || { date: '', name: '' },
-          japaneseLevel: documentsData.japaneseLevel || documentsData.certificateStatus?.name || '',
-          qualificationDate: documentsData.qualificationDate || documentsData.certificateStatus?.date || '',
-          nextJapaneseTestDate: documentsData.nextJapaneseTestDate || '',
-          nextJapaneseTestLevel: documentsData.nextJapaneseTestLevel || '',
-          whyJapan: documentsData.whyJapan || '',
-          whyInterestJapan: documentsData.whyInterestJapan || '',
-
-          // 追加情報
-          selfIntroduction: documentsData.selfIntroduction || '',
-          spouse: documentsData.spouse || '',
-          spouseSupport: documentsData.spouseSupport || ''
-        };
-
-        // 既存のresumeレコードがあれば更新、なければ作成
-        const existingResume = await query(
-          `SELECT id FROM user_documents WHERE user_id = $1 AND document_type = 'resume'`,
-          [userId]
-        );
-        if (existingResume.rows.length > 0) {
-          await query(
-            `UPDATE user_documents SET document_data = $1, updated_at = NOW() WHERE id = $2`,
-            [JSON.stringify(combinedForResume), existingResume.rows[0].id]
-          );
-        } else {
-          await query(
-            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
-             VALUES ($1, 'resume', $2, NOW(), NOW())`,
-            [userId, JSON.stringify(combinedForResume)]
-          );
-        }
-
-        // 入力率を算出して保存
-        const completionRate = (() => {
-          const fields: any[] = [
-            combinedForResume.lastName,
-            combinedForResume.firstName,
-            combinedForResume.kanaLastName,
-            combinedForResume.kanaFirstName,
-            combinedForResume.birthDate,
-            combinedForResume.gender,
-            combinedForResume.livePostNumber,
-            combinedForResume.liveAddress,
-            combinedForResume.kanaLiveAddress,
-            combinedForResume.livePhoneNumber,
-            combinedForResume.liveMail,
-            combinedForResume.nationality,
-            combinedForResume.contactSameAsLive ? true : combinedForResume.contactPostNumber,
-            combinedForResume.contactSameAsLive ? true : combinedForResume.contactAddress,
-            combinedForResume.contactSameAsLive ? true : combinedForResume.kanaContactAddress,
-            combinedForResume.contactSameAsLive ? true : combinedForResume.contactPhoneNumber,
-            combinedForResume.contactSameAsLive ? true : combinedForResume.contactMail,
-            combinedForResume.selfIntroduction,
-            combinedForResume.resume?.noEducation ? true : (combinedForResume.resume?.education && combinedForResume.resume.education.length > 0),
-            combinedForResume.resume?.noWorkExperience ? true : (combinedForResume.resume?.workExperience && combinedForResume.resume.workExperience.length > 0),
-            combinedForResume.resume?.noQualifications ? true : (combinedForResume.resume?.qualifications && combinedForResume.resume?.qualifications.length > 0),
-            combinedForResume.workHistory?.noWorkHistory ? true : (combinedForResume.workHistory?.workExperiences && combinedForResume.workHistory?.workExperiences.length > 0),
-            combinedForResume.skillSheet?.skills?.Windows?.evaluation && combinedForResume.skillSheet?.skills?.Windows?.evaluation !== '-',
-            combinedForResume.skillSheet?.skills?.MacOS?.evaluation && combinedForResume.skillSheet?.skills?.MacOS?.evaluation !== '-',
-            combinedForResume.skillSheet?.skills?.Linux?.evaluation && combinedForResume.skillSheet?.skills?.Linux?.evaluation !== '-',
-            combinedForResume.certificateStatus?.name,
-            combinedForResume.whyJapan && combinedForResume.whyJapan.length >= 300 ? true : false,
-            combinedForResume.whyInterestJapan && combinedForResume.whyInterestJapan.length >= 300 ? true : false,
-            combinedForResume.selfIntroduction && combinedForResume.selfIntroduction.length >= 300 ? true : false,
-            combinedForResume.spouse,
-            combinedForResume.spouseSupport,
-          ];
-          const filled = fields.filter((f: any) => {
-            if (typeof f === 'string') return f && f.trim() !== '';
-            if (typeof f === 'boolean') return f === true;
-            if (Array.isArray(f)) return f.length > 0;
-            return f;
-          });
-          return Math.round((filled.length / fields.length) * 100);
-        })();
-
-        await query(
-          'UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2',
-          [completionRate, userId]
-        );
-
+        console.log('書類データ移行完了:', userId);
       } catch (documentsError) {
         console.error('書類データ移行エラー:', documentsError);
         // 書類データ移行に失敗しても処理を継続
@@ -669,45 +534,6 @@ router.post('/complete/:token', async (req, res) => {
       success: false, 
       message: '本登録完了中にエラーが発生しました。' 
     });
-  }
-});
-
-// 管理者: 仮登録一覧取得
-router.get('/admin/temporary', authenticate, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-      return res.status(403).json({ success: false, message: '管理者権限が必要です' });
-    }
-
-    const { query: q } = await import('../../integrations/postgres/client.js');
-    const result = await q(`
-      SELECT id, email, first_name, last_name, status, expires_at, created_at, updated_at
-      FROM temporary_registrations
-      ORDER BY created_at DESC
-      LIMIT 200
-    `);
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('管理: 仮登録一覧取得エラー:', error);
-    res.status(500).json({ success: false, message: '仮登録一覧の取得に失敗しました' });
-  }
-});
-
-// 管理者: 仮登録削除
-router.delete('/admin/temporary/:id', authenticate, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-      return res.status(403).json({ success: false, message: '管理者権限が必要です' });
-    }
-
-    const { id } = req.params;
-    await query('DELETE FROM temporary_registrations WHERE id = $1', [id]);
-    res.json({ success: true, message: '仮登録を削除しました' });
-  } catch (error) {
-    console.error('管理: 仮登録削除エラー:', error);
-    res.status(500).json({ success: false, message: '仮登録の削除に失敗しました' });
   }
 });
 

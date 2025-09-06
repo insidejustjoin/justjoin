@@ -372,224 +372,33 @@ router.get('/:userId', async (req: express.Request, res: express.Response): Prom
       });
     }
 
-    // データベースから取得（全レコードを取得して統合）
+    // データベースから取得
     try {
-      const queryText = `
-        SELECT document_type, document_data, created_at, updated_at
-        FROM user_documents
-        WHERE user_id = $1
-        ORDER BY updated_at DESC
-      `;
+      const queryText = 'SELECT document_data, created_at, updated_at FROM user_documents WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1';
       const result = await query(queryText, [userId]);
 
       if (result.rows.length > 0) {
-        const rows = result.rows as Array<{ document_type: string; document_data: any; created_at: string; updated_at: string }>;
-
-        // 各ドキュメントタイプを統合してDocumentGeneratorが期待する形に整形
-        const combined = (() => {
-          const base: any = {
-            // 基本情報
-            lastName: '',
-            firstName: '',
-            kanaLastName: '',
-            kanaFirstName: '',
-            birthDate: '',
-            gender: '',
-
-            // 現住所情報
-            livePostNumber: '',
-            liveAddress: '',
-            kanaLiveAddress: '',
-            livePhoneNumber: '',
-            liveMail: '',
-            nationality: '',
-
-            // 連絡先情報
-            contactPostNumber: '',
-            contactAddress: '',
-            kanaContactAddress: '',
-            contactPhoneNumber: '',
-            contactMail: '',
-            contactSameAsLive: false,
-
-            // 履歴書
-            resume: {
-              photoUrl: '',
-              education: [{ year: '', month: '', content: '' }],
-              workExperience: [{ year: '', month: '', content: '' }],
-              qualifications: [{ year: '', month: '', name: '' }],
-              skills: [{ category: '', level: '' }],
-              selfPR: '',
-              noEducation: false,
-              noWorkExperience: false,
-              noQualifications: false
-            },
-
-            // 職務経歴書
-            workHistory: {
-              currentDate: new Date().toLocaleDateString('ja-JP'),
-              workExperiences: [{ period: '', company: '', position: '', description: '', technologies: '', software: '', role: '' }],
-              qualifications: '',
-              noWorkHistory: false
-            },
-
-            // スキルシート
-            skillSheet: {
-              skills: {}
-            },
-
-            // 追加情報
-            selfIntroduction: '',
-            personalPreference: '',
-            spouse: '',
-            spouseSupport: '',
-
-            // 日本語関連
-            certificateStatus: { date: '', name: '' },
-            japaneseLevel: '',
-            qualificationDate: '',
-            nextJapaneseTestDate: '',
-            nextJapaneseTestLevel: '',
-            whyJapan: '',
-            whyInterestJapan: ''
-          };
-
-          for (const row of rows) {
-            const type = row.document_type;
-            const data = row.document_data;
-            if (!type || !data) continue;
-
-            switch (type) {
-              case 'basic_info': {
-                const b = data;
-                base.firstName = b.firstName || base.firstName;
-                base.lastName = b.lastName || base.lastName;
-                base.kanaFirstName = b.kanaFirstName || base.kanaFirstName;
-                base.kanaLastName = b.kanaLastName || base.kanaLastName;
-                base.liveMail = b.email || base.liveMail;
-                base.livePhoneNumber = b.phone || base.livePhoneNumber;
-                base.birthDate = b.dateOfBirth || base.birthDate;
-                base.liveAddress = b.address || base.liveAddress;
-                base.gender = b.gender || base.gender;
-                base.nationality = b.nationality || base.nationality;
-                break;
-              }
-              case 'resume': {
-                base.resume = { ...base.resume, ...data };
-                break;
-              }
-              case 'work_history': {
-                base.workHistory = { ...base.workHistory, ...data };
-                break;
-              }
-              case 'skill_sheet': {
-                base.skillSheet = { ...base.skillSheet, ...data };
-                break;
-              }
-              case 'certificate_status': {
-                base.certificateStatus = data;
-                base.japaneseLevel = data?.name || base.japaneseLevel;
-                base.qualificationDate = data?.date || base.qualificationDate;
-                break;
-              }
-              case 'why_japan': {
-                base.whyJapan = data?.whyJapan ?? base.whyJapan;
-                break;
-              }
-              case 'why_interest_japan': {
-                base.whyInterestJapan = data?.whyInterestJapan ?? base.whyInterestJapan;
-                break;
-              }
-              case 'self_introduction': {
-                base.selfIntroduction = data?.selfIntroduction ?? base.selfIntroduction;
-                break;
-              }
-              case 'spouse_info': {
-                base.spouse = data?.spouse ?? base.spouse;
-                base.spouseSupport = data?.spouseSupport ?? base.spouseSupport;
-                break;
-              }
-              default:
-                break;
-            }
-          }
-
-          return base;
-        })();
-
-        logger.info('書類取得成功（統合）', { userId, documentType }, undefined, 'api_success');
+        const documentData = result.rows[0].document_data;
+        logger.info('書類取得成功（データベース）', { userId, documentType }, undefined, 'api_success');
+        
         return res.json({
           success: true,
-          data: combined,
+          data: documentData,
           createdAt: result.rows[0].created_at,
           updatedAt: result.rows[0].updated_at
         });
       }
     } catch (dbError) {
-      logger.error('データベース読み込みエラー', { userId, documentType, error: (dbError as any).message }, undefined, 'db_error');
+      logger.error('データベース読み込みエラー', { userId, documentType, error: dbError.message }, undefined, 'db_error');
     }
 
     // データが見つからない場合
-    // フォールバック: 仮登録データから統合を試みる
-    try {
-      const fallbackQuery = `
-        SELECT tr.documents_data
-        FROM temporary_registrations tr
-        JOIN users u ON u.email = tr.email
-        WHERE u.id = $1
-        ORDER BY tr.updated_at DESC NULLS LAST, tr.created_at DESC
-        LIMIT 1
-      `;
-      const fb = await query(fallbackQuery, [userId]);
-      if (fb.rows.length > 0 && fb.rows[0].documents_data) {
-        const d = typeof fb.rows[0].documents_data === 'string' ? JSON.parse(fb.rows[0].documents_data) : fb.rows[0].documents_data;
-        const combined = {
-          lastName: d.lastName || d.resume?.basicInfo?.lastName || '',
-          firstName: d.firstName || d.resume?.basicInfo?.firstName || '',
-          kanaLastName: d.kanaLastName || d.resume?.basicInfo?.kanaLastName || '',
-          kanaFirstName: d.kanaFirstName || d.resume?.basicInfo?.kanaFirstName || '',
-          birthDate: d.birthDate || d.resume?.basicInfo?.dateOfBirth || '',
-          gender: d.gender || d.resume?.basicInfo?.gender || '',
-          nationality: d.nationality || d.resume?.basicInfo?.nationality || '',
-          livePostNumber: d.livePostNumber || d.addressInfo?.livePostNumber || '',
-          liveAddress: d.liveAddress || d.resume?.basicInfo?.address || '',
-          kanaLiveAddress: d.kanaLiveAddress || d.addressInfo?.kanaLiveAddress || '',
-          livePhoneNumber: d.livePhoneNumber || d.resume?.basicInfo?.phone || '',
-          liveMail: d.liveMail || d.resume?.basicInfo?.email || '',
-          contactPostNumber: d.contactPostNumber || d.addressInfo?.contactPostNumber || '',
-          contactAddress: d.contactAddress || d.addressInfo?.contactAddress || '',
-          kanaContactAddress: d.kanaContactAddress || d.addressInfo?.kanaContactAddress || '',
-          contactPhoneNumber: d.contactPhoneNumber || d.addressInfo?.contactPhoneNumber || '',
-          contactMail: d.contactMail || d.addressInfo?.contactMail || '',
-          contactSameAsLive: d.contactSameAsLive || false,
-          resume: d.resume || { photoUrl: '', education: [{year:'',month:'',content:''}], workExperience: [{year:'',month:'',content:''}], qualifications: [{year:'',month:'',name:''}], skills: [{category:'',level:''}], selfPR: '', noEducation: false, noWorkExperience: false, noQualifications: false },
-          workHistory: d.workHistory || { currentDate: new Date().toLocaleDateString('ja-JP'), workExperiences: [{ period: '', company: '', position: '', description: '', technologies: '', software: '', role: '' }], qualifications: '', noWorkHistory: false },
-          skillSheet: d.skillSheet || { skills: {} },
-          selfIntroduction: d.selfIntroduction || '',
-          personalPreference: d.personalPreference || '',
-          spouse: d.spouse || '',
-          spouseSupport: d.spouseSupport || '',
-          certificateStatus: d.certificateStatus || { date: '', name: '' },
-          japaneseLevel: d.japaneseLevel || d.certificateStatus?.name || '',
-          qualificationDate: d.qualificationDate || d.certificateStatus?.date || '',
-          nextJapaneseTestDate: d.nextJapaneseTestDate || '',
-          nextJapaneseTestLevel: d.nextJapaneseTestLevel || '',
-          whyJapan: d.whyJapan || '',
-          whyInterestJapan: d.whyInterestJapan || ''
-        };
-        logger.info('書類取得成功（仮登録フォールバック）', { userId }, undefined, 'api_success');
-        return res.json({ success: true, data: combined, createdAt: null, updatedAt: null });
-      }
-    } catch (fbErr) {
-      logger.warn('仮登録フォールバック取得エラー', { userId, error: (fbErr as any).message }, undefined, 'db_error');
-    }
-
     logger.warn('書類取得API: 書類が見つかりません', { userId, documentType }, undefined, 'api_failure');
     return res.status(404).json({
       success: false,
       message: '書類が見つかりません'
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('書類読み込みエラー:', error);
     logger.error('書類取得APIエラー', { error: error.message }, undefined, 'api_error');
     res.status(500).json({

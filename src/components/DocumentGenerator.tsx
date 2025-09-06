@@ -425,7 +425,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
         const qualificationDate = certificateStatus?.date || '';
         
         return {
-          ...prevData,
+        ...prevData,
           // 基本情報をprefillDataから設定
           firstName: prefillData.firstName || prefillData.resume?.basicInfo?.firstName || prevData.firstName,
           lastName: prefillData.lastName || prefillData.resume?.basicInfo?.lastName || prevData.lastName,
@@ -609,13 +609,13 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
             spouseSupport: savedDocumentData.spouseSupport || savedDocumentData.additionalInfo?.spouseSupport || jobSeekerData.spouse_support || '',
             
             // 日本語関連情報
-                    certificateStatus: savedDocumentData.certificateStatus || savedDocumentData.japaneseInfo?.certificateStatus || { date: '', name: '' },
+            certificateStatus: savedDocumentData.certificateStatus || savedDocumentData.japaneseInfo?.certificateStatus || { date: '', name: '' },
         japaneseLevel: savedDocumentData.japaneseLevel || savedDocumentData.japaneseInfo?.japaneseLevel || '',
         qualificationDate: savedDocumentData.qualificationDate || savedDocumentData.japaneseInfo?.qualificationDate || '',
-        nextJapaneseTestDate: savedDocumentData.nextJapaneseTestDate || savedDocumentData.japaneseInfo?.nextJapaneseTestDate || '',
-        nextJapaneseTestLevel: savedDocumentData.nextJapaneseTestLevel || savedDocumentData.japaneseInfo?.nextJapaneseTestLevel || '',
-        whyJapan: savedDocumentData.whyJapan || savedDocumentData.japaneseInfo?.whyJapan || '',
-        whyInterestJapan: savedDocumentData.whyInterestJapan || savedDocumentData.japaneseInfo?.whyInterestJapan || ''
+            nextJapaneseTestDate: savedDocumentData.nextJapaneseTestDate || savedDocumentData.japaneseInfo?.nextJapaneseTestDate || '',
+            nextJapaneseTestLevel: savedDocumentData.nextJapaneseTestLevel || savedDocumentData.japaneseInfo?.nextJapaneseTestLevel || '',
+            whyJapan: savedDocumentData.whyJapan || savedDocumentData.japaneseInfo?.whyJapan || '',
+            whyInterestJapan: savedDocumentData.whyInterestJapan || savedDocumentData.japaneseInfo?.whyInterestJapan || ''
           } : {
             // 基本情報
             lastName: lastName,

@@ -633,25 +633,13 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       let gender = row.gender; // 基本の性別
       
       try {
-        // まずresumeタイプをupdated_at降順で取得、なければ全タイプから最新updated_atを取得
-        const resumeFirst = await query(`
+        const docResult = await query(`
           SELECT document_data
-          FROM user_documents
-          WHERE user_id = $1 AND document_type = 'resume'
-          ORDER BY updated_at DESC
+          FROM user_documents 
+          WHERE user_id = $1 
+          ORDER BY created_at DESC 
           LIMIT 1
         `, [row.user_id]);
-
-        let docResult = resumeFirst;
-        if (resumeFirst.rows.length === 0) {
-          docResult = await query(`
-            SELECT document_data
-            FROM user_documents
-            WHERE user_id = $1
-            ORDER BY updated_at DESC
-            LIMIT 1
-          `, [row.user_id]);
-        }
         
         if (docResult.rows.length > 0) {
           const documentData = docResult.rows[0].document_data;
@@ -880,24 +868,13 @@ app.get('/api/jobseekers/:id', async (req, res) => {
     // user_documentsから写真データを取得
     let photoUrl = null;
     try {
-      const resumeFirst = await query(`
+      const docResult = await query(`
         SELECT document_data
-        FROM user_documents
-        WHERE user_id = $1 AND document_type = 'resume'
-        ORDER BY updated_at DESC
+        FROM user_documents 
+        WHERE user_id = $1 
+        ORDER BY created_at DESC 
         LIMIT 1
       `, [jobSeeker.user_id]);
-
-      let docResult = resumeFirst;
-      if (resumeFirst.rows.length === 0) {
-        docResult = await query(`
-          SELECT document_data
-          FROM user_documents 
-          WHERE user_id = $1 
-          ORDER BY updated_at DESC 
-          LIMIT 1
-        `, [jobSeeker.user_id]);
-      }
       
       if (docResult.rows.length > 0) {
         const documentData = docResult.rows[0].document_data;
@@ -1088,69 +1065,26 @@ app.put('/api/jobseekers/profile', async (req, res) => {
 // --- 求職者情報更新API ---
 app.put('/api/jobseekers/:id', async (req, res) => {
   try {
-    const { id } = req.params; // users.id (UUID/数値)
+    const { id } = req.params;
     const updateData = req.body;
-
-    // 入力を正規化
-    const normalizeGender = (g: any) => {
-      if (!g) return undefined;
-      if (g === '男性' || g === 'male') return 'male';
-      if (g === '女性' || g === 'female') return 'female';
-      return 'other';
-    };
-
-    // firstName/lastName → full_name
-    let full_name = updateData.full_name;
-    if (!full_name && (updateData.firstName || updateData.lastName)) {
-      full_name = `${updateData.lastName || ''} ${updateData.firstName || ''}`.trim();
+    // 年齢も受け取る
+    const { full_name, date_of_birth, gender, address, phone, email, self_introduction, age } = updateData;
+    // jobSeekersRepository.updateにageも渡す
+    const { jobSeekersRepository } = await import('../integrations/postgres/jobSeekers.js');
+    const updated = await jobSeekersRepository.update(id, {
+      full_name,
+      date_of_birth,
+      gender,
+      address,
+      phone,
+      email,
+      self_introduction,
+      age // 追加
+    });
+    if (!updated) {
+      return res.status(404).json({ success: false, message: '求職者が見つかりません' });
     }
-
-    const date_of_birth = updateData.dateOfBirth || updateData.date_of_birth;
-    const gender = normalizeGender(updateData.gender);
-    const address = updateData.address;
-    const phone = updateData.phone;
-    const email = updateData.email;
-    const self_introduction = updateData.selfIntroduction || updateData.self_introduction;
-    const age = updateData.age;
-
-    const { query } = await import('../integrations/postgres/client.js');
-
-    // 既存のjob_seekers行があるか確認
-    const existing = await query(`SELECT id FROM job_seekers WHERE user_id = $1`, [id]);
-    if (existing.rows.length === 0) {
-      // 存在しない場合は最小レコードを作成
-      await query(
-        `INSERT INTO job_seekers (user_id, full_name, created_at, updated_at)
-         VALUES ($1, $2, NOW(), NOW())`,
-        [id, full_name || '']
-      );
-    }
-
-    // 更新
-    const result = await query(`
-      UPDATE job_seekers SET
-        full_name = COALESCE($2, full_name),
-        date_of_birth = COALESCE($3, date_of_birth),
-        gender = COALESCE($4, gender),
-        address = COALESCE($5, address),
-        phone = COALESCE($6, phone),
-        self_introduction = COALESCE($7, self_introduction),
-        age = COALESCE($8, age),
-        updated_at = NOW()
-      WHERE user_id = $1
-      RETURNING *
-    `, [
-      id,
-      full_name ?? null,
-      date_of_birth ?? null,
-      gender ?? null,
-      address ?? null,
-      phone ?? null,
-      self_introduction ?? null,
-      age ?? null
-    ]);
-
-    return res.json({ success: true, data: result.rows[0] });
+    res.json({ success: true, data: updated });
   } catch (error) {
     console.error('/api/jobseekers/:id 更新エラー:', error);
     res.status(500).json({ success: false, message: '求職者情報の更新に失敗しました' });
