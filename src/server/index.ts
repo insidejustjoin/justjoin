@@ -1068,7 +1068,7 @@ app.get('/api/jobseekers/documents/:userId', async (req, res) => {
 // 求職者プロフィール更新API（設定ページ用）
 app.put('/api/jobseekers/profile', async (req, res) => {
   try {
-    const { userId, full_name, phone, self_introduction } = req.body;
+    const { userId, full_name, phone, self_introduction, address = null, desired_job_title = null, experience_years = 0 } = req.body;
     
     if (!userId) {
       return res.status(400).json({
