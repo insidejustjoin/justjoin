@@ -429,38 +429,111 @@ app.put('/api/jobseekers/profile', async (req, res) => {
 app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log('完成度取得API呼び出し - userId:', userId);
-    
-    if (!userId) {
-      console.log('userIdが未指定');
-      return res.status(400).json({ error: 'userIdが必要です' });
-    }
-    
     const { query } = await import('../integrations/postgres/client.js');
-    console.log('データベースクエリ実行中...');
-    const result = await query(
-      'SELECT completion_rate FROM job_seekers WHERE user_id = $1',
+
+    // 最新の書類データを優先的に使用して再計算（無い場合のみDBの値）
+    const docResult = await query(
+      `SELECT document_data FROM user_documents 
+         WHERE user_id = $1 
+           AND document_type IN ('jobseeker_documents','resume')
+         ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+         LIMIT 1`,
       [userId]
     );
-    console.log('クエリ結果:', result.rows);
-    
-    if (result.rows.length > 0) {
-      const completionRate = result.rows[0].completion_rate || 0;
-      console.log('完成度を返却:', completionRate);
-      res.json({ 
-        success: true, 
-        completionRate: completionRate
-      });
-    } else {
-      console.log('ユーザーが見つからない、デフォルト値0を返却');
-      res.json({ 
-        success: true, 
-        completionRate: 0 
-      });
+
+    if (docResult.rows.length === 0) {
+      // 書類が無ければDBの値を返す
+      const jsResult = await query(
+        `SELECT completion_rate FROM job_seekers WHERE user_id = $1`,
+        [userId]
+      );
+      const dbRate = jsResult.rows.length > 0 && jsResult.rows[0].completion_rate !== null ? Number(jsResult.rows[0].completion_rate) : 0;
+      return res.json({ success: true, completionRate: dbRate });
     }
-  } catch (error) {
-    console.error('入力率取得エラー:', error);
-    res.status(500).json({ error: '入力率の取得に失敗しました' });
+
+    const documentData = docResult.rows[0].document_data || {};
+
+    // フロントと同一ロジック
+    const calculateCompletionRate = (data: any): number => {
+      let score = 0;
+      let maxScore = 0;
+      const addField = (value: any) => {
+        maxScore += 1;
+        if (typeof value === 'string') {
+          if (value.trim() !== '') score += 1;
+        } else if (typeof value === 'boolean') {
+          if (value) score += 1;
+        } else if (Array.isArray(value)) {
+          if (value.length > 0) score += 1;
+        } else if (value !== null && value !== undefined) {
+          score += 1;
+        }
+      };
+
+      addField(data.lastName);
+      addField(data.firstName);
+      addField(data.kanaLastName);
+      addField(data.kanaFirstName);
+      addField(data.birthDate);
+      addField(data.gender);
+      addField(data.nationality);
+
+      addField(data.livePostNumber);
+      addField(data.liveAddress);
+      addField(data.kanaLiveAddress);
+      addField(data.livePhoneNumber);
+      addField(data.liveMail);
+
+      addField(data.contactSameAsLive ? true : data.contactPostNumber);
+      addField(data.contactSameAsLive ? true : data.contactAddress);
+      addField(data.contactSameAsLive ? true : data.kanaContactAddress);
+      addField(data.contactSameAsLive ? true : data.contactPhoneNumber);
+      addField(data.contactSameAsLive ? true : data.contactMail);
+
+      addField(data.resume?.photoUrl);
+      addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
+      addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
+      addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume.qualifications.length > 0));
+
+      addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
+
+      const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
+      const skillsMaxWeight = 3;
+      if (skills.length > 0) {
+        const completed = skills.filter((s: any) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
+        maxScore += skillsMaxWeight;
+        score += skillsMaxWeight * (completed / skills.length);
+      }
+
+      const japaneseLevel = data.japaneseLevel || (data.certificateStatus?.name && data.certificateStatus.name !== 'なし' ? data.certificateStatus.name : '');
+      const qualificationDate = data.qualificationDate || data.certificateStatus?.date || '';
+      addField(japaneseLevel);
+      addField(qualificationDate);
+
+      addField(data.selfIntroduction);
+      addField(data.spouse);
+      addField(data.spouseSupport);
+
+      const baseRate = maxScore > 0 ? (score / maxScore) * 100 : 0;
+      let bonus = 0;
+      if (data.whyJapan && data.whyJapan.length >= 300) bonus += 2;
+      if (data.whyInterestJapan && data.whyInterestJapan.length >= 300) bonus += 2;
+      const finalRate = Math.min(100, Math.round(baseRate + bonus));
+      return finalRate;
+    };
+
+    const rate = calculateCompletionRate(documentData);
+
+    // DBにも反映（補正）
+    await query(
+      `UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2`,
+      [rate, userId]
+    );
+
+    return res.json({ success: true, completionRate: rate });
+  } catch (error: any) {
+    console.error('completion-rate取得エラー:', error?.message || error);
+    res.status(500).json({ success: false, message: '入力率取得に失敗しました' });
   }
 });
 
