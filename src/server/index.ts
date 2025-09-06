@@ -1222,7 +1222,53 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
         console.log('user_status_historyテーブルは存在しないか、データがありません:', error.message);
         deletedRecords.userStatusHistory = 0;
       }
-      
+
+      // 5.1 通知関連の削除
+      try {
+        const notificationsResult = await query('DELETE FROM notifications WHERE user_id = $1', [userId]);
+        deletedRecords.notifications = notificationsResult.rowCount;
+        console.log(`notifications削除: ${notificationsResult.rowCount}件`);
+      } catch (error) {
+        console.log('notificationsテーブルは存在しないか、データがありません:', error.message);
+        deletedRecords.notifications = 0;
+      }
+      try {
+        const spotResult = await query('DELETE FROM spot_notification_history WHERE user_id = $1', [userId]);
+        deletedRecords.spotNotifications = spotResult.rowCount;
+        console.log(`spot_notification_history削除: ${spotResult.rowCount}件`);
+      } catch (error) {
+        console.log('spot_notification_historyテーブルは存在しないか、データがありません:', error.message);
+        deletedRecords.spotNotifications = 0;
+      }
+      try {
+        const workflowResult = await query('DELETE FROM workflow_notification_history WHERE user_id = $1', [userId]);
+        deletedRecords.workflowNotifications = workflowResult.rowCount;
+        console.log(`workflow_notification_history削除: ${workflowResult.rowCount}件`);
+      } catch (error) {
+        console.log('workflow_notification_historyテーブルは存在しないか、データがありません:', error.message);
+        deletedRecords.workflowNotifications = 0;
+      }
+
+      // 5.2 面接関連の削除（存在すれば）
+      try {
+        // applicantをメールで特定
+        const applicants = await query(`SELECT id FROM interview_applicants WHERE email = $1`, [fullName]);
+        if (applicants.rows.length > 0) {
+          const applicantId = applicants.rows[0].id;
+          try { await query(`DELETE FROM interview_summaries WHERE applicant_id = $1`, [applicantId]); } catch {}
+          try { await query(`DELETE FROM interview_answers WHERE applicant_id = $1`, [applicantId]); } catch {}
+          try { await query(`DELETE FROM interview_sessions WHERE applicant_id = $1`, [applicantId]); } catch {}
+          try { await query(`DELETE FROM interview_applicants WHERE id = $1`, [applicantId]); } catch {}
+          deletedRecords.interviewApplicant = 1;
+          console.log(`interview_* 関連削除: applicant_id=${applicantId}`);
+        } else {
+          deletedRecords.interviewApplicant = 0;
+        }
+      } catch (error) {
+        console.log('面接関連テーブルは存在しないか、データがありません:', (error as any)?.message || error);
+        deletedRecords.interviewApplicant = 0;
+      }
+
       // 6. user_documentsテーブルから削除
       const documentsResult = await query('DELETE FROM user_documents WHERE user_id = $1', [userId]);
       deletedRecords.documents = documentsResult.rowCount;
