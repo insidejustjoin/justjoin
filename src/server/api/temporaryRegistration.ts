@@ -268,7 +268,7 @@ router.post('/update-documents/:token', async (req, res) => {
     // 仮登録データの存在確認
     const tempReg = await query(
       `SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status IN ($2, $3)`,
+       WHERE verification_token = $1 AND status IN ($2, $3)`,
       [token, 'pending', 'documents_completed']
     );
 
@@ -350,7 +350,7 @@ router.post('/complete/:token', async (req, res) => {
     // 仮登録データ取得
     const tempReg = await query(
       `SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status = $2`,
+       WHERE verification_token = $1 AND status = $2`,
       [token, 'documents_completed']
     );
 
@@ -424,7 +424,14 @@ router.post('/complete/:token', async (req, res) => {
     // 仮登録で入力された書類データをuser_documentsテーブルに移行
     if (registration.documents_data) {
       try {
-        const documentsData = JSON.parse(registration.documents_data);
+        let documentsData: any;
+        try {
+          documentsData = typeof registration.documents_data === 'string'
+            ? JSON.parse(registration.documents_data)
+            : registration.documents_data;
+        } catch (e) {
+          documentsData = registration.documents_data;
+        }
         
         // 基本情報をuser_documentsに保存
         if (documentsData.resume?.basicInfo) {
