@@ -400,12 +400,25 @@ router.post('/complete/:token', async (req, res) => {
     }
 
     // 求職者詳細情報作成
-    await query(
-      `INSERT INTO job_seekers (user_id, first_name, last_name, created_at, updated_at, interview_enabled) 
-       VALUES ($1, $2, $3, NOW(), NOW(), FALSE)
-       ON CONFLICT (user_id) DO UPDATE SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, updated_at = NOW(), interview_enabled = FALSE`,
-      [userId, registration.first_name, registration.last_name]
+    const existingJobSeeker = await query(
+      `SELECT id FROM job_seekers WHERE user_id = $1`,
+      [userId]
     );
+
+    if (existingJobSeeker.rows.length > 0) {
+      await query(
+        `UPDATE job_seekers 
+         SET first_name = $1, last_name = $2, interview_enabled = FALSE, updated_at = NOW() 
+         WHERE user_id = $3`,
+        [registration.first_name, registration.last_name, userId]
+      );
+    } else {
+      await query(
+        `INSERT INTO job_seekers (user_id, first_name, last_name, interview_enabled, created_at, updated_at) 
+         VALUES ($1, $2, $3, FALSE, NOW(), NOW())`,
+        [userId, registration.first_name, registration.last_name]
+      );
+    }
 
     // 面接を明示的に無効化
     await query(
