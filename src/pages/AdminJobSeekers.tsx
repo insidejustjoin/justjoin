@@ -1560,227 +1560,226 @@ export function AdminJobSeekers() {
 
         {/* 求職者管理タブ */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList>
             <TabsTrigger value="active">求職者一覧</TabsTrigger>
             <TabsTrigger value="employed">就職済み一覧</TabsTrigger>
             <TabsTrigger value="withdrawn">退会済み一覧</TabsTrigger>
+            <TabsTrigger value="temporary">仮登録</TabsTrigger>
           </TabsList>
-
-          {/* 求職者一覧タブ */}
+          
+          {/* 既存のタブ */}
           <TabsContent value="active" className="space-y-4">
-          {loading ? (
-            <div className="flex justify-center items-center py-8">
-              <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-              <span className="ml-2 text-gray-600">データを読み込み中...</span>
-            </div>
-          ) : error ? (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : filteredJobSeekers.length === 0 ? (
-            <Alert>
-              <Users className="h-4 w-4" />
-              <AlertDescription>
-                条件に一致する求職者が見つかりませんでした。
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-4">
-              {/* 一括選択ヘッダー */}
-              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSelectAll}
-                  className="flex items-center gap-2"
-                >
-                  {isSelectAll ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                  {isSelectAll ? '全選択解除' : '全選択'}
-                </Button>
-                <span className="text-sm text-gray-600">
-                  {selectedJobSeekers.length} / {filteredJobSeekers.length} 選択中
-                </span>
+            {loading ? (
+              <div className="flex justify-center items-center py-8">
+                <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+                <span className="ml-2 text-gray-600">データを読み込み中...</span>
               </div>
+            ) : error ? (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : filteredJobSeekers.length === 0 ? (
+              <Alert>
+                <Users className="h-4 w-4" />
+                <AlertDescription>
+                  条件に一致する求職者が見つかりませんでした。
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                {/* 一括選択ヘッダー */}
+                <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSelectAll}
+                    className="flex items-center gap-2"
+                  >
+                    {isSelectAll ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    {isSelectAll ? '全選択解除' : '全選択'}
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    {selectedJobSeekers.length} / {filteredJobSeekers.length} 選択中
+                  </span>
+                </div>
 
-              {/* 求職者カード */}
-              {filteredJobSeekers.map((jobSeeker) => (
-                <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4 flex-1">
-                        {/* 選択チェックボックス */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleSelectJobSeeker(jobSeeker)}
-                          className={`flex items-center gap-2 ${
-                            isJobSeekerSelected(jobSeeker) 
-                              ? 'bg-blue-100 border-blue-300' 
-                              : 'bg-white'
-                          }`}
-                        >
-                          {isJobSeekerSelected(jobSeeker) ? (
-                            <CheckSquare className="h-4 w-4 text-blue-600" />
-                          ) : (
-                            <Square className="h-4 w-4" />
-                          )}
-                        </Button>
+                {/* 求職者カード */}
+                {filteredJobSeekers.map((jobSeeker) => (
+                  <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-4 flex-1">
+                          {/* 選択チェックボックス */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSelectJobSeeker(jobSeeker)}
+                            className={`flex items-center gap-2 ${
+                              isJobSeekerSelected(jobSeeker) 
+                                ? 'bg-blue-100 border-blue-300' 
+                                : 'bg-white'
+                            }`}
+                          >
+                            {isJobSeekerSelected(jobSeeker) ? (
+                              <CheckSquare className="h-4 w-4 text-blue-600" />
+                            ) : (
+                              <Square className="h-4 w-4" />
+                            )}
+                          </Button>
 
-                        {/* 顔写真 */}
-                        <div className="flex-shrink-0">
-                          {jobSeeker.profile_photo ? (
-                            <div className="w-[76px] h-[102px]">
-                              <img
-                                src={jobSeeker.profile_photo}
-                                alt={`${jobSeeker.full_name}の写真`}
-                                className="w-full h-full object-cover rounded-lg border"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-[76px] h-[102px] bg-gray-200 rounded-lg border flex items-center justify-center">
-                              <span className="text-gray-500 text-xs">写真なし</span>
-                            </div>
-                          )}
-                        </div>
+                          {/* 顔写真 */}
+                          <div className="flex-shrink-0">
+                            {jobSeeker.profile_photo ? (
+                              <div className="w-[76px] h-[102px]">
+                                <img
+                                  src={jobSeeker.profile_photo}
+                                  alt={`${jobSeeker.full_name}の写真`}
+                                  className="w-full h-full object-cover rounded-lg border"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-[76px] h-[102px] bg-gray-200 rounded-lg border flex items-center justify-center">
+                                <span className="text-gray-500 text-xs">写真なし</span>
+                              </div>
+                            )}
+                          </div>
 
-                        {/* 求職者情報 */}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-4 mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {jobSeeker.full_name || '名前未設定'}
-                            </h3>
-                            <Badge variant="secondary">
-                              {getDisplayAge(jobSeeker) ? `${getDisplayAge(jobSeeker)}歳` : '年齢未設定'}
-                            </Badge>
-                            <Badge variant="outline">
-                              {getGenderLabel(jobSeeker.gender || '')}
-                            </Badge>
-                            {jobSeeker.nationality && (
+                          {/* 求職者情報 */}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-4 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {jobSeeker.full_name || '名前未設定'}
+                              </h3>
+                              <Badge variant="secondary">
+                                {getDisplayAge(jobSeeker) ? `${getDisplayAge(jobSeeker)}歳` : '年齢未設定'}
+                              </Badge>
                               <Badge variant="outline">
-                                {jobSeeker.nationality}
+                                {getGenderLabel(jobSeeker.gender || '')}
                               </Badge>
-                            )}
-                            {/* 面接表示状態バッジ */}
-                            <Badge 
-                              variant={jobSeeker.interviewEnabled ? "default" : "secondary"}
-                              className={jobSeeker.interviewEnabled ? "bg-green-500" : "bg-gray-400"}
-                            >
-                              {jobSeeker.interviewEnabled ? "面接有効" : "面接無効"}
-                            </Badge>
-                            
-                            {/* 面接状態バッジ */}
-                            <Badge 
-                              variant="outline"
-                              className={`${getInterviewStatusDisplay(jobSeeker.user_id).color}`}
-                            >
-                              {getInterviewStatusDisplay(jobSeeker.user_id).text}
-                            </Badge>
-                            
-                            {/* 面接受験回数バッジ */}
-                            {jobSeeker.interview_attempts && jobSeeker.interview_attempts.count > 0 && (
-                              <Badge variant="outline" className="bg-blue-100 text-blue-700">
-                                面接{jobSeeker.interview_attempts.count}回
-                              </Badge>
-                            )}
-                            
-                            {/* 面接再有効化ボタン（面接完了時のみ表示） */}
-                            {getInterviewStatusDisplay(jobSeeker.user_id).text === '受験完了' && (
-                              <Button
-                                onClick={() => resetInterview(jobSeeker)}
-                                size="sm"
-                                variant="outline"
-                                className="bg-yellow-100 hover:bg-yellow-200 border-yellow-300 text-yellow-800"
+                              {jobSeeker.nationality && (
+                                <Badge variant="outline">
+                                  {jobSeeker.nationality}
+                                </Badge>
+                              )}
+                              {/* 面接表示状態バッジ */}
+                              <Badge 
+                                variant={jobSeeker.interviewEnabled ? "default" : "secondary"}
+                                className={jobSeeker.interviewEnabled ? "bg-green-500" : "bg-gray-400"}
                               >
-                                <RefreshCw className="h-3 w-3 mr-1" />
-                                再有効化
-                              </Button>
-                            )}
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                            <div>
-                              <p><strong>生年月日:</strong> {jobSeeker.date_of_birth ? new Date(jobSeeker.date_of_birth).toLocaleDateString('ja-JP') : '未設定'}</p>
-                              <p><strong>国籍:</strong> {jobSeeker.nationality || '未設定'}</p>
-                              <p><strong>日本語資格:</strong> {jobSeeker.certificateStatus?.name || '未設定'}</p>
-                              <p><strong>メール:</strong> {jobSeeker.email || jobSeeker.user_email || '未設定'}</p>
+                                {jobSeeker.interviewEnabled ? "面接有効" : "面接無効"}
+                              </Badge>
+                              
+                              {/* 面接状態バッジ */}
+                              <Badge 
+                                variant="outline"
+                                className={`${getInterviewStatusDisplay(jobSeeker.user_id).color}`}
+                              >
+                                {getInterviewStatusDisplay(jobSeeker.user_id).text}
+                              </Badge>
+                              
+                              {/* 面接受験回数バッジ */}
+                              {jobSeeker.interview_attempts && jobSeeker.interview_attempts.count > 0 && (
+                                <Badge variant="outline" className="bg-blue-100 text-blue-700">
+                                  面接{jobSeeker.interview_attempts.count}回
+                                </Badge>
+                              )}
+                              
+                              {/* 面接再有効化ボタン（面接完了時のみ表示） */}
+                              {getInterviewStatusDisplay(jobSeeker.user_id).text === '受験完了' && (
+                                <Button
+                                  onClick={() => resetInterview(jobSeeker)}
+                                  size="sm"
+                                  variant="outline"
+                                  className="bg-yellow-100 hover:bg-yellow-200 border-yellow-300 text-yellow-800"
+                                >
+                                  <RefreshCw className="h-3 w-3 mr-1" />
+                                  再有効化
+                                </Button>
+                              )}
                             </div>
-                            <div>
-                              <p><strong>電話:</strong> {jobSeeker.phone || '未設定'}</p>
-                              <p><strong>登録日:</strong> {new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</p>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                              <div>
+                                <p><strong>生年月日:</strong> {jobSeeker.date_of_birth ? new Date(jobSeeker.date_of_birth).toLocaleDateString('ja-JP') : '未設定'}</p>
+                                <p><strong>国籍:</strong> {jobSeeker.nationality || '未設定'}</p>
+                                <p><strong>日本語資格:</strong> {jobSeeker.certificateStatus?.name || '未設定'}</p>
+                                <p><strong>メール:</strong> {jobSeeker.email || jobSeeker.user_email || '未設定'}</p>
+                              </div>
+                              <div>
+                                <p><strong>電話:</strong> {jobSeeker.phone || '未設定'}</p>
+                                <p><strong>登録日:</strong> {new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</p>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* アクションボタン */}
-                      <div className="flex flex-col gap-2 ml-4">
-                        <Button
-                          onClick={() => openDetailModal(jobSeeker)}
-                          size="sm"
-                          variant="outline"
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          詳細表示
-                        </Button>
-                        <Button
-                          onClick={() => openDocumentGenerator(jobSeeker)}
-                          size="sm"
-                          variant="outline"
-                        >
-                          <FileText className="h-4 w-4 mr-2" />
-                          書類作成
-                        </Button>
-                        {/* 面接再有効化ボタン */}
-                        <Button
-                          onClick={() => resetInterview(jobSeeker)}
-                          size="sm"
-                          variant="outline"
-                          className="bg-yellow-100 hover:bg-yellow-200 border-yellow-300"
-                        >
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          面接再有効化
-                        </Button>
-                        <Button
-                          onClick={() => openStatusModal(jobSeeker)}
-                          size="sm"
-                          variant="outline"
-                          className="bg-green-100 hover:bg-green-200 border-green-300"
-                        >
-                          <Building2 className="h-4 w-4 mr-2" />
-                          就職済み
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            console.log('削除ボタンクリック:', { 
-                              user_id: jobSeeker.user_id, 
-                              full_name: jobSeeker.full_name,
-                              user_idType: typeof jobSeeker.user_id,
-                              isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(jobSeeker.user_id))
-                            });
-                            deleteJobSeeker(jobSeeker.user_id, jobSeeker.full_name);
-                          }}
-                          size="sm"
-                          variant="destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          削除
-                        </Button>
+                        {/* アクションボタン */}
+                        <div className="flex flex-col gap-2 ml-4">
+                          <Button
+                            onClick={() => openDetailModal(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            詳細表示
+                          </Button>
+                          <Button
+                            onClick={() => openDocumentGenerator(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            書類作成
+                          </Button>
+                          {/* 面接再有効化ボタン */}
+                          <Button
+                            onClick={() => resetInterview(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                            className="bg-yellow-100 hover:bg-yellow-200 border-yellow-300"
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            面接再有効化
+                          </Button>
+                          <Button
+                            onClick={() => openStatusModal(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                            className="bg-green-100 hover:bg-green-200 border-green-300"
+                          >
+                            <Building2 className="h-4 w-4 mr-2" />
+                            就職済み
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              console.log('削除ボタンクリック:', { 
+                                user_id: jobSeeker.user_id, 
+                                full_name: jobSeeker.full_name,
+                                user_idType: typeof jobSeeker.user_id,
+                                isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(jobSeeker.user_id))
+                              });
+                              deleteJobSeeker(jobSeeker.user_id, jobSeeker.full_name);
+                            }}
+                            size="sm"
+                            variant="destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            削除
+                          </Button>
 
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
-
-          {/* 就職済み一覧タブ */}
           <TabsContent value="employed" className="space-y-4">
             {statusLoading ? (
               <div className="flex justify-center items-center py-8">
@@ -1839,8 +1838,6 @@ export function AdminJobSeekers() {
               </div>
             )}
           </TabsContent>
-
-          {/* 退会済み一覧タブ */}
           <TabsContent value="withdrawn" className="space-y-4">
             {statusLoading ? (
               <div className="flex justify-center items-center py-8">
@@ -1908,6 +1905,12 @@ export function AdminJobSeekers() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          {/* 仮登録タブ */}
+          <TabsContent value="temporary" className="space-y-4">
+            {/* 仮登録一覧取得＆削除ボタン */}
+            {/* 簡易実装: 初回マウントで一覧取得、テーブル表示、削除ボタン */}
           </TabsContent>
         </Tabs>
 

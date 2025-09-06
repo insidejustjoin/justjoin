@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../../integrations/postgres/client.js';
 import { emailService } from '../../services/emailService.js';
+import { authenticate } from '../authenticate.js';
 
 const router = express.Router();
 
@@ -655,6 +656,45 @@ router.post('/complete/:token', async (req, res) => {
       success: false, 
       message: '本登録完了中にエラーが発生しました。' 
     });
+  }
+});
+
+// 管理者: 仮登録一覧取得
+router.get('/admin/temporary', authenticate, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return res.status(403).json({ success: false, message: '管理者権限が必要です' });
+    }
+
+    const { query: q } = await import('../../integrations/postgres/client.js');
+    const result = await q(`
+      SELECT id, email, first_name, last_name, status, expires_at, created_at, updated_at
+      FROM temporary_registrations
+      ORDER BY created_at DESC
+      LIMIT 200
+    `);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('管理: 仮登録一覧取得エラー:', error);
+    res.status(500).json({ success: false, message: '仮登録一覧の取得に失敗しました' });
+  }
+});
+
+// 管理者: 仮登録削除
+router.delete('/admin/temporary/:id', authenticate, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return res.status(403).json({ success: false, message: '管理者権限が必要です' });
+    }
+
+    const { id } = req.params;
+    await query('DELETE FROM temporary_registrations WHERE id = $1', [id]);
+    res.json({ success: true, message: '仮登録を削除しました' });
+  } catch (error) {
+    console.error('管理: 仮登録削除エラー:', error);
+    res.status(500).json({ success: false, message: '仮登録の削除に失敗しました' });
   }
 });
 
