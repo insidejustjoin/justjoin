@@ -445,8 +445,8 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       // 書類が無ければDBの値を返す
       const jsResult = await query(
         `SELECT completion_rate FROM job_seekers WHERE user_id = $1`,
-        [userId]
-      );
+      [userId]
+    );
       const dbRate = jsResult.rows.length > 0 && jsResult.rows[0].completion_rate !== null ? Number(jsResult.rows[0].completion_rate) : 0;
       return res.json({ success: true, completionRate: dbRate });
     }
@@ -1490,39 +1490,49 @@ app.get('/api/admin/users', async (req, res) => {
 app.get('/api/documents/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    
     const { query } = await import('../integrations/postgres/client.js');
-    
+
+    // 複数document_typeをマージして返却
     const result = await query(`
-      SELECT 
-        document_data
-      FROM user_documents 
-      WHERE user_id = $1 
-      ORDER BY created_at DESC 
-      LIMIT 1
+      SELECT document_type, document_data, created_at
+      FROM user_documents
+      WHERE user_id = $1
+      ORDER BY created_at ASC
     `, [userId]);
-    
+
     if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'ドキュメントデータが見つかりません'
-      });
+      return res.status(404).json({ success: false, message: 'ドキュメントデータが見つかりません' });
     }
-    
-    const documentData = result.rows[0].document_data;
-    
-    console.log(`ドキュメントデータ取得: ユーザーID ${userId}`);
-    
-    res.json({
-      success: true,
-      data: documentData
-    });
+
+    const merged: any = {};
+    for (const row of result.rows) {
+      try {
+        const data = row.document_data || {};
+        // ベースを順次マージ（後勝ち）
+        Object.assign(merged, data);
+        // ネスト構造がある場合も上書き
+        if (data.resume) {
+          merged.resume = { ...(merged.resume || {}), ...data.resume };
+        }
+        if (data.workHistory) {
+          merged.workHistory = { ...(merged.workHistory || {}), ...data.workHistory };
+        }
+        if (data.skillSheet) {
+          merged.skillSheet = { ...(merged.skillSheet || {}), ...data.skillSheet };
+          if (data.skillSheet.skills) {
+            merged.skillSheet.skills = { ...(merged.skillSheet.skills || {}), ...data.skillSheet.skills };
+          }
+        }
+        if (data.certificateStatus) {
+          merged.certificateStatus = { ...(merged.certificateStatus || {}), ...data.certificateStatus };
+        }
+      } catch {}
+    }
+
+    res.json({ success: true, data: merged });
   } catch (error) {
-    console.error('ドキュメントデータ取得エラー:', error);
-    res.status(500).json({
-      success: false,
-      message: 'ドキュメントデータの取得に失敗しました'
-    });
+    console.error('書類データ取得エラー:', error);
+    res.status(500).json({ success: false, message: '書類データの取得に失敗しました' });
   }
 });
 
