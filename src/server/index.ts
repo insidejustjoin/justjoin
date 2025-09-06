@@ -633,13 +633,25 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       let gender = row.gender; // 基本の性別
       
       try {
-        const docResult = await query(`
+        // まずresumeタイプをupdated_at降順で取得、なければ全タイプから最新updated_atを取得
+        const resumeFirst = await query(`
           SELECT document_data
-          FROM user_documents 
-          WHERE user_id = $1 
-          ORDER BY created_at DESC 
+          FROM user_documents
+          WHERE user_id = $1 AND document_type = 'resume'
+          ORDER BY updated_at DESC
           LIMIT 1
         `, [row.user_id]);
+
+        let docResult = resumeFirst;
+        if (resumeFirst.rows.length === 0) {
+          docResult = await query(`
+            SELECT document_data
+            FROM user_documents
+            WHERE user_id = $1
+            ORDER BY updated_at DESC
+            LIMIT 1
+          `, [row.user_id]);
+        }
         
         if (docResult.rows.length > 0) {
           const documentData = docResult.rows[0].document_data;
@@ -868,13 +880,24 @@ app.get('/api/jobseekers/:id', async (req, res) => {
     // user_documentsから写真データを取得
     let photoUrl = null;
     try {
-      const docResult = await query(`
+      const resumeFirst = await query(`
         SELECT document_data
-        FROM user_documents 
-        WHERE user_id = $1 
-        ORDER BY created_at DESC 
+        FROM user_documents
+        WHERE user_id = $1 AND document_type = 'resume'
+        ORDER BY updated_at DESC
         LIMIT 1
       `, [jobSeeker.user_id]);
+
+      let docResult = resumeFirst;
+      if (resumeFirst.rows.length === 0) {
+        docResult = await query(`
+          SELECT document_data
+          FROM user_documents 
+          WHERE user_id = $1 
+          ORDER BY updated_at DESC 
+          LIMIT 1
+        `, [jobSeeker.user_id]);
+      }
       
       if (docResult.rows.length > 0) {
         const documentData = docResult.rows[0].document_data;
@@ -1102,9 +1125,9 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
     // 1. usersテーブルからユーザー情報を取得
     const userResult = await query('SELECT id, email FROM users WHERE id = $1', [id]);
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
-    }
-    
+        return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
+      }
+      
     const userId = userResult.rows[0].id;
     const fullName = userResult.rows[0].email;
     
