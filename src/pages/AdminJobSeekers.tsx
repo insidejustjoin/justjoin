@@ -1383,6 +1383,57 @@ export function AdminJobSeekers() {
     setFilterChange(prev => prev + 1);
   };
 
+  // 仮登録一覧用の状態
+  const [tempRegs, setTempRegs] = useState<Array<{id: string; email: string; first_name: string; last_name: string; status: string; expires_at: string; created_at: string;}>>([]);
+  const [loadingTemp, setLoadingTemp] = useState(false);
+
+  const fetchTemporaryRegistrations = async () => {
+    setLoadingTemp(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) throw new Error('認証トークンが見つかりません');
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      const res = await fetch(`${apiUrl}/api/register/admin/temporary`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTempRegs(data.data || []);
+      }
+    } catch (e) {
+      console.error('仮登録一覧取得エラー:', e);
+    } finally {
+      setLoadingTemp(false);
+    }
+  };
+
+  const deleteTemporaryRegistration = async (id: string) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) throw new Error('認証トークンが見つかりません');
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      const res = await fetch(`${apiUrl}/api/register/admin/temporary/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTempRegs(prev => prev.filter(r => r.id !== id));
+        toast({ title: '削除完了', description: '仮登録を削除しました' });
+      } else {
+        toast({ title: 'エラー', description: data.message || '削除に失敗しました', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'エラー', description: e.message || '削除に失敗しました', variant: 'destructive' });
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'temporary') {
+      fetchTemporaryRegistrations();
+    }
+  }, [activeTab]);
+
   return (
     <AdminPageLayout title="管理者ダッシュボード">
       <div className="space-y-6">
@@ -1909,8 +1960,48 @@ export function AdminJobSeekers() {
 
           {/* 仮登録タブ */}
           <TabsContent value="temporary" className="space-y-4">
-            {/* 仮登録一覧取得＆削除ボタン */}
-            {/* 簡易実装: 初回マウントで一覧取得、テーブル表示、削除ボタン */}
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">仮登録一覧</h2>
+              <Button variant="outline" size="sm" onClick={fetchTemporaryRegistrations} disabled={loadingTemp}>
+                再読み込み
+              </Button>
+            </div>
+            {loadingTemp ? (
+              <div className="text-sm text-muted-foreground">読み込み中...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b">
+                      <th className="py-2 px-2">氏名</th>
+                      <th className="py-2 px-2">メール</th>
+                      <th className="py-2 px-2">ステータス</th>
+                      <th className="py-2 px-2">期限</th>
+                      <th className="py-2 px-2">作成日時</th>
+                      <th className="py-2 px-2">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tempRegs.length === 0 ? (
+                      <tr><td className="py-4 px-2" colSpan={6}>データがありません</td></tr>
+                    ) : tempRegs.map(r => (
+                      <tr key={r.id} className="border-b">
+                        <td className="py-2 px-2">{r.last_name} {r.first_name}</td>
+                        <td className="py-2 px-2">{r.email}</td>
+                        <td className="py-2 px-2">{r.status}</td>
+                        <td className="py-2 px-2">{r.expires_at ? new Date(r.expires_at).toLocaleString('ja-JP') : '-'}</td>
+                        <td className="py-2 px-2">{r.created_at ? new Date(r.created_at).toLocaleString('ja-JP') : '-'}</td>
+                        <td className="py-2 px-2">
+                          <Button variant="destructive" size="sm" onClick={() => deleteTemporaryRegistration(r.id)}>
+                            削除
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
 
