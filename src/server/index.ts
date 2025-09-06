@@ -431,29 +431,73 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
     const { userId } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
 
-    // 最新の書類データを優先的に使用して再計算（無い場合のみDBの値）
-    const docResult = await query(
-      `SELECT document_data FROM user_documents 
-         WHERE user_id = $1 
-           AND document_type IN ('jobseeker_documents','resume')
-         ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-         LIMIT 1`,
-      [userId]
-    );
+    // すべての書類データを取得し統合
+    const rows = await query(`
+      SELECT document_type, document_data, created_at
+      FROM user_documents
+      WHERE user_id = $1
+      ORDER BY created_at ASC
+    `, [userId]);
 
-    if (docResult.rows.length === 0) {
+    if (rows.rows.length === 0) {
       // 書類が無ければDBの値を返す
       const jsResult = await query(
         `SELECT completion_rate FROM job_seekers WHERE user_id = $1`,
-      [userId]
-    );
+        [userId]
+      );
       const dbRate = jsResult.rows.length > 0 && jsResult.rows[0].completion_rate !== null ? Number(jsResult.rows[0].completion_rate) : 0;
       return res.json({ success: true, completionRate: dbRate });
     }
 
-    const documentData = docResult.rows[0].document_data || {};
+    const merged: any = {};
+    const liftBasic = (d: any) => {
+      const b = d?.resume?.basicInfo;
+      if (!b) return;
+      merged.lastName = merged.lastName || b.lastName;
+      merged.firstName = merged.firstName || b.firstName;
+      merged.kanaLastName = merged.kanaLastName || b.kanaLastName;
+      merged.kanaFirstName = merged.kanaFirstName || b.kanaFirstName;
+      merged.birthDate = merged.birthDate || b.dateOfBirth;
+      merged.gender = merged.gender || b.gender;
+      merged.nationality = merged.nationality || b.nationality;
+      merged.liveAddress = merged.liveAddress || b.address;
+      merged.livePhoneNumber = merged.livePhoneNumber || b.phone;
+      merged.liveMail = merged.liveMail || b.email;
+    };
 
-    // フロントと同一ロジック
+    for (const r of rows.rows) {
+      const data = r.document_data || {};
+      Object.assign(merged, data);
+      liftBasic(data);
+      if (r.document_type === 'basic_info') {
+        // basic_infoをトップに昇格（フィールド名はDocumentGeneratorの型に合わせる）
+        const b = data;
+        merged.lastName = merged.lastName || b.lastName;
+        merged.firstName = merged.firstName || b.firstName;
+        merged.kanaLastName = merged.kanaLastName || b.kanaLastName;
+        merged.kanaFirstName = merged.kanaFirstName || b.kanaFirstName;
+        merged.birthDate = merged.birthDate || b.dateOfBirth;
+        merged.gender = merged.gender || b.gender;
+        merged.nationality = merged.nationality || b.nationality;
+        merged.liveAddress = merged.liveAddress || b.address;
+        merged.livePhoneNumber = merged.livePhoneNumber || b.phone;
+        merged.liveMail = merged.liveMail || b.email;
+      }
+      if (data.skillSheet) {
+        merged.skillSheet = { ...(merged.skillSheet || {}), ...data.skillSheet };
+        if (data.skillSheet.skills) {
+          merged.skillSheet.skills = { ...(merged.skillSheet.skills || {}), ...data.skillSheet.skills };
+        }
+      }
+      if (data.workHistory) {
+        merged.workHistory = { ...(merged.workHistory || {}), ...data.workHistory };
+      }
+      if (data.certificateStatus) {
+        merged.certificateStatus = { ...(merged.certificateStatus || {}), ...data.certificateStatus };
+      }
+    }
+
+    // 入力率計算（フロント新仕様と同一）
     const calculateCompletionRate = (data: any): number => {
       let score = 0;
       let maxScore = 0;
@@ -470,6 +514,7 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
         }
       };
 
+      // 基本情報
       addField(data.lastName);
       addField(data.firstName);
       addField(data.kanaLastName);
@@ -478,38 +523,35 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       addField(data.gender);
       addField(data.nationality);
 
-      addField(data.livePostNumber);
+      // 連絡先など
       addField(data.liveAddress);
-      addField(data.kanaLiveAddress);
       addField(data.livePhoneNumber);
       addField(data.liveMail);
 
-      addField(data.contactSameAsLive ? true : data.contactPostNumber);
-      addField(data.contactSameAsLive ? true : data.contactAddress);
-      addField(data.contactSameAsLive ? true : data.kanaContactAddress);
-      addField(data.contactSameAsLive ? true : data.contactPhoneNumber);
-      addField(data.contactSameAsLive ? true : data.contactMail);
-
+      // 履歴書
       addField(data.resume?.photoUrl);
       addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
       addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
-      addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume.qualifications.length > 0));
 
+      // 職務経歴
       addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
 
+      // スキル（最大3%）
       const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
       const skillsMaxWeight = 3;
       if (skills.length > 0) {
-        const completed = skills.filter((s: any) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
+        const completed = (skills as any[]).filter((s: any) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
         maxScore += skillsMaxWeight;
-        score += skillsMaxWeight * (completed / skills.length);
+        score += skillsMaxWeight * (completed / (skills as any[]).length);
       }
 
+      // 日本語
       const japaneseLevel = data.japaneseLevel || (data.certificateStatus?.name && data.certificateStatus.name !== 'なし' ? data.certificateStatus.name : '');
       const qualificationDate = data.qualificationDate || data.certificateStatus?.date || '';
       addField(japaneseLevel);
       addField(qualificationDate);
 
+      // 任意（配偶者など）
       addField(data.selfIntroduction);
       addField(data.spouse);
       addField(data.spouseSupport);
@@ -518,22 +560,15 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       let bonus = 0;
       if (data.whyJapan && data.whyJapan.length >= 300) bonus += 2;
       if (data.whyInterestJapan && data.whyInterestJapan.length >= 300) bonus += 2;
-      const finalRate = Math.min(100, Math.round(baseRate + bonus));
-      return finalRate;
+      const final = Math.min(100, Math.round(baseRate + bonus));
+      return final;
     };
 
-    const rate = calculateCompletionRate(documentData);
-
-    // DBにも反映（補正）
-    await query(
-      `UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2`,
-      [rate, userId]
-    );
-
-    return res.json({ success: true, completionRate: rate });
-  } catch (error: any) {
-    console.error('completion-rate取得エラー:', error?.message || error);
-    res.status(500).json({ success: false, message: '入力率取得に失敗しました' });
+    const completionRate = calculateCompletionRate(merged);
+    return res.json({ success: true, completionRate });
+  } catch (error) {
+    console.error('/api/jobseekers/completion-rate エラー:', error);
+    res.status(500).json({ success: false, message: '完成度の取得に失敗しました' });
   }
 });
 
@@ -1081,59 +1116,36 @@ app.get('/api/jobseekers/documents/:userId', async (req, res) => {
 // 求職者プロフィール更新API（設定ページ用）
 app.put('/api/jobseekers/profile', async (req, res) => {
   try {
-    const { userId, full_name, phone, self_introduction, address = null, desired_job_title = null, experience_years = 0 } = req.body;
+    const { userId, full_name, phone, self_introduction } = req.body;
+    
+    console.log('プロフィール更新API呼び出し - userId:', userId);
     
     if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'ユーザーIDは必須です'
-      });
+      return res.status(400).json({ error: 'userIdが必要です' });
     }
     
     const { query } = await import('../integrations/postgres/client.js');
     
-    // プロフィールが存在するかチェック
-    const existingProfile = await query(`
-      SELECT id FROM job_seekers WHERE user_id = $1
-    `, [userId]);
+    // プロフィール更新
+    const updateResult = await query(
+      `UPDATE job_seekers 
+       SET full_name = $2, phone = $3, self_introduction = $4, updated_at = NOW()
+       WHERE user_id = $1`,
+      [userId, full_name, phone, self_introduction]
+    );
     
-    if (existingProfile.rows.length === 0) {
-      // プロフィールが存在しない場合は作成
-      const result = await query(`
-        INSERT INTO job_seekers (
-          user_id, full_name, phone, self_introduction, address, 
-          desired_job_title, experience_years, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-        RETURNING full_name, phone, self_introduction, address, desired_job_title, experience_years
-      `, [userId, full_name, phone, self_introduction, address, desired_job_title, experience_years || 0]);
-      
-      res.json({
-        success: true,
-        message: 'プロフィールを作成しました',
-        profile: result.rows[0]
-      });
-    } else {
-      // プロフィールが存在する場合は更新
-      const result = await query(`
-        UPDATE job_seekers 
-        SET full_name = $2, phone = $3, self_introduction = $4, 
-            address = $5, desired_job_title = $6, experience_years = $7, updated_at = NOW()
-        WHERE user_id = $1
-        RETURNING full_name, phone, self_introduction, address, desired_job_title, experience_years
-      `, [userId, full_name, phone, self_introduction, address, desired_job_title, experience_years || 0]);
-      
-      res.json({
-        success: true,
-        message: 'プロフィールを更新しました',
-        profile: result.rows[0]
-      });
-    }
+    console.log('プロフィール更新結果:', updateResult);
+    
+    res.json({
+      success: true,
+      message: 'プロフィールを更新しました'
+    });
+    
   } catch (error) {
     console.error('プロフィール更新エラー:', error);
     res.status(500).json({
       success: false,
-      message: 'プロフィールの更新に失敗しました'
+      error: 'プロフィールの更新に失敗しました'
     });
   }
 });
