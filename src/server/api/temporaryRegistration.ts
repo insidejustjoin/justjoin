@@ -76,11 +76,13 @@ router.post('/temporary', async (req, res) => {
     console.log('既存仮登録チェック結果:', existingTemp.rows);
 
     if (existingTemp.rows.length > 0) {
-      console.log('仮登録ブロック - 既存データあり:', existingTemp.rows[0]);
-      return res.status(400).json({ 
-        success: false, 
-        message: 'このメールアドレスは既に仮登録中です。1時間後に再度お試しください。' 
-      });
+      // ブロックせず、既存の仮登録（未完了）を削除してやり直し可能にする
+      console.log('既存の未完了仮登録を削除して再発行します:', email);
+      await query(
+        `DELETE FROM temporary_registrations 
+         WHERE email = $1 AND status IN ('pending','documents_completed')`,
+        [email]
+      );
     }
 
     // レート制限チェック（同一IPからの連続リクエスト制限）

@@ -1253,6 +1253,12 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
       try {
         // applicantをメールで特定
         const applicants = await query(`SELECT id FROM interview_applicants WHERE email = $1`, [fullName]);
+        // user_idベースのattemptsも削除
+        try {
+          const attempts = await query(`DELETE FROM interview_attempts WHERE user_id = $1`, [userId]);
+          deletedRecords.interviewAttempts = attempts.rowCount;
+          console.log(`interview_attempts削除: ${attempts.rowCount}件`);
+        } catch {}
         if (applicants.rows.length > 0) {
           const applicantId = applicants.rows[0].id;
           try { await query(`DELETE FROM interview_summaries WHERE applicant_id = $1`, [applicantId]); } catch {}
