@@ -1068,7 +1068,7 @@ app.get('/api/jobseekers/documents/:userId', async (req, res) => {
 // 求職者プロフィール更新API（設定ページ用）
 app.put('/api/jobseekers/profile', async (req, res) => {
   try {
-    const { userId, full_name, phone, self_introduction, address, desired_job_title, experience_years } = req.body;
+    const { userId, full_name, phone, self_introduction } = req.body;
     
     if (!userId) {
       return res.status(400).json({
@@ -1482,6 +1482,8 @@ app.get('/api/documents/:userId', async (req, res) => {
     const { userId } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
 
+    console.log('[DOCS][GET] userId =', userId);
+
     // 複数document_typeをマージして返却
     const result = await query(`
       SELECT document_type, document_data, created_at
@@ -1489,6 +1491,8 @@ app.get('/api/documents/:userId', async (req, res) => {
       WHERE user_id = $1
       ORDER BY created_at ASC
     `, [userId]);
+
+    console.log('[DOCS][GET] rows =', result.rows.length, 'types =', result.rows.map(r => r.document_type));
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'ドキュメントデータが見つかりません' });
@@ -1498,10 +1502,8 @@ app.get('/api/documents/:userId', async (req, res) => {
     for (const row of result.rows) {
       try {
         const data = row.document_data || {};
-        // ベースを順次マージ（後勝ち）
         Object.assign(merged, data);
         liftBasic(data);
-        // ネスト構造がある場合も上書き
         if (data.resume) {
           merged.resume = { ...(merged.resume || {}), ...data.resume };
         }
@@ -1520,10 +1522,12 @@ app.get('/api/documents/:userId', async (req, res) => {
       } catch {}
     }
 
+    console.log('[DOCS][GET] merged keys =', Object.keys(merged));
+
     res.json({ success: true, data: merged });
   } catch (error) {
-    console.error('書類データ取得エラー:', error);
-    res.status(500).json({ success: false, message: '書類データの取得に失敗しました' });
+    console.error('[DOCS][GET] error:', (error as any)?.message || error);
+    res.status(500).json({ success: false, message: 'ドキュメント取得中にエラーが発生しました' });
   }
 });
 

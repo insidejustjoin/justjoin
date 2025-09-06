@@ -307,6 +307,8 @@ router.post('/complete/:token', async (req, res) => {
     const { token } = req.params;
     const { password } = req.body;
 
+    console.log('[REGISTER][COMPLETE] start token=', (token || '').slice(0, 8));
+
     // データベース接続テスト
     try {
       const testQuery = await query('SELECT 1 as test');
@@ -362,6 +364,7 @@ router.post('/complete/:token', async (req, res) => {
     }
 
     const registration = tempReg.rows[0];
+    console.log('[REGISTER][COMPLETE] email=', registration.email, 'hasDocs=', !!registration.documents_data);
 
     // パスワードハッシュ化
     const passwordHash = await bcrypt.hash(password, 10);
@@ -400,6 +403,8 @@ router.post('/complete/:token', async (req, res) => {
       userId = userResult.rows[0].id;
     }
 
+    console.log('[REGISTER][COMPLETE] userId=', userId);
+
     // 求職者詳細情報作成
     await query(
       `INSERT INTO job_seekers (user_id, first_name, last_name, created_at, updated_at) 
@@ -417,7 +422,6 @@ router.post('/complete/:token', async (req, res) => {
       console.log('求職者ステータス初期化成功:', userId);
     } catch (statusError) {
       console.error('求職者ステータス初期化エラー:', statusError);
-      // ステータス初期化に失敗しても処理を継続
       console.log('ステータス初期化をスキップして処理を継続');
     }
 
@@ -432,6 +436,8 @@ router.post('/complete/:token', async (req, res) => {
         } catch (e) {
           documentsData = registration.documents_data;
         }
+
+        console.log('[REGISTER][COMPLETE] migrating docs for userId=', userId, 'keys=', Object.keys(documentsData || {}));
         
         // 基本情報をuser_documentsに保存
         if (documentsData.resume?.basicInfo) {
@@ -510,10 +516,12 @@ router.post('/complete/:token', async (req, res) => {
           );
         }
 
+        const types = await query(`SELECT document_type FROM user_documents WHERE user_id = $1 ORDER BY created_at ASC`, [userId]);
+        console.log('[REGISTER][COMPLETE] migrated types for userId=', userId, types.rows.map(r => r.document_type));
+
         console.log('書類データ移行完了:', userId);
       } catch (documentsError) {
         console.error('書類データ移行エラー:', documentsError);
-        // 書類データ移行に失敗しても処理を継続
         console.log('書類データ移行をスキップして処理を継続');
       }
     }
