@@ -2204,19 +2204,19 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../dist')));
   
   // SPAルーティング: すべてのGETリクエストをindex.htmlにリダイレクト
-  app.get('*', (req, res) => {
-    // APIルートは除外
+  app.get('*', (req, res, next) => {
+    // APIルートは除外 -> 次のルートへ委譲（後続のAPI定義を有効にする）
     if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: 'API endpoint not found' });
+      return next();
     }
     
     res.sendFile(path.join(__dirname, '../../dist/index.html'));
   });
 } else {
   // 開発環境ではAPIルートのみ処理
-  app.get('*', (req, res) => {
+  app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: 'API endpoint not found' });
+      return next();
     }
     res.status(404).json({ error: 'Route not found' });
   });
