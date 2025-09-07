@@ -206,9 +206,9 @@ router.post('/documents/:token', async (req, res) => {
       'skillSheet.skills'
     ];
 
-    const missingFields = [];
+    const missingFields = [] as string[];
     for (const field of requiredFields) {
-      const value = field.split('.').reduce((obj, key) => obj?.[key], documentsData);
+      const value = field.split('.').reduce((obj: any, key: string) => obj?.[key], documentsData);
       if (!value || (Array.isArray(value) && value.length === 0)) {
         missingFields.push(field);
       }
@@ -220,6 +220,20 @@ router.post('/documents/:token', async (req, res) => {
     }
     if (!documentsData.resume?.noWorkExperience && (!documentsData.resume?.workExperience || documentsData.resume.workExperience.length === 0)) {
       missingFields.push('resume.workExperience');
+    }
+
+    // 日本語資格: name==='なし' の場合は date を必須にしない
+    if (documentsData.certificateStatus?.name && documentsData.certificateStatus.name !== 'なし') {
+      if (!documentsData.certificateStatus?.date) {
+        missingFields.push('certificateStatus.date');
+      }
+    }
+
+    // 予定の日本語資格: level==='未定' の場合は nextJapaneseTestDate を必須にしない
+    if (documentsData.nextJapaneseTestLevel && documentsData.nextJapaneseTestLevel !== '未定') {
+      if (!documentsData.nextJapaneseTestDate) {
+        missingFields.push('nextJapaneseTestDate');
+      }
     }
 
     if (missingFields.length > 0) {
