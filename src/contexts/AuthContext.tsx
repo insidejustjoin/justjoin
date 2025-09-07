@@ -107,7 +107,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
               const meJson = await meRes.json();
               if (meJson?.success && meJson.user?.id) {
                 const serverUser = meJson.user as any;
-                const normalized = { ...serverUser, id: String(serverUser.id) };
+                const user_type = serverUser.user_type || serverUser.role || 'job_seeker';
+                const normalized = { ...serverUser, user_type, id: String(serverUser.id) };
                 setUser(normalized);
                 localStorage.setItem('auth_user', JSON.stringify(normalized));
                 console.log('AuthContext: /api/auth/me によりユーザーを確定:', normalized.id, normalized.email);
@@ -146,10 +147,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
             
             // idを文字列として処理
             const userId = String(initialUser.id);
+            const userType = (initialUser as any).user_type || (initialUser as any).role || 'job_seeker';
             console.log('AuthContext: 初期化 - ユーザーID:', userId);
             
             // ユーザー情報の検証（数値のユーザーIDも有効とする）
-            if (!initialUser.email || !initialUser.user_type) {
+            if (!initialUser.email || !userType) {
               console.log('AuthContext: 無効なユーザー情報です。ログアウトします。');
               localStorage.removeItem('auth_token');
               localStorage.removeItem('auth_user');
@@ -166,7 +168,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             // ユーザー情報を設定
             setUser({
               ...initialUser,
-              id: userId
+              id: userId,
+              user_type: userType as any
             });
             
             console.log('AuthContext: 初期化完了 - ユーザー:', initialUser.email);
