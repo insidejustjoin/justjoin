@@ -553,15 +553,26 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       addField(data.gender);
       addField(data.nationality);
 
-      // 連絡先など
+      // 現住所（フロント同等のフィールドを考慮）
+      addField(data.livePostNumber);
       addField(data.liveAddress);
+      addField(data.kanaLiveAddress);
       addField(data.livePhoneNumber);
       addField(data.liveMail);
+
+      // 連絡先（同一なら自動充足）
+      const same = !!data.contactSameAsLive || !!data.contact?.sameAsLive;
+      addField(same ? true : (data.contactPostNumber || data.contact?.postNumber));
+      addField(same ? true : (data.contactAddress || data.contact?.address));
+      addField(same ? true : (data.kanaContactAddress || data.contact?.kanaAddress));
+      addField(same ? true : (data.contactPhoneNumber || data.contact?.phone));
+      addField(same ? true : (data.contactMail || data.contact?.mail));
 
       // 履歴書
       addField(data.resume?.photoUrl);
       addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
       addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
+      addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume.qualifications.length > 0));
 
       // 職務経歴
       addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
@@ -569,13 +580,13 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       // スキル（最大3%）
       const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
       const skillsMaxWeight = 3;
-      if (skills.length > 0) {
+      if ((skills as any[]).length > 0) {
         const completed = (skills as any[]).filter((s: any) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
         maxScore += skillsMaxWeight;
         score += skillsMaxWeight * (completed / (skills as any[]).length);
       }
 
-      // 日本語
+      // 日本語（"なし"なら取得日は免除）
       const japaneseLevel = data.japaneseLevel || (data.certificateStatus?.name && data.certificateStatus.name !== 'なし' ? data.certificateStatus.name : '');
       const qualificationDate = data.certificateStatus?.name === 'なし' ? '' : (data.qualificationDate || data.certificateStatus?.date || '');
       addField(japaneseLevel);
