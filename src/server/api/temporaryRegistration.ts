@@ -537,6 +537,51 @@ router.post('/complete/:token', async (req, res) => {
           );
         }
 
+        // 住所・連絡先などトップレベルの補助情報も保存
+        try {
+          const addressInfo = {
+            livePostNumber: documentsData.livePostNumber || documentsData.live?.postNumber || null,
+            liveAddress: documentsData.liveAddress || documentsData.live?.address || null,
+            kanaLiveAddress: documentsData.kanaLiveAddress || documentsData.live?.kanaAddress || null,
+            livePhoneNumber: documentsData.livePhoneNumber || documentsData.live?.phone || null,
+            liveMail: documentsData.liveMail || documentsData.live?.mail || null,
+          };
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'address_info', JSON.stringify(addressInfo)]
+          );
+
+          const contactInfo = {
+            contactSameAsLive: documentsData.contactSameAsLive || documentsData.contact?.sameAsLive || false,
+            contactPostNumber: documentsData.contactPostNumber || documentsData.contact?.postNumber || null,
+            contactAddress: documentsData.contactAddress || documentsData.contact?.address || null,
+            kanaContactAddress: documentsData.kanaContactAddress || documentsData.contact?.kanaAddress || null,
+            contactPhoneNumber: documentsData.contactPhoneNumber || documentsData.contact?.phone || null,
+            contactMail: documentsData.contactMail || documentsData.contact?.mail || null,
+          };
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'contact_info', JSON.stringify(contactInfo)]
+          );
+
+          const japanesePlan = {
+            certificateStatus: documentsData.certificateStatus || null,
+            japaneseLevel: documentsData.japaneseLevel || null,
+            qualificationDate: documentsData.qualificationDate || null,
+            nextJapaneseTestDate: documentsData.nextJapaneseTestDate || null,
+            nextJapaneseTestLevel: documentsData.nextJapaneseTestLevel || null,
+          };
+          await query(
+            `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`,
+            [userId, 'japanese_test_plan', JSON.stringify(japanesePlan)]
+          );
+        } catch (e) {
+          console.warn('[REGISTER][COMPLETE] optional info save warning:', e);
+        }
+
         const types = await query(`SELECT document_type FROM user_documents WHERE user_id = $1 ORDER BY created_at ASC`, [userId]);
         console.log('[REGISTER][COMPLETE] migrated types for userId=', userId, types.rows.map(r => r.document_type));
 

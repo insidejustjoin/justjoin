@@ -67,9 +67,9 @@ export const RegistrationVerification: React.FC = () => {
 
       if (data.success) {
         setStep('completed');
-        // 3秒後にマイページにリダイレクト
+        // 3秒後にログインページにリダイレクト
         setTimeout(() => {
-          navigate('/jobseeker/my-page');
+          navigate('/jobseeker');
         }, 3000);
       } else {
         setError(data.message);

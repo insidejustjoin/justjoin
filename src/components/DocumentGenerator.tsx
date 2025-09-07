@@ -2782,9 +2782,9 @@ whiteCells.forEach(cell => {
                       <SelectValue placeholder={t('documents.selectGender')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="男性">{t('documents.male')}</SelectItem>
-                      <SelectItem value="女性">{t('documents.female')}</SelectItem>
-                      <SelectItem value="その他">{t('documents.other')}</SelectItem>
+                      <SelectItem value="男性">男性 / Male</SelectItem>
+                      <SelectItem value="女性">女性 / Female</SelectItem>
+                      <SelectItem value="その他">その他 / Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3390,8 +3390,8 @@ whiteCells.forEach(cell => {
                       <SelectValue placeholder={t('documents.spousePlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="あり">あり</SelectItem>
-                      <SelectItem value="なし">なし / None</SelectItem>
+                      <SelectItem value="あり">あり / Yes</SelectItem>
+                      <SelectItem value="なし">なし / No</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3402,8 +3402,8 @@ whiteCells.forEach(cell => {
                       <SelectValue placeholder={t('documents.spouseSupportPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="あり">あり</SelectItem>
-                      <SelectItem value="なし">なし / None</SelectItem>
+                      <SelectItem value="あり">あり / Yes</SelectItem>
+                      <SelectItem value="なし">なし / No</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -4063,6 +4063,9 @@ whiteCells.forEach(cell => {
                       basicInfo: {
                         firstName: documentData.firstName,
                         lastName: documentData.lastName,
+                        kanaFirstName: documentData.kanaFirstName,
+                        kanaLastName: documentData.kanaLastName,
+                        gender: documentData.gender,
                         email: documentData.liveMail,
                         phone: documentData.livePhoneNumber,
                         dateOfBirth: documentData.birthDate,
@@ -4088,7 +4091,7 @@ whiteCells.forEach(cell => {
                     skillSheet: {
                       skills: documentData.skillSheet?.skills || {}
                     },
-                    // 連絡先
+                    // 連絡先（トップレベルにも複製）
                     contact: {
                       sameAsLive: !!documentData.contactSameAsLive,
                       postNumber: documentData.contactPostNumber || '',
@@ -4097,7 +4100,13 @@ whiteCells.forEach(cell => {
                       phone: documentData.contactPhoneNumber || '',
                       mail: documentData.contactMail || '',
                     },
-                    // 現住所
+                    contactSameAsLive: !!documentData.contactSameAsLive,
+                    contactPostNumber: documentData.contactPostNumber || '',
+                    contactAddress: documentData.contactAddress || '',
+                    kanaContactAddress: documentData.kanaContactAddress || '',
+                    contactPhoneNumber: documentData.contactPhoneNumber || '',
+                    contactMail: documentData.contactMail || '',
+                    // 現住所（トップレベルにも複製）
                     live: {
                       postNumber: documentData.livePostNumber || '',
                       address: documentData.liveAddress || '',
@@ -4105,6 +4114,11 @@ whiteCells.forEach(cell => {
                       phone: documentData.livePhoneNumber || '',
                       mail: documentData.liveMail || '',
                     },
+                    livePostNumber: documentData.livePostNumber || '',
+                    liveAddress: documentData.liveAddress || '',
+                    kanaLiveAddress: documentData.kanaLiveAddress || '',
+                    livePhoneNumber: documentData.livePhoneNumber || '',
+                    liveMail: documentData.liveMail || '',
                     // 日本語資格/試験
                     certificateStatus: documentData.certificateStatus,
                     japaneseLevel: documentData.japaneseLevel,
