@@ -145,6 +145,45 @@ export function AuthProvider({ children }: AuthProviderProps) {
             });
             
             console.log('AuthContext: 初期化完了 - ユーザー:', initialUser.email);
+
+            // 追加: ID不整合の自己修復（by-emailフォールバック）
+            (async () => {
+              try {
+                const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
+                const res = await fetch(`${apiUrl}/api/jobseekers/${userId}`);
+                if (res.status === 404) {
+                  console.warn('AuthContext: 保存IDが404。メールから再取得を試みます:', initialUser.email);
+                  const byEmailRes = await fetch(`${apiUrl}/api/jobseekers/by-email/${encodeURIComponent(initialUser.email)}`);
+                  if (byEmailRes.ok) {
+                    const data = await byEmailRes.json();
+                    const newId = String(data?.data?.userId || '');
+                    if (newId) {
+                      const repairedUser = { ...initialUser, id: newId } as any;
+                      setUser(repairedUser);
+                      const userForStorage = { ...repairedUser };
+                      localStorage.setItem('auth_user', JSON.stringify(userForStorage));
+                      console.log('AuthContext: userIdを修復しました ->', newId);
+                    } else {
+                      console.warn('AuthContext: by-email取得にuserIdが含まれません。ログアウトします。');
+                      localStorage.removeItem('auth_token');
+                      localStorage.removeItem('auth_user');
+                      localStorage.removeItem('auth_login_time');
+                      setUser(null);
+                      window.location.href = '/jobseeker';
+                    }
+                  } else {
+                    console.warn('AuthContext: by-email取得に失敗。ログアウトします。');
+                    localStorage.removeItem('auth_token');
+                    localStorage.removeItem('auth_user');
+                    localStorage.removeItem('auth_login_time');
+                    setUser(null);
+                    window.location.href = '/jobseeker';
+                  }
+                }
+              } catch (e) {
+                console.warn('AuthContext: ID修復中にエラー', e);
+              }
+            })();
           } catch (parseError) {
             console.error('AuthContext: ユーザー情報のパースエラー:', parseError);
             localStorage.removeItem('auth_token');
@@ -491,41 +530,57 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (!response.ok) {
         if (response.status === 404) {
-          console.log('AuthContext: Profile not found, creating default profile');
-          // プロフィールが見つからない場合はデフォルトプロフィールを作成
-          const defaultProfile = {
-            id: user.id,
-            full_name: user.profile?.full_name || 'テストユーザー',
-            company_name: user.profile?.company_name,
-            phone: user.profile?.phone || '',
-            address: user.profile?.address || '',
-            desired_job_title: user.profile?.desired_job_title || '',
-            experience_years: user.profile?.experience_years || 0,
-            skills: user.profile?.skills || [],
-            self_introduction: user.profile?.self_introduction || '',
-            profile_photo_url: user.profile?.profile_photo_url || ''
-          };
+          console.log('AuthContext: Profile 404, trying by-email fallback');
+          try {
+            const byEmailRes = await fetch(`${apiUrl}/api/jobseekers/by-email/${encodeURIComponent(user.email)}`, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            if (byEmailRes.ok) {
+              const byEmailData = await byEmailRes.json();
+              const resolvedId = (byEmailData && (byEmailData.userId || byEmailData?.jobSeeker?.userId || byEmailData?.jobSeeker?.id || byEmailData?.id));
+              if (resolvedId) {
+                const resolvedIdStr = String(resolvedId);
+                console.log('AuthContext: Resolved userId by email:', resolvedIdStr);
 
-          // キャッシュを更新
-          updateCachedProfile(String(user.id), defaultProfile);
+                const newUser = { ...user, id: resolvedIdStr } as User;
+                setUser(newUser);
+                localStorage.setItem('auth_user', JSON.stringify({ ...newUser, id: resolvedIdStr }));
 
-          // userオブジェクトとlocalStorageを即座に更新
-          const updatedUser = {
-            ...user,
-            profile: { ...defaultProfile }
-          };
-          setUser(updatedUser);
-          // idを文字列として保存
-          const userForStorage = {
-            ...updatedUser,
-            id: String(updatedUser.id)
-          };
-          localStorage.setItem('auth_user', JSON.stringify(userForStorage));
-          
-          console.log('AuthContext: Default profile created and cached');
-          return;
+                const retryRes = await fetch(`${apiUrl}/api/jobseekers/${resolvedIdStr}`, {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' }
+                });
+                if (retryRes.ok) {
+                  const retryJson = await retryRes.json();
+                  if (retryJson.success && retryJson.jobSeeker) {
+                    updateCachedProfile(resolvedIdStr, retryJson.jobSeeker);
+                    const updatedUser2 = { ...newUser, profile: { ...retryJson.jobSeeker } } as User;
+                    setUser(updatedUser2);
+                    localStorage.setItem('auth_user', JSON.stringify({ ...updatedUser2, id: resolvedIdStr }));
+                    console.log('AuthContext: Profile recovered by email fallback');
+                    return;
+                  }
+                }
+              }
+            }
+            console.log('AuthContext: Fallback failed. Clearing stale session.');
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_user');
+            localStorage.removeItem('auth_login_time');
+            setUser(null);
+            window.location.href = '/jobseeker';
+            return;
+          } catch (e) {
+            console.error('AuthContext: by-email fallback error:', e);
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_user');
+            localStorage.removeItem('auth_login_time');
+            setUser(null);
+            window.location.href = '/jobseeker';
+            return;
+          }
         }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
