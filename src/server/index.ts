@@ -497,6 +497,36 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       }
     }
 
+    // 正規化: トップレベルにある場合は構造へフォールバック
+    const normalized: any = { ...merged };
+    normalized.resume = normalized.resume || {};
+    normalized.skillSheet = normalized.skillSheet || {};
+    normalized.workHistory = normalized.workHistory || {};
+
+    // education/workExperience を resume.* に昇格
+    if (!normalized.resume.education && Array.isArray(normalized.education)) {
+      normalized.resume.education = normalized.education;
+    }
+    if (!normalized.resume.workExperience && Array.isArray(normalized.workExperience)) {
+      normalized.resume.workExperience = normalized.workExperience;
+    }
+    if (normalized.noEducation !== undefined && normalized.resume.noEducation === undefined) {
+      normalized.resume.noEducation = normalized.noEducation;
+    }
+    if (normalized.noWorkExperience !== undefined && normalized.resume.noWorkExperience === undefined) {
+      normalized.resume.noWorkExperience = normalized.noWorkExperience;
+    }
+
+    // skills を skillSheet.skills へ
+    if (!normalized.skillSheet.skills && normalized.skills && typeof normalized.skills === 'object') {
+      normalized.skillSheet.skills = normalized.skills;
+    }
+
+    // workHistory.workExperiences へフォールバック（なければ resume.workExperience を参照）
+    if (!normalized.workHistory.workExperiences && Array.isArray(normalized.resume.workExperience)) {
+      normalized.workHistory.workExperiences = normalized.resume.workExperience;
+    }
+
     // 入力率計算（フロント新仕様と同一）
     const calculateCompletionRate = (data: any): number => {
       let score = 0;
@@ -564,7 +594,7 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       return final;
     };
 
-    const completionRate = calculateCompletionRate(merged);
+    const completionRate = calculateCompletionRate(normalized);
     return res.json({ success: true, completionRate });
   } catch (error) {
     console.error('/api/jobseekers/completion-rate エラー:', error);
