@@ -96,6 +96,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const token = localStorage.getItem('auth_token');
         const storedUser = localStorage.getItem('auth_user');
         
+        // 先に /api/auth/me でサーバー側の正を採用
+        if (token) {
+          try {
+            const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
+            const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (meRes.ok) {
+              const meJson = await meRes.json();
+              if (meJson?.success && meJson.user?.id) {
+                const serverUser = meJson.user as any;
+                const normalized = { ...serverUser, id: String(serverUser.id) };
+                setUser(normalized);
+                localStorage.setItem('auth_user', JSON.stringify(normalized));
+                console.log('AuthContext: /api/auth/me によりユーザーを確定:', normalized.id, normalized.email);
+                setIsLoading(false);
+                setIsInitialized(true);
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn('AuthContext: /api/auth/me 取得に失敗。localStorageにフォールバック');
+          }
+        }
+        
         if (token && storedUser) {
           try {
             const initialUser: User = JSON.parse(storedUser);

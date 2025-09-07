@@ -2412,3 +2412,17 @@ app.get('/api/jobseekers/by-email/:email', async (req, res) => {
   }
 });
 // ... existing code ...
+
+app.get('/api/auth/me', authenticate, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || !user.id) {
+      return res.status(401).json({ success: false, message: 'UNAUTHORIZED' });
+    }
+    const { query } = await import('../integrations/postgres/client.js');
+    const js = await query('SELECT * FROM job_seekers WHERE user_id = $1 LIMIT 1', [user.id]);
+    return res.json({ success: true, user: { id: user.id, email: user.email, user_type: user.user_type, profile: js.rows[0] || null } });
+  } catch (e:any) {
+    return res.status(500).json({ success: false, message: e?.message || 'INTERNAL_ERROR' });
+  }
+});
