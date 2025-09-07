@@ -2284,87 +2284,46 @@ app.get('/api/jobseekers/by-email/:email', async (req, res) => {
     const { email } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
 
-    const u = await query(`SELECT id FROM users WHERE email = $1 ORDER BY created_at DESC LIMIT 1`, [email]);
-    if (u.rows.length === 0) {
+    if (!email) return res.status(400).json({ success: false, message: 'メールは必須です' });
+
+    const userRes = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [email]);
+    if (userRes.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
     }
-    const userId = u.rows[0].id;
+    const userId = userRes.rows[0].id;
 
-    // 既存のマージロジックを流用
-    const base = await query(`
-      SELECT js.*, u.email
-      FROM job_seekers js
-      LEFT JOIN users u ON u.id = js.user_id
-      WHERE js.user_id = $1
-      LIMIT 1
-    `, [userId]);
-
-    if (base.rows.length === 0) {
-      return res.status(404).json({ success: false, message: '求職者が見つかりません' });
-    }
-
-    const row = base.rows[0];
-
-    const allDocs = await query(`
+    // 既存の /api/jobseekers/:id と同じ統合ロジック（簡約版）
+    const docs = await query(`
       SELECT document_type, document_data, created_at
-      FROM user_documents 
+      FROM user_documents
       WHERE user_id = $1
       ORDER BY created_at ASC
-    `, [row.user_id]);
+    `, [userId]);
 
-    const merged: any = {
-      id: row.id,
-      user_id: row.user_id,
-      email: row.email,
-      full_name: row.full_name,
-      first_name: row.first_name,
-      last_name: row.last_name,
-      phone: row.phone,
-      address: row.address,
-      date_of_birth: row.date_of_birth,
-      gender: row.gender,
-      nationality: row.nationality,
-      profile_photo: row.profile_photo,
-      completion_rate: row.completion_rate || 0,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-    };
-
-    const liftBasic = (d: any) => {
-      const b = d?.resume?.basicInfo;
-      if (!b) return;
-      merged.last_name = merged.last_name || b.lastName;
-      merged.first_name = merged.first_name || b.firstName;
-      merged.kana_last_name = merged.kana_last_name || b.kanaLastName;
-      merged.kana_first_name = merged.kana_first_name || b.kanaFirstName;
-      merged.date_of_birth = merged.date_of_birth || b.dateOfBirth;
-      merged.gender = merged.gender || b.gender;
-      merged.nationality = merged.nationality || b.nationality;
-      merged.address = merged.address || b.address;
-      merged.phone = merged.phone || b.phone;
-      merged.email = merged.email || b.email;
-    };
-
-    for (const r of allDocs.rows) {
-      const data = r.document_data || {};
-      Object.assign(merged, data);
-      liftBasic(data);
-      if (data.resume?.photoUrl) {
-        merged.profile_photo = merged.profile_photo || data.resume.photoUrl;
-      }
-      if (data.japaneseInfo?.nextJapaneseTestLevel) {
-        merged.japanese_level = data.japaneseInfo.nextJapaneseTestLevel;
-      } else if (data.japaneseInfo?.certificateStatus?.name) {
-        merged.japanese_level = data.japaneseInfo.certificateStatus.name;
-      } else if (data.certificateStatus?.name) {
-        merged.japanese_level = data.certificateStatus.name;
-      }
+    const merged: any = {}; const liftBasic = (d:any)=>{ if(!d) return; const b=d.resume?.basicInfo; if(b){ merged.lastName=merged.lastName||b.lastName; merged.firstName=merged.firstName||b.firstName; merged.kanaLastName=merged.kanaLastName||b.kanaLastName; merged.kanaFirstName=merged.kanaFirstName||b.kanaFirstName; merged.birthDate=merged.birthDate||b.dateOfBirth; merged.gender=merged.gender||b.gender; merged.nationality=merged.nationality||b.nationality; merged.liveAddress=merged.liveAddress||b.address; merged.livePhoneNumber=merged.livePhoneNumber||b.phone; merged.liveMail=merged.liveMail||b.email; }};
+    for (const row of docs.rows) {
+      const data = row.document_data || {};
+      try {
+        Object.assign(merged, data);
+        liftBasic(data);
+        if (data.resume) merged.resume = { ...(merged.resume || {}), ...data.resume };
+        if (data.workHistory) merged.workHistory = { ...(merged.workHistory || {}), ...data.workHistory };
+        if (data.skillSheet) {
+          merged.skillSheet = { ...(merged.skillSheet || {}), ...data.skillSheet };
+          if (data.skillSheet.skills) merged.skillSheet.skills = { ...(merged.skillSheet.skills || {}), ...data.skillSheet.skills };
+        }
+        if (data.certificateStatus) merged.certificateStatus = { ...(merged.certificateStatus || {}), ...data.certificateStatus };
+      } catch {}
     }
 
-    res.json({ success: true, data: merged });
+    // user基本情報も付与
+    const js = await query('SELECT * FROM job_seekers WHERE user_id = $1 LIMIT 1', [userId]);
+    const profile = js.rows[0] || {};
+
+    return res.json({ success: true, data: { userId, profile, ...merged } });
   } catch (error) {
-    console.error('/api/jobseekers/by-email 取得エラー:', error);
-    res.status(500).json({ success: false, message: '求職者詳細(by email)の取得に失敗しました' });
+    console.error('[JOBSEEKERS][BY_EMAIL] error:', (error as any)?.message || error);
+    res.status(500).json({ success: false, message: '取得中にエラーが発生しました' });
   }
 });
 // ... existing code ...
