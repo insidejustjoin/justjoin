@@ -4066,23 +4066,59 @@ whiteCells.forEach(cell => {
                         email: documentData.liveMail,
                         phone: documentData.livePhoneNumber,
                         dateOfBirth: documentData.birthDate,
-                        address: documentData.liveAddress
+                        address: documentData.liveAddress,
+                        nationality: documentData.nationality,
                       },
                       education: documentData.resume?.education || [],
                       workExperience: documentData.resume?.workExperience || [],
+                      qualifications: documentData.resume?.qualifications || [],
+                      skills: documentData.resume?.skills || [],
+                      selfPR: documentData.resume?.selfPR || '',
                       noEducation: documentData.resume?.noEducation || false,
-                      noWorkExperience: documentData.resume?.noWorkExperience || false
+                      noWorkExperience: documentData.resume?.noWorkExperience || false,
+                      noQualifications: documentData.resume?.noQualifications || false,
+                      photoUrl: documentData.resume?.photoUrl || '',
+                    },
+                    workHistory: {
+                      currentDate: documentData.workHistory?.currentDate || '',
+                      workExperiences: documentData.workHistory?.workExperiences || [],
+                      qualifications: documentData.workHistory?.qualifications || '',
+                      noWorkHistory: documentData.workHistory?.noWorkHistory || false,
                     },
                     skillSheet: {
                       skills: documentData.skillSheet?.skills || {}
                     },
-                    // その他の書類データも含める
+                    // 連絡先
+                    contact: {
+                      sameAsLive: !!documentData.contactSameAsLive,
+                      postNumber: documentData.contactPostNumber || '',
+                      address: documentData.contactAddress || '',
+                      kanaAddress: documentData.kanaContactAddress || '',
+                      phone: documentData.contactPhoneNumber || '',
+                      mail: documentData.contactMail || '',
+                    },
+                    // 現住所
+                    live: {
+                      postNumber: documentData.livePostNumber || '',
+                      address: documentData.liveAddress || '',
+                      kanaAddress: documentData.kanaLiveAddress || '',
+                      phone: documentData.livePhoneNumber || '',
+                      mail: documentData.liveMail || '',
+                    },
+                    // 日本語資格/試験
                     certificateStatus: documentData.certificateStatus,
-                    whyJapan: documentData.whyJapan,
-                    whyInterestJapan: documentData.whyInterestJapan,
+                    japaneseLevel: documentData.japaneseLevel,
+                    qualificationDate: documentData.qualificationDate,
+                    nextJapaneseTestDate: documentData.nextJapaneseTestDate,
+                    nextJapaneseTestLevel: documentData.nextJapaneseTestLevel,
+                    // 自己PRなど
                     selfIntroduction: documentData.selfIntroduction,
+                    personalPreference: documentData.personalPreference,
+                    // 配偶者
                     spouse: documentData.spouse,
-                    spouseSupport: documentData.spouseSupport
+                    spouseSupport: documentData.spouseSupport,
+                    // 入力率（任意）
+                    completionRateHint: typeof completionRate === 'number' ? completionRate : undefined,
                   };
 
                   try {
