@@ -479,13 +479,18 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     }
     
     // 日本語資格の必須項目（certificateStatusもチェック）
-    const japaneseLevel = documentData.japaneseLevel || (documentData.certificateStatus?.name && documentData.certificateStatus.name !== 'なし' ? documentData.certificateStatus.name : '');
-    const qualificationDate = documentData.qualificationDate || documentData.certificateStatus?.date || '';
+    const certName = documentData.certificateStatus?.name;
+    const isNone = certName === 'なし';
+    const japaneseLevel = documentData.japaneseLevel 
+      || (certName && certName !== 'なし' ? certName : (isNone ? 'なし' : ''));
+    const qualificationDate = isNone 
+      ? '' 
+      : (documentData.qualificationDate || documentData.certificateStatus?.date || '');
     
-    if (!japaneseLevel) missingFields.push('日本語資格');
-    if (!qualificationDate) missingFields.push('資格取得日');
+    if (!japaneseLevel && !isNone) missingFields.push('日本語資格');
+    if (!qualificationDate && !isNone) missingFields.push('資格取得日');
     
-    console.log('チェック後の値:', { japaneseLevel, qualificationDate });
+    console.log('チェック後の値:', { japaneseLevel, qualificationDate, certName, isNone });
     console.log('missingFields:', missingFields);
     
     return missingFields;
