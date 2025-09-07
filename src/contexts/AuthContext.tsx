@@ -143,8 +143,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
               ...initialUser,
               id: userId
             });
-            
             console.log('AuthContext: 初期化完了 - ユーザー:', initialUser.email);
+
+            // ID自己修復: email から最新 userId を取得して差し替え
+            try {
+              const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+              const r = await fetch(`${apiUrl}/api/jobseekers/by-email/${encodeURIComponent(initialUser.email)}`);
+              if (r.ok) {
+                const j = await r.json();
+                const resolvedId = j?.data?.userId ? String(j.data.userId) : null;
+                if (resolvedId && resolvedId !== userId) {
+                  const updatedUser = { ...initialUser, id: resolvedId } as any;
+                  setUser(updatedUser);
+                  localStorage.setItem('auth_user', JSON.stringify({ ...updatedUser, id: resolvedId }));
+                  console.log('AuthContext: userIdを自己修復:', userId, '→', resolvedId);
+                }
+              }
+            } catch {}
           } catch (parseError) {
             console.error('AuthContext: ユーザー情報のパースエラー:', parseError);
             localStorage.removeItem('auth_token');
@@ -273,6 +288,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
         console.log('認証状態更新完了');
         console.log('保存されたJWTトークン:', localStorage.getItem('auth_token'));
         toast.success(`${userType === 'job_seeker' ? '求職者' : userType === 'company' ? '企業' : '管理者'}としてログインしました`);
+
+        // ID自己修復（ログイン直後）
+        try {
+          const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+          const r = await fetch(`${apiUrl}/api/jobseekers/by-email/${encodeURIComponent(user.email)}`);
+          if (r.ok) {
+            const j = await r.json();
+            const resolvedId = j?.data?.userId ? String(j.data.userId) : null;
+            if (resolvedId && resolvedId !== String(user.id)) {
+              const updatedUser = { ...user, id: resolvedId } as any;
+              setUser(updatedUser);
+              localStorage.setItem('auth_user', JSON.stringify({ ...updatedUser, id: resolvedId }));
+              console.log('AuthContext: userIdを自己修復(ログイン時):', String(user.id), '→', resolvedId);
+            }
+          }
+        } catch {}
         return true;
       } else {
         console.error('Login failed:', result);

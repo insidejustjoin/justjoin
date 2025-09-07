@@ -217,7 +217,25 @@ export function JobSeekerMyPage() {
               setUserData(updatedUserData);
             }
           } else {
-            // Profile API エラーは静かに処理
+            // 404時はby-emailでID再取得→自己修復
+            if (response.status === 404) {
+              try {
+                const r = await fetch(`${apiUrl}/api/jobseekers/by-email/${encodeURIComponent(String(user.email))}`);
+                if (r.ok) {
+                  const j = await r.json();
+                  const resolvedId = j?.data?.userId ? String(j.data.userId) : null;
+                  if (resolvedId && resolvedId !== String(user.id)) {
+                    const updatedUser: any = { ...user, id: resolvedId };
+                    // localStorage更新
+                    const userForStorage = { ...updatedUser, id: resolvedId };
+                    localStorage.setItem('auth_user', JSON.stringify(userForStorage));
+                    // 再読込
+                    window.location.reload();
+                    return;
+                  }
+                }
+              } catch {}
+            }
           }
         } catch (error) {
           // Profile fetch エラーは静かに処理
