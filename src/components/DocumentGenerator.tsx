@@ -1506,7 +1506,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
           
           // 履歴書固有
           resume: {
-            photoUrl: savedData.resume?.photoUrl || '',
+            photoUrl: savedData.resume?.photoUrl || savedData.photoUrl || '',
             education: savedData.resume?.education || [{ year: '', month: '', content: '' }],
             workExperience: savedData.resume?.workExperience || [{ year: '', month: '', content: '' }],
             qualifications: savedData.resume?.qualifications || [{ year: '', month: '', name: '' }],

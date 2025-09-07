@@ -53,11 +53,10 @@ router.post('/temporary', async (req, res) => {
         const existingTemp = await query('SELECT id, status, created_at FROM temporary_registrations WHERE email = $1 AND status != $2', [email, 'completed']);
         console.log('既存仮登録チェック結果:', existingTemp.rows);
         if (existingTemp.rows.length > 0) {
-            console.log('仮登録ブロック - 既存データあり:', existingTemp.rows[0]);
-            return res.status(400).json({
-                success: false,
-                message: 'このメールアドレスは既に仮登録中です。1時間後に再度お試しください。'
-            });
+            // ブロックせず、既存の仮登録（未完了）を削除してやり直し可能にする
+            console.log('既存の未完了仮登録を削除して再発行します:', email);
+            await query(`DELETE FROM temporary_registrations 
+         WHERE email = $1 AND status IN ('pending','documents_completed')`, [email]);
         }
         // レート制限チェック（同一IPからの連続リクエスト制限）
         const clientIP = req.ip || req.connection.remoteAddress;
@@ -97,7 +96,7 @@ router.get('/verify/:token', async (req, res) => {
         const { token } = req.params;
         // 仮登録データ取得（pending または documents_completed を許可）
         const tempReg = await query(`SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status IN ($2, $3)`, [token, 'pending', 'documents_completed']);
+       WHERE verification_token = $1 AND status IN ($2, $3)`, [token, 'pending', 'documents_completed']);
         if (tempReg.rows.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -134,7 +133,7 @@ router.post('/documents/:token', async (req, res) => {
         const documentsData = req.body;
         // 仮登録データ取得
         const tempReg = await query(`SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status = $2`, [token, 'pending']);
+       WHERE verification_token = $1 AND status = $2`, [token, 'pending']);
         if (tempReg.rows.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -164,6 +163,18 @@ router.post('/documents/:token', async (req, res) => {
         }
         if (!documentsData.resume?.noWorkExperience && (!documentsData.resume?.workExperience || documentsData.resume.workExperience.length === 0)) {
             missingFields.push('resume.workExperience');
+        }
+        // 日本語資格: name==='なし' の場合は date を必須にしない
+        if (documentsData.certificateStatus?.name && documentsData.certificateStatus.name !== 'なし') {
+            if (!documentsData.certificateStatus?.date) {
+                missingFields.push('certificateStatus.date');
+            }
+        }
+        // 予定の日本語資格: level==='未定' の場合は nextJapaneseTestDate を必須にしない
+        if (documentsData.nextJapaneseTestLevel && documentsData.nextJapaneseTestLevel !== '未定') {
+            if (!documentsData.nextJapaneseTestDate) {
+                missingFields.push('nextJapaneseTestDate');
+            }
         }
         if (missingFields.length > 0) {
             return res.status(400).json({
@@ -200,19 +211,23 @@ router.post('/update-documents/:token', async (req, res) => {
                 message: '書類データが必要です'
             });
         }
+        console.log('[REGISTER][UPDATE_DOCS] token=', (token || '').slice(0, 8), 'keys=', Object.keys(documentsData || {}));
         // 仮登録データの存在確認
         const tempReg = await query(`SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status IN ($2, $3)`, [token, 'pending', 'documents_completed']);
+       WHERE verification_token = $1 AND status IN ($2, $3)`, [token, 'pending', 'documents_completed']);
         if (tempReg.rows.length === 0) {
             return res.status(400).json({
                 success: false,
                 message: '無効なトークンまたは期限切れです。'
             });
         }
+        const email = tempReg.rows[0].email;
+        console.log('[REGISTER][UPDATE_DOCS] email=', email, 'size=', JSON.stringify(documentsData).length);
         // 書類データを更新
         await query(`UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
        WHERE verification_token = $3`, [JSON.stringify(documentsData), 'documents_completed', token]);
+        console.log('[REGISTER][UPDATE_DOCS] saved.');
         res.json({
             success: true,
             message: '書類データが更新されました。'
@@ -231,6 +246,7 @@ router.post('/complete/:token', async (req, res) => {
     try {
         const { token } = req.params;
         const { password } = req.body;
+        console.log('[REGISTER][COMPLETE] start token=', (token || '').slice(0, 8));
         // データベース接続テスト
         try {
             const testQuery = await query('SELECT 1 as test');
@@ -269,7 +285,7 @@ router.post('/complete/:token', async (req, res) => {
         }
         // 仮登録データ取得
         const tempReg = await query(`SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND expires_at > NOW() AND status = $2`, [token, 'documents_completed']);
+       WHERE verification_token = $1 AND status = $2`, [token, 'documents_completed']);
         if (tempReg.rows.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -277,6 +293,7 @@ router.post('/complete/:token', async (req, res) => {
             });
         }
         const registration = tempReg.rows[0];
+        console.log('[REGISTER][COMPLETE] email=', registration.email, 'hasDocs=', !!registration.documents_data);
         // パスワードハッシュ化
         const passwordHash = await bcrypt.hash(password, 10);
         // 既存のinactiveなユーザーがいるかチェック
@@ -298,6 +315,7 @@ router.post('/complete/:token', async (req, res) => {
          VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id`, [registration.email, passwordHash, 'job_seeker']);
             userId = userResult.rows[0].id;
         }
+        console.log('[REGISTER][COMPLETE] userId=', userId);
         // 求職者詳細情報作成
         await query(`INSERT INTO job_seekers (user_id, first_name, last_name, created_at, updated_at) 
        VALUES ($1, $2, $3, NOW(), NOW())`, [userId, registration.first_name, registration.last_name]);
@@ -309,13 +327,21 @@ router.post('/complete/:token', async (req, res) => {
         }
         catch (statusError) {
             console.error('求職者ステータス初期化エラー:', statusError);
-            // ステータス初期化に失敗しても処理を継続
             console.log('ステータス初期化をスキップして処理を継続');
         }
         // 仮登録で入力された書類データをuser_documentsテーブルに移行
         if (registration.documents_data) {
             try {
-                const documentsData = JSON.parse(registration.documents_data);
+                let documentsData;
+                try {
+                    documentsData = typeof registration.documents_data === 'string'
+                        ? JSON.parse(registration.documents_data)
+                        : registration.documents_data;
+                }
+                catch (e) {
+                    documentsData = registration.documents_data;
+                }
+                console.log('[REGISTER][COMPLETE] migrating docs for userId=', userId, 'keys=', Object.keys(documentsData || {}));
                 // 基本情報をuser_documentsに保存
                 if (documentsData.resume?.basicInfo) {
                     await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
@@ -357,11 +383,46 @@ router.post('/complete/:token', async (req, res) => {
                     await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
              VALUES ($1, $2, $3, NOW(), NOW())`, [userId, 'spouse_info', JSON.stringify({ spouse: documentsData.spouse, spouseSupport: documentsData.spouseSupport })]);
                 }
+                // 住所・連絡先などトップレベルの補助情報も保存
+                try {
+                    const addressInfo = {
+                        livePostNumber: documentsData.livePostNumber || documentsData.live?.postNumber || null,
+                        liveAddress: documentsData.liveAddress || documentsData.live?.address || null,
+                        kanaLiveAddress: documentsData.kanaLiveAddress || documentsData.live?.kanaAddress || null,
+                        livePhoneNumber: documentsData.livePhoneNumber || documentsData.live?.phone || null,
+                        liveMail: documentsData.liveMail || documentsData.live?.mail || null,
+                    };
+                    await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`, [userId, 'address_info', JSON.stringify(addressInfo)]);
+                    const contactInfo = {
+                        contactSameAsLive: documentsData.contactSameAsLive || documentsData.contact?.sameAsLive || false,
+                        contactPostNumber: documentsData.contactPostNumber || documentsData.contact?.postNumber || null,
+                        contactAddress: documentsData.contactAddress || documentsData.contact?.address || null,
+                        kanaContactAddress: documentsData.kanaContactAddress || documentsData.contact?.kanaAddress || null,
+                        contactPhoneNumber: documentsData.contactPhoneNumber || documentsData.contact?.phone || null,
+                        contactMail: documentsData.contactMail || documentsData.contact?.mail || null,
+                    };
+                    await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`, [userId, 'contact_info', JSON.stringify(contactInfo)]);
+                    const japanesePlan = {
+                        certificateStatus: documentsData.certificateStatus || null,
+                        japaneseLevel: documentsData.japaneseLevel || null,
+                        qualificationDate: documentsData.qualificationDate || null,
+                        nextJapaneseTestDate: documentsData.nextJapaneseTestDate || null,
+                        nextJapaneseTestLevel: documentsData.nextJapaneseTestLevel || null,
+                    };
+                    await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+             VALUES ($1, $2, $3, NOW(), NOW())`, [userId, 'japanese_test_plan', JSON.stringify(japanesePlan)]);
+                }
+                catch (e) {
+                    console.warn('[REGISTER][COMPLETE] optional info save warning:', e);
+                }
+                const types = await query(`SELECT document_type FROM user_documents WHERE user_id = $1 ORDER BY created_at ASC`, [userId]);
+                console.log('[REGISTER][COMPLETE] migrated types for userId=', userId, types.rows.map(r => r.document_type));
                 console.log('書類データ移行完了:', userId);
             }
             catch (documentsError) {
                 console.error('書類データ移行エラー:', documentsError);
-                // 書類データ移行に失敗しても処理を継続
                 console.log('書類データ移行をスキップして処理を継続');
             }
         }

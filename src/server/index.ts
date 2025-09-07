@@ -443,8 +443,8 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       // 書類が無ければDBの値を返す
       const jsResult = await query(
         `SELECT completion_rate FROM job_seekers WHERE user_id = $1`,
-        [userId]
-      );
+      [userId]
+    );
       const dbRate = jsResult.rows.length > 0 && jsResult.rows[0].completion_rate !== null ? Number(jsResult.rows[0].completion_rate) : 0;
       return res.json({ success: true, completionRate: dbRate });
     }
@@ -971,8 +971,8 @@ app.get('/api/jobseekers/:id', async (req, res) => {
     // すべての書類データを取得してマージ
     const allDocs = await query(`
       SELECT document_type, document_data, created_at
-      FROM user_documents 
-      WHERE user_id = $1
+        FROM user_documents 
+        WHERE user_id = $1 
       ORDER BY created_at ASC
     `, [row.user_id]);
 
@@ -1165,9 +1165,9 @@ app.put('/api/jobseekers/profile', async (req, res) => {
     );
     
     console.log('プロフィール更新結果:', updateResult);
-    
-    res.json({
-      success: true,
+      
+      res.json({
+        success: true,
       message: 'プロフィールを更新しました'
     });
     
@@ -1536,17 +1536,17 @@ app.get('/api/documents/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
-
+    
     console.log('[DOCS][GET] userId =', userId);
 
     // 複数document_typeをマージして返却
     const result = await query(`
       SELECT document_type, document_data, created_at
-      FROM user_documents
-      WHERE user_id = $1
+      FROM user_documents 
+      WHERE user_id = $1 
       ORDER BY created_at ASC
     `, [userId]);
-
+    
     if (result.rows.length === 0) {
       // フォールバック: temporary_registrations の documents_data
       const temp = await query(`

@@ -315,29 +315,74 @@ router.get('/:userId', async (req, res) => {
                 message: 'ユーザーIDは必須です'
             });
         }
-        // データベースから取得
-        try {
-            const queryText = 'SELECT document_data, created_at, updated_at FROM user_documents WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1';
-            const result = await query(queryText, [userId]);
-            if (result.rows.length > 0) {
-                const documentData = result.rows[0].document_data;
-                logger.info('書類取得成功（データベース）', { userId, documentType }, undefined, 'api_success');
-                return res.json({
-                    success: true,
-                    data: documentData,
-                    createdAt: result.rows[0].created_at,
-                    updatedAt: result.rows[0].updated_at
-                });
+        // すべてのドキュメントタイプを取得して統合
+        const result = await query(`SELECT document_type, document_data, created_at, updated_at
+       FROM user_documents
+       WHERE user_id = $1
+       ORDER BY created_at ASC`, [userId]);
+        if (result.rows.length === 0) {
+            logger.warn('書類取得API: 書類が見つかりません', { userId, documentType }, undefined, 'api_failure');
+            return res.status(404).json({
+                success: false,
+                message: '書類が見つかりません'
+            });
+        }
+        const merged = {};
+        const liftBasic = (d) => {
+            const b = d?.resume?.basicInfo;
+            if (!b)
+                return;
+            merged.lastName = merged.lastName || b.lastName;
+            merged.firstName = merged.firstName || b.firstName;
+            merged.kanaLastName = merged.kanaLastName || b.kanaLastName;
+            merged.kanaFirstName = merged.kanaFirstName || b.kanaFirstName;
+            merged.birthDate = merged.birthDate || b.dateOfBirth;
+            merged.gender = merged.gender || b.gender;
+            merged.nationality = merged.nationality || b.nationality;
+            merged.liveAddress = merged.liveAddress || b.address;
+            merged.livePhoneNumber = merged.livePhoneNumber || b.phone;
+            merged.liveMail = merged.liveMail || b.email;
+        };
+        for (const row of result.rows) {
+            const data = row.document_data || {};
+            Object.assign(merged, data);
+            liftBasic(data);
+            if (row.document_type === 'basic_info') {
+                const b = data;
+                merged.lastName = merged.lastName || b.lastName;
+                merged.firstName = merged.firstName || b.firstName;
+                merged.kanaLastName = merged.kanaLastName || b.kanaLastName;
+                merged.kanaFirstName = merged.kanaFirstName || b.kanaFirstName;
+                merged.birthDate = merged.birthDate || b.dateOfBirth;
+                merged.gender = merged.gender || b.gender;
+                merged.nationality = merged.nationality || b.nationality;
+                merged.liveAddress = merged.liveAddress || b.address;
+                merged.livePhoneNumber = merged.livePhoneNumber || b.phone;
+                merged.liveMail = merged.liveMail || b.email;
+            }
+            if (data.resume) {
+                merged.resume = { ...(merged.resume || {}), ...data.resume };
+            }
+            if (data.workHistory) {
+                merged.workHistory = { ...(merged.workHistory || {}), ...data.workHistory };
+            }
+            if (data.skillSheet) {
+                merged.skillSheet = { ...(merged.skillSheet || {}), ...data.skillSheet };
+                if (data.skillSheet.skills) {
+                    merged.skillSheet.skills = { ...(merged.skillSheet.skills || {}), ...data.skillSheet.skills };
+                }
+            }
+            if (data.certificateStatus) {
+                merged.certificateStatus = { ...(merged.certificateStatus || {}), ...data.certificateStatus };
             }
         }
-        catch (dbError) {
-            logger.error('データベース読み込みエラー', { userId, documentType, error: dbError.message }, undefined, 'db_error');
-        }
-        // データが見つからない場合
-        logger.warn('書類取得API: 書類が見つかりません', { userId, documentType }, undefined, 'api_failure');
-        return res.status(404).json({
-            success: false,
-            message: '書類が見つかりません'
+        const first = result.rows[0];
+        const last = result.rows[result.rows.length - 1];
+        return res.json({
+            success: true,
+            data: merged,
+            createdAt: first.created_at,
+            updatedAt: last.updated_at || last.created_at
         });
     }
     catch (error) {
