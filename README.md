@@ -1877,3 +1877,39 @@ $$ LANGUAGE plpgsql;
 5. **オンボーディング**: 新規ユーザー向けの段階的ガイダンス
 
 この仮登録システムにより、JustJoinプラットフォームのユーザー体験とセキュリティが大幅に向上し、より多くの求職者に安全で使いやすいサービスを提供できるようになりました。
+
+### 最近の改善 (2025-09-07)
+- 入力率計算: 「現在の日本語資格=なし/None」「予定の日本語資格=未定/Not yet」でもレベル・日付を加点（フロント/サーバー両対応）
+- 書類保存API: `POST /api/documents` の安定化（SELECT→UPDATE/INSERTへ、検証・ログ追加）
+- 書類反映: `temporary_registrations` → `user_documents` への移行拡充（住所/連絡先/日本語計画）
+- 顔写真: 管理者一覧の最新20件スキャンで `resume.photoUrl` を確実に反映
+- ログイン: ロール不一致時にメール単体で再検索するフォールバックを追加
+
+### Cloud Buildでのデプロイ
+```bash
+# 1) Dockerfile.gcp を使用してCloud Buildでビルド&プッシュ
+cp Dockerfile.gcp Dockerfile
+REV=$(date +%Y%m%d%H%M%S)-deploy
+gcloud builds submit --tag gcr.io/justjoin-platform/justjoin:$REV --timeout=1800 .
+rm Dockerfile
+
+# 2) Cloud Runへデプロイ
+gcloud run deploy justjoin \
+  --image gcr.io/justjoin-platform/justjoin:$REV \
+  --platform managed \
+  --region asia-northeast1 \
+  --allow-unauthenticated \
+  --port 8080 \
+  --memory 1Gi \
+  --cpu 1 \
+  --max-instances 10 \
+  --min-instances 0 \
+  --env-vars-file env.gcp.yaml \
+  --add-cloudsql-instances justjoin-platform:asia-northeast1:justjoin-enterprise \
+  --timeout 300 \
+  --concurrency 80
+
+# 3) リビジョン確認
+gcloud run services describe justjoin --region=asia-northeast1 \
+  --format='value(status.latestReadyRevisionName,status.traffic[0].revisionName,status.url)'
+```
