@@ -3386,7 +3386,7 @@ whiteCells.forEach(cell => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="あり">あり</SelectItem>
-                      <SelectItem value="なし">なし</SelectItem>
+                      <SelectItem value="なし">なし / None</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3398,7 +3398,7 @@ whiteCells.forEach(cell => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="あり">あり</SelectItem>
-                      <SelectItem value="なし">なし</SelectItem>
+                      <SelectItem value="なし">なし / None</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3433,7 +3433,7 @@ whiteCells.forEach(cell => {
                       <SelectValue placeholder={t('documents.selectLevel')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="なし">なし</SelectItem>
+                      <SelectItem value="なし">なし / None</SelectItem>
                       <SelectItem value="N1">N1</SelectItem>
                       <SelectItem value="N2">N2</SelectItem>
                       <SelectItem value="N3">N3</SelectItem>
@@ -3443,12 +3443,13 @@ whiteCells.forEach(cell => {
                   </Select>
                 </div>
                 <div>
-                                      <Label className="text-sm font-medium">{t('documents.acquisitionDate')} <span className="text-red-500">*</span></Label>
+                                      <Label className="text-sm font-medium">{t('documents.acquisitionDate')}</Label>
                   <Input
                     type="date"
                     value={documentData.certificateStatus.date}
                     onChange={(e) => setDocumentData(prev => ({ ...prev, certificateStatus: { ...prev.certificateStatus, date: e.target.value } }))}
                     className="h-10"
+                    disabled={documentData.certificateStatus.name === 'なし'}
                   />
                 </div>
               </div>
@@ -3460,7 +3461,7 @@ whiteCells.forEach(cell => {
                       <SelectValue placeholder={t('documents.selectLevel')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="未定">未定</SelectItem>
+                      <SelectItem value="未定">未定 / Not yet</SelectItem>
                       <SelectItem value="N1">N1</SelectItem>
                       <SelectItem value="N2">N2</SelectItem>
                       <SelectItem value="N3">N3</SelectItem>
@@ -3470,12 +3471,13 @@ whiteCells.forEach(cell => {
                   </Select>
                 </div>
                 <div>
-                                      <Label className="text-sm font-medium">{t('documents.nextExamDate')} <span className="text-red-500">*</span></Label>
+                                      <Label className="text-sm font-medium">{t('documents.nextExamDate')}</Label>
                   <Input
                     type="date"
                     value={documentData.nextJapaneseTestDate}
                     onChange={(e) => setDocumentData(prev => ({ ...prev, nextJapaneseTestDate: e.target.value }))}
                     className="h-10"
+                    disabled={documentData.nextJapaneseTestLevel === '未定'}
                   />
                 </div>
               </div>

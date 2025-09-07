@@ -547,7 +547,7 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
 
       // 日本語
       const japaneseLevel = data.japaneseLevel || (data.certificateStatus?.name && data.certificateStatus.name !== 'なし' ? data.certificateStatus.name : '');
-      const qualificationDate = data.qualificationDate || data.certificateStatus?.date || '';
+      const qualificationDate = data.certificateStatus?.name === 'なし' ? '' : (data.qualificationDate || data.certificateStatus?.date || '');
       addField(japaneseLevel);
       addField(qualificationDate);
 
