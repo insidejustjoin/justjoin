@@ -216,37 +216,6 @@ export function JobSeekerMyPage() {
               };
               setUserData(updatedUserData);
             }
-          } else if (response.status === 404) {
-            // フォールバック: メールで再取得してID修復
-            try {
-              const byEmailRes = await fetch(`${apiUrl}/api/jobseekers/by-email/${encodeURIComponent(String(user.email))}`);
-              if (byEmailRes.ok) {
-                const byEmail = await byEmailRes.json();
-                const newId = String(byEmail?.data?.userId || '');
-                const profileData = byEmail?.data || {};
-                if (newId) {
-                  // in-memory
-                  const updatedUserData = {
-                    ...basicUserData,
-                    id: newId,
-                    full_name: profileData.full_name || '',
-                    interview_enabled: profileData.interview_enabled || false
-                  };
-                  setUserData(updatedUserData);
-
-                  // localStorageも修復
-                  const stored = localStorage.getItem('auth_user');
-                  if (stored) {
-                    try {
-                      const parsed = JSON.parse(stored);
-                      parsed.id = newId;
-                      localStorage.setItem('auth_user', JSON.stringify(parsed));
-                      console.log('MyPage: userIdを修復しました ->', newId);
-                    } catch {}
-                  }
-                }
-              }
-            } catch {}
           } else {
             // Profile API エラーは静かに処理
           }

@@ -254,41 +254,23 @@ router.post('/', async (req, res) => {
                 message: 'ユーザーID、書類タイプ、書類データは必須です'
             });
         }
-        // データベースに保存（メインストレージ）
-        try {
-            const checkQuery = 'SELECT id FROM user_documents WHERE user_id = $1';
-            const checkResult = await query(checkQuery, [userId]);
-            if (checkResult.rows.length > 0) {
-                // 既存データを更新
-                const updateQuery = `
-          UPDATE user_documents 
-          SET document_data = $1, document_type = $2, updated_at = $3 
-          WHERE user_id = $4
-        `;
-                await query(updateQuery, [JSON.stringify(documentData), documentType, timestamp || new Date().toISOString(), userId]);
-            }
-            else {
-                // 新規データを挿入
-                const insertQuery = `
-          INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at) 
-          VALUES ($1, $2, $3, $4, $5)
-        `;
-                const now = timestamp || new Date().toISOString();
-                await query(insertQuery, [userId, documentType, JSON.stringify(documentData), now, now]);
-            }
-            // 完成度を計算して更新
-            let completionRate = 0;
-            if (documentType === 'resume') {
-                completionRate = calculateCompletionRate(documentData);
-                // job_seekersテーブルのcompletion_rateを更新
-                await query('UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2', [completionRate, userId]);
-            }
-            logger.info('書類保存成功（データベース）', { userId, documentType, completionRate }, undefined, 'api_success');
+        // UPSERTで重複キーを回避
+        const now = timestamp || new Date().toISOString();
+        const upsertQuery = `
+      INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $4)
+      ON CONFLICT (user_id, document_type)
+      DO UPDATE SET document_data = EXCLUDED.document_data, updated_at = EXCLUDED.updated_at
+      RETURNING id
+    `;
+        await query(upsertQuery, [userId, documentType, JSON.stringify(documentData), now]);
+        // 完成度を計算して更新（履歴書の場合）
+        let completionRate = 0;
+        if (documentType === 'resume') {
+            completionRate = calculateCompletionRate(documentData);
+            await query('UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2', [completionRate, userId]);
         }
-        catch (dbError) {
-            logger.error('データベース保存エラー', { userId, documentType, error: dbError.message }, undefined, 'db_error');
-            throw new Error(`データベース保存に失敗しました: ${dbError.message}`);
-        }
+        logger.info('書類保存成功（UPSERT）', { userId, documentType, completionRate }, undefined, 'api_success');
         res.status(200).json({
             success: true,
             message: '書類データが正常に保存されました'

@@ -384,6 +384,99 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
       ORDER BY created_at ASC
     `, [userId]);
         if (rows.rows.length === 0) {
+            // フォールバック: temporary_registrations の documents_data を使用して計算
+            const temp = await query(`
+        SELECT tr.documents_data
+        FROM temporary_registrations tr
+        JOIN users u ON u.email = tr.email
+        WHERE u.id = $1 AND tr.status IN ('pending','documents_completed','completed')
+        ORDER BY tr.updated_at DESC NULLS LAST, tr.created_at DESC NULLS LAST
+        LIMIT 1
+      `, [userId]);
+            if (temp.rows.length > 0 && temp.rows[0].documents_data) {
+                let doc = temp.rows[0].documents_data;
+                try {
+                    doc = typeof doc === 'string' ? JSON.parse(doc) : doc;
+                }
+                catch { }
+                // 最小限の正規化
+                const normalized = { ...doc };
+                normalized.resume = normalized.resume || {};
+                normalized.skillSheet = normalized.skillSheet || {};
+                normalized.workHistory = normalized.workHistory || {};
+                if (!normalized.resume.education && Array.isArray(normalized.education))
+                    normalized.resume.education = normalized.education;
+                if (!normalized.resume.workExperience && Array.isArray(normalized.workExperience))
+                    normalized.resume.workExperience = normalized.workExperience;
+                if (!normalized.skillSheet.skills && normalized.skills && typeof normalized.skills === 'object')
+                    normalized.skillSheet.skills = normalized.skills;
+                // フロントと同一ロジック（関数は下で定義済み）を流用
+                const calculateCompletionRate = (data) => {
+                    let score = 0;
+                    let maxScore = 0;
+                    const addField = (v) => { maxScore += 1; if (typeof v === 'string') {
+                        if (v.trim() !== '')
+                            score += 1;
+                    }
+                    else if (typeof v === 'boolean') {
+                        if (v)
+                            score += 1;
+                    }
+                    else if (Array.isArray(v)) {
+                        if (v.length > 0)
+                            score += 1;
+                    }
+                    else if (v !== null && v !== undefined) {
+                        score += 1;
+                    } };
+                    addField(data?.resume?.basicInfo?.lastName || normalized.lastName);
+                    addField(data?.resume?.basicInfo?.firstName || normalized.firstName);
+                    addField(data?.resume?.basicInfo?.kanaLastName || normalized.kanaLastName);
+                    addField(data?.resume?.basicInfo?.kanaFirstName || normalized.kanaFirstName);
+                    addField(data?.resume?.basicInfo?.dateOfBirth || normalized.birthDate);
+                    addField(data?.resume?.basicInfo?.gender || normalized.gender);
+                    addField(data?.resume?.basicInfo?.nationality || normalized.nationality);
+                    addField(normalized.livePostNumber);
+                    addField(normalized.liveAddress || data?.resume?.basicInfo?.address);
+                    addField(normalized.kanaLiveAddress);
+                    addField(normalized.livePhoneNumber || data?.resume?.basicInfo?.phone);
+                    addField(normalized.liveMail || data?.resume?.basicInfo?.email);
+                    const same = !!normalized.contactSameAsLive || !!normalized.contact?.sameAsLive;
+                    addField(same ? true : (normalized.contactPostNumber || normalized.contact?.postNumber));
+                    addField(same ? true : (normalized.contactAddress || normalized.contact?.address));
+                    addField(same ? true : (normalized.kanaContactAddress || normalized.contact?.kanaAddress));
+                    addField(same ? true : (normalized.contactPhoneNumber || normalized.contact?.phone));
+                    addField(same ? true : (normalized.contactMail || normalized.contact?.mail));
+                    addField(normalized.resume?.photoUrl);
+                    addField(normalized.resume?.noEducation ? true : (normalized.resume?.education && normalized.resume.education.length > 0));
+                    addField(normalized.resume?.noWorkExperience ? true : (normalized.resume?.workExperience && normalized.resume.workExperience.length > 0));
+                    addField(normalized.resume?.noQualifications ? true : (normalized.resume?.qualifications && normalized.resume.qualifications.length > 0));
+                    addField(normalized.workHistory?.noWorkHistory ? true : (normalized.workHistory?.workExperiences && normalized.workHistory.workExperiences.length > 0));
+                    const skills = normalized.skillSheet?.skills ? Object.values(normalized.skillSheet.skills) : [];
+                    const skillsMaxWeight = 3;
+                    if (skills.length > 0) {
+                        const completed = skills.filter((s) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
+                        maxScore += skillsMaxWeight;
+                        score += skillsMaxWeight * (completed / skills.length);
+                    }
+                    const japaneseLevel = normalized.japaneseLevel || (normalized.certificateStatus?.name && normalized.certificateStatus.name !== 'なし' ? normalized.certificateStatus.name : '');
+                    const qualificationDate = normalized.certificateStatus?.name === 'なし' ? '' : (normalized.qualificationDate || normalized.certificateStatus?.date || '');
+                    addField(japaneseLevel);
+                    addField(qualificationDate);
+                    addField(normalized.selfIntroduction);
+                    addField(normalized.spouse);
+                    addField(normalized.spouseSupport);
+                    const baseRate = maxScore > 0 ? (score / maxScore) * 100 : 0;
+                    let bonus = 0;
+                    if (normalized.whyJapan && normalized.whyJapan.length >= 300)
+                        bonus += 2;
+                    if (normalized.whyInterestJapan && normalized.whyInterestJapan.length >= 300)
+                        bonus += 2;
+                    return Math.min(100, Math.round(baseRate + bonus));
+                };
+                const rate = calculateCompletionRate(normalized);
+                return res.json({ success: true, completionRate: rate });
+            }
             // 書類が無ければDBの値を返す
             const jsResult = await query(`SELECT completion_rate FROM job_seekers WHERE user_id = $1`, [userId]);
             const dbRate = jsResult.rows.length > 0 && jsResult.rows[0].completion_rate !== null ? Number(jsResult.rows[0].completion_rate) : 0;
@@ -492,14 +585,24 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
             addField(data.birthDate);
             addField(data.gender);
             addField(data.nationality);
-            // 連絡先など
+            // 現住所（フロント同等のフィールドを考慮）
+            addField(data.livePostNumber);
             addField(data.liveAddress);
+            addField(data.kanaLiveAddress);
             addField(data.livePhoneNumber);
             addField(data.liveMail);
+            // 連絡先（同一なら自動充足）
+            const same = !!data.contactSameAsLive || !!data.contact?.sameAsLive;
+            addField(same ? true : (data.contactPostNumber || data.contact?.postNumber));
+            addField(same ? true : (data.contactAddress || data.contact?.address));
+            addField(same ? true : (data.kanaContactAddress || data.contact?.kanaAddress));
+            addField(same ? true : (data.contactPhoneNumber || data.contact?.phone));
+            addField(same ? true : (data.contactMail || data.contact?.mail));
             // 履歴書
             addField(data.resume?.photoUrl);
             addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
             addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
+            addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume.qualifications.length > 0));
             // 職務経歴
             addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
             // スキル（最大3%）
@@ -510,7 +613,7 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
                 maxScore += skillsMaxWeight;
                 score += skillsMaxWeight * (completed / skills.length);
             }
-            // 日本語
+            // 日本語（"なし"なら取得日は免除）
             const japaneseLevel = data.japaneseLevel || (data.certificateStatus?.name && data.certificateStatus.name !== 'なし' ? data.certificateStatus.name : '');
             const qualificationDate = data.certificateStatus?.name === 'なし' ? '' : (data.qualificationDate || data.certificateStatus?.date || '');
             addField(japaneseLevel);
@@ -866,7 +969,38 @@ app.get('/api/jobseekers/:id', async (req, res) => {
       LIMIT 1
     `, [id]);
         if (base.rows.length === 0) {
-            return res.status(404).json({ success: false, message: '求職者が見つかりません' });
+            // フォールバック: usersが存在すれば temporary_documents または user_documents から最小プロフィールを作成
+            const u = await query(`SELECT id, email FROM users WHERE id::text = $1 LIMIT 1`, [id]);
+            if (u.rows.length === 0) {
+                return res.status(404).json({ success: false, message: '求職者が見つかりません' });
+            }
+            const userId = u.rows[0].id;
+            const email = u.rows[0].email;
+            const docs = await query(`SELECT document_type, document_data FROM user_documents WHERE user_id = $1 ORDER BY created_at ASC`, [userId]);
+            let merged = {};
+            for (const r of docs.rows) {
+                const d = r.document_data || {};
+                try {
+                    Object.assign(merged, d);
+                    if (d.resume) {
+                        merged.resume = { ...(merged.resume || {}), ...d.resume };
+                    }
+                }
+                catch { }
+            }
+            if (!merged.resume) {
+                const temp = await query(`SELECT documents_data FROM temporary_registrations WHERE email = $1 ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST LIMIT 1`, [email]);
+                if (temp.rows.length > 0 && temp.rows[0].documents_data) {
+                    try {
+                        merged = typeof temp.rows[0].documents_data === 'string' ? JSON.parse(temp.rows[0].documents_data) : temp.rows[0].documents_data;
+                    }
+                    catch {
+                        merged = {};
+                    }
+                }
+            }
+            const full_name = `${merged?.resume?.basicInfo?.lastName || ''} ${merged?.resume?.basicInfo?.firstName || ''}`.trim();
+            return res.json({ success: true, jobSeeker: { id: userId, user_id: userId, email, full_name, profile_photo: merged?.resume?.photoUrl || null } });
         }
         const row = base.rows[0];
         // すべての書類データを取得してマージ
