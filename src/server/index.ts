@@ -771,79 +771,64 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       let gender = row.gender; // 基本の性別
       
       try {
+        // まず直近のドキュメント1件を見る（従来）
         const docResult = await query(`
-          SELECT document_data
+          SELECT document_type, document_data
           FROM user_documents 
           WHERE user_id = $1 
           ORDER BY created_at DESC 
           LIMIT 1
         `, [row.user_id]);
         
+        let docData: any = null;
+        
         if (docResult.rows.length > 0) {
-          const documentData = docResult.rows[0].document_data;
-          
-          // デバッグログを追加
-          console.log(`User ${row.user_id} document data:`, JSON.stringify(documentData, null, 2));
-          
-          // 写真URLを取得（photoUrlまたはprofile_photoから）
-          if (documentData && documentData.resume) {
-            if (documentData.resume.photoUrl) {
-              photoUrl = documentData.resume.photoUrl;
-            } else if (documentData.resume.profile_photo) {
-              photoUrl = documentData.resume.profile_photo;
-            }
+          docData = docResult.rows[0].document_data;
+          // 写真URL（resume.photoUrl）
+          if (docData?.resume?.photoUrl) {
+            photoUrl = docData.resume.photoUrl;
           }
-          
-          // 国籍情報を取得（user_documentsから優先、なければjob_seekersから）
-          if (documentData?.nationality) {
-            nationality = documentData.nationality;
-          }
-          
-          // 電話番号を取得（user_documentsから優先、なければjob_seekersから）
-          if (documentData?.livePhoneNumber) {
-            phone = documentData.livePhoneNumber;
-          }
-          
-          // 生年月日を取得（user_documentsから優先、なければjob_seekersから）
-          if (documentData?.birthDate) {
-            birthDate = documentData.birthDate;
-          }
-          
-          // 性別を取得（user_documentsから優先、なければjob_seekersから）
-          if (documentData?.gender) {
-            gender = documentData.gender;
-          }
-          
-          // 日本語レベルを取得（複数候補から最初に値が入っているものをセット）
-          
-          // デバッグログを追加
-          console.log('documentData.japaneseInfo:', documentData?.japaneseInfo);
-          console.log('documentData.japaneseInfo.nextJapaneseTestLevel:', documentData?.japaneseInfo?.nextJapaneseTestLevel);
-          console.log('documentData.japaneseInfo.certificateStatus:', documentData?.japaneseInfo?.certificateStatus);
-          
-          if (documentData?.japaneseInfo?.nextJapaneseTestLevel) {
-            japaneseLevel = documentData.japaneseInfo.nextJapaneseTestLevel;
-            console.log('japaneseLevel set to nextJapaneseTestLevel:', japaneseLevel);
-          } else if (documentData?.japaneseInfo?.certificateStatus?.name) {
-            japaneseLevel = documentData.japaneseInfo.certificateStatus.name;
-            console.log('japaneseLevel set to certificateStatus.name:', japaneseLevel);
-          } else if (documentData?.nextJapaneseTestLevel) {
-            japaneseLevel = documentData.nextJapaneseTestLevel;
-            console.log('japaneseLevel set to documentData.nextJapaneseTestLevel:', japaneseLevel);
-          } else if (documentData?.certificateStatus?.name) {
-            japaneseLevel = documentData.certificateStatus.name;
-            console.log('japaneseLevel set to documentData.certificateStatus.name:', japaneseLevel);
-          }
-
-          // 詳細情報を設定
-          detailedInfo = {
-            japaneseLevel: japaneseLevel,
-            nextJapaneseTest: documentData?.nextJapaneseTestDate || documentData?.nextJapaneseTestLevel || '未設定',
-            selfIntroduction: documentData?.resume?.selfPR || documentData?.selfIntroduction || documentData?.resume?.selfIntroduction || '',
-            hasSelfIntroduction: !!(documentData?.resume?.selfPR || documentData?.selfIntroduction || documentData?.resume?.selfIntroduction),
-            documentData: documentData
-          };
+          // その他の情報も従来通り設定
+          if (docData?.nationality) nationality = docData.nationality;
+          if (docData?.livePhoneNumber) phone = docData.livePhoneNumber;
+          if (docData?.birthDate) birthDate = docData.birthDate;
+          if (docData?.gender) gender = docData.gender;
         }
+        
+        // 直近1件で写真が見つからない場合、最新20件を走査して最初の写真を使用
+        if (!photoUrl) {
+          const scan = await query(`
+            SELECT document_data
+            FROM user_documents
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 20
+          `, [row.user_id]);
+          for (const r of scan.rows) {
+            const d = r.document_data || {};
+            if (d?.resume?.photoUrl) { photoUrl = d.resume.photoUrl; break; }
+          }
+        }
+        
+        // 日本語レベル（従来ロジックをdocDataで）
+        if (docData?.japaneseInfo?.nextJapaneseTestLevel) {
+          japaneseLevel = docData.japaneseInfo.nextJapaneseTestLevel;
+        } else if (docData?.japaneseInfo?.certificateStatus?.name) {
+          japaneseLevel = docData.japaneseInfo.certificateStatus.name;
+        } else if (docData?.nextJapaneseTestLevel) {
+          japaneseLevel = docData.nextJapaneseTestLevel;
+        } else if (docData?.certificateStatus?.name) {
+          japaneseLevel = docData.certificateStatus.name;
+        }
+        
+        // 詳細情報を設定
+        detailedInfo = {
+          japaneseLevel: japaneseLevel,
+          nextJapaneseTest: docData?.nextJapaneseTestDate || docData?.nextJapaneseTestLevel || '未設定',
+          selfIntroduction: docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction || '',
+          hasSelfIntroduction: !!(docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction),
+          documentData: docData
+        };
       } catch (error) {
         console.warn(`詳細情報取得エラー (ユーザーID: ${row.user_id}):`, error);
       }
