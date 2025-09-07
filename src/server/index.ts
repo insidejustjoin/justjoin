@@ -1536,20 +1536,34 @@ app.get('/api/documents/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
-    
+
     console.log('[DOCS][GET] userId =', userId);
 
     // 複数document_typeをマージして返却
     const result = await query(`
       SELECT document_type, document_data, created_at
-      FROM user_documents 
-      WHERE user_id = $1 
+      FROM user_documents
+      WHERE user_id = $1
       ORDER BY created_at ASC
     `, [userId]);
 
-    console.log('[DOCS][GET] rows =', result.rows.length, 'types =', result.rows.map(r => r.document_type));
-    
     if (result.rows.length === 0) {
+      // フォールバック: temporary_registrations の documents_data
+      const temp = await query(`
+        SELECT tr.documents_data
+        FROM temporary_registrations tr
+        JOIN users u ON u.email = tr.email
+        WHERE u.id = $1 AND tr.status IN ('pending','documents_completed','completed')
+        ORDER BY tr.updated_at DESC NULLS LAST, tr.created_at DESC NULLS LAST
+        LIMIT 1
+      `, [userId]);
+      if (temp.rows.length > 0 && temp.rows[0].documents_data) {
+        let doc = temp.rows[0].documents_data;
+        try {
+          doc = typeof doc === 'string' ? JSON.parse(doc) : doc;
+        } catch {}
+        return res.json({ success: true, data: doc, createdAt: null, updatedAt: null });
+      }
       return res.status(404).json({ success: false, message: 'ドキュメントデータが見つかりません' });
     }
 
@@ -1559,21 +1573,13 @@ app.get('/api/documents/:userId', async (req, res) => {
         const data = row.document_data || {};
         Object.assign(merged, data);
         liftBasic(data);
-        if (data.resume) {
-          merged.resume = { ...(merged.resume || {}), ...data.resume };
-        }
-        if (data.workHistory) {
-          merged.workHistory = { ...(merged.workHistory || {}), ...data.workHistory };
-        }
+        if (data.resume) merged.resume = { ...(merged.resume || {}), ...data.resume };
+        if (data.workHistory) merged.workHistory = { ...(merged.workHistory || {}), ...data.workHistory };
         if (data.skillSheet) {
           merged.skillSheet = { ...(merged.skillSheet || {}), ...data.skillSheet };
-          if (data.skillSheet.skills) {
-            merged.skillSheet.skills = { ...(merged.skillSheet.skills || {}), ...data.skillSheet.skills };
-          }
+          if (data.skillSheet.skills) merged.skillSheet.skills = { ...(merged.skillSheet.skills || {}), ...data.skillSheet.skills };
         }
-        if (data.certificateStatus) {
-          merged.certificateStatus = { ...(merged.certificateStatus || {}), ...data.certificateStatus };
-        }
+        if (data.certificateStatus) merged.certificateStatus = { ...(merged.certificateStatus || {}), ...data.certificateStatus };
       } catch {}
     }
 

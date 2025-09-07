@@ -279,6 +279,8 @@ router.post('/update-documents/:token', async (req, res) => {
       });
     }
 
+    console.log('[REGISTER][UPDATE_DOCS] token=', (token || '').slice(0,8), 'keys=', Object.keys(documentsData || {}));
+
     // 仮登録データの存在確認
     const tempReg = await query(
       `SELECT * FROM temporary_registrations 
@@ -293,6 +295,9 @@ router.post('/update-documents/:token', async (req, res) => {
       });
     }
 
+    const email = tempReg.rows[0].email;
+    console.log('[REGISTER][UPDATE_DOCS] email=', email, 'size=', JSON.stringify(documentsData).length);
+
     // 書類データを更新
     await query(
       `UPDATE temporary_registrations 
@@ -300,6 +305,8 @@ router.post('/update-documents/:token', async (req, res) => {
        WHERE verification_token = $3`,
       [JSON.stringify(documentsData), 'documents_completed', token]
     );
+
+    console.log('[REGISTER][UPDATE_DOCS] saved.');
 
     res.json({ 
       success: true, 
