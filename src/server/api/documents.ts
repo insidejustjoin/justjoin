@@ -1407,8 +1407,8 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
     const updateQuery = `
       UPDATE job_seekers 
       SET interview_enabled = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING id, interview_enabled
+      WHERE user_id = $2
+      RETURNING id, user_id, interview_enabled
     `;
     
     const result = await query(updateQuery, [interviewEnabled, id]);
@@ -1424,6 +1424,7 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
       success: true,
       data: {
         id: result.rows[0].id,
+        userId: result.rows[0].user_id,
         interviewEnabled: result.rows[0].interview_enabled
       },
       message: `面接表示設定を${interviewEnabled ? '有効' : '無効'}にしました`

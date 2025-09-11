@@ -431,171 +431,16 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
     const { userId } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
 
-    // すべての書類データを取得し統合
-    const rows = await query(`
-      SELECT document_type, document_data, created_at
-      FROM user_documents
-      WHERE user_id = $1
-      ORDER BY created_at ASC
-    `, [userId]);
-
-    if (rows.rows.length === 0) {
-      // 書類が無ければDBの値を返す
-      const jsResult = await query(
-        `SELECT completion_rate FROM job_seekers WHERE user_id = $1`,
+    const result = await query(
+      'SELECT completion_rate FROM job_seekers WHERE user_id = $1',
       [userId]
     );
-      const dbRate = jsResult.rows.length > 0 && jsResult.rows[0].completion_rate !== null ? Number(jsResult.rows[0].completion_rate) : 0;
-      return res.json({ success: true, completionRate: dbRate });
-    }
 
-    const merged: any = {};
-    const liftBasic = (d: any) => {
-      const b = d?.resume?.basicInfo;
-      if (!b) return;
-      merged.lastName = merged.lastName || b.lastName;
-      merged.firstName = merged.firstName || b.firstName;
-      merged.kanaLastName = merged.kanaLastName || b.kanaLastName;
-      merged.kanaFirstName = merged.kanaFirstName || b.kanaFirstName;
-      merged.birthDate = merged.birthDate || b.dateOfBirth;
-      merged.gender = merged.gender || b.gender;
-      merged.nationality = merged.nationality || b.nationality;
-      merged.liveAddress = merged.liveAddress || b.address;
-      merged.livePhoneNumber = merged.livePhoneNumber || b.phone;
-      merged.liveMail = merged.liveMail || b.email;
-    };
+    const rate = result.rows.length > 0 && result.rows[0].completion_rate !== null
+      ? Number(result.rows[0].completion_rate)
+      : 0;
 
-    for (const r of rows.rows) {
-      const data = r.document_data || {};
-      Object.assign(merged, data);
-      liftBasic(data);
-      if (r.document_type === 'basic_info') {
-        // basic_infoをトップに昇格（フィールド名はDocumentGeneratorの型に合わせる）
-        const b = data;
-        merged.lastName = merged.lastName || b.lastName;
-        merged.firstName = merged.firstName || b.firstName;
-        merged.kanaLastName = merged.kanaLastName || b.kanaLastName;
-        merged.kanaFirstName = merged.kanaFirstName || b.kanaFirstName;
-        merged.birthDate = merged.birthDate || b.dateOfBirth;
-        merged.gender = merged.gender || b.gender;
-        merged.nationality = merged.nationality || b.nationality;
-        merged.liveAddress = merged.liveAddress || b.address;
-        merged.livePhoneNumber = merged.livePhoneNumber || b.phone;
-        merged.liveMail = merged.liveMail || b.email;
-      }
-      if (data.skillSheet) {
-        merged.skillSheet = { ...(merged.skillSheet || {}), ...data.skillSheet };
-        if (data.skillSheet.skills) {
-          merged.skillSheet.skills = { ...(merged.skillSheet.skills || {}), ...data.skillSheet.skills };
-        }
-      }
-      if (data.workHistory) {
-        merged.workHistory = { ...(merged.workHistory || {}), ...data.workHistory };
-      }
-      if (data.certificateStatus) {
-        merged.certificateStatus = { ...(merged.certificateStatus || {}), ...data.certificateStatus };
-      }
-    }
-
-    // 正規化: トップレベルにある場合は構造へフォールバック
-    const normalized: any = { ...merged };
-    normalized.resume = normalized.resume || {};
-    normalized.skillSheet = normalized.skillSheet || {};
-    normalized.workHistory = normalized.workHistory || {};
-
-    // education/workExperience を resume.* に昇格
-    if (!normalized.resume.education && Array.isArray(normalized.education)) {
-      normalized.resume.education = normalized.education;
-    }
-    if (!normalized.resume.workExperience && Array.isArray(normalized.workExperience)) {
-      normalized.resume.workExperience = normalized.workExperience;
-    }
-    if (normalized.noEducation !== undefined && normalized.resume.noEducation === undefined) {
-      normalized.resume.noEducation = normalized.noEducation;
-    }
-    if (normalized.noWorkExperience !== undefined && normalized.resume.noWorkExperience === undefined) {
-      normalized.resume.noWorkExperience = normalized.noWorkExperience;
-    }
-
-    // skills を skillSheet.skills へ
-    if (!normalized.skillSheet.skills && normalized.skills && typeof normalized.skills === 'object') {
-      normalized.skillSheet.skills = normalized.skills;
-    }
-
-    // workHistory.workExperiences へフォールバック（なければ resume.workExperience を参照）
-    if (!normalized.workHistory.workExperiences && Array.isArray(normalized.resume.workExperience)) {
-      normalized.workHistory.workExperiences = normalized.resume.workExperience;
-    }
-
-    // 入力率計算（フロント新仕様と同一）
-    const calculateCompletionRate = (data: any): number => {
-      let score = 0;
-      let maxScore = 0;
-      const addField = (value: any) => {
-        maxScore += 1;
-        if (typeof value === 'string') {
-          if (value.trim() !== '') score += 1;
-        } else if (typeof value === 'boolean') {
-          if (value) score += 1;
-        } else if (Array.isArray(value)) {
-          if (value.length > 0) score += 1;
-        } else if (value !== null && value !== undefined) {
-          score += 1;
-        }
-      };
-
-      // 基本情報
-      addField(data.lastName);
-      addField(data.firstName);
-      addField(data.kanaLastName);
-      addField(data.kanaFirstName);
-      addField(data.birthDate);
-      addField(data.gender);
-      addField(data.nationality);
-
-      // 連絡先など
-      addField(data.liveAddress);
-      addField(data.livePhoneNumber);
-      addField(data.liveMail);
-
-      // 履歴書
-      addField(data.resume?.photoUrl);
-      addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
-      addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
-
-      // 職務経歴
-      addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
-
-      // スキル（最大3%）
-      const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
-      const skillsMaxWeight = 3;
-      if (skills.length > 0) {
-        const completed = (skills as any[]).filter((s: any) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
-        maxScore += skillsMaxWeight;
-        score += skillsMaxWeight * (completed / (skills as any[]).length);
-      }
-
-      // 日本語
-      const japaneseLevel = data.japaneseLevel || (data.certificateStatus?.name && data.certificateStatus.name !== 'なし' ? data.certificateStatus.name : '');
-      const qualificationDate = data.certificateStatus?.name === 'なし' ? '' : (data.qualificationDate || data.certificateStatus?.date || '');
-      addField(japaneseLevel);
-      addField(qualificationDate);
-
-      // 任意（配偶者など）
-      addField(data.selfIntroduction);
-      addField(data.spouse);
-      addField(data.spouseSupport);
-
-      const baseRate = maxScore > 0 ? (score / maxScore) * 100 : 0;
-      let bonus = 0;
-      if (data.whyJapan && data.whyJapan.length >= 300) bonus += 2;
-      if (data.whyInterestJapan && data.whyInterestJapan.length >= 300) bonus += 2;
-      const final = Math.min(100, Math.round(baseRate + bonus));
-      return final;
-    };
-
-    const completionRate = calculateCompletionRate(normalized);
-    return res.json({ success: true, completionRate });
+    return res.json({ success: true, completionRate: rate });
   } catch (error) {
     console.error('/api/jobseekers/completion-rate エラー:', error);
     res.status(500).json({ success: false, message: '完成度の取得に失敗しました' });
@@ -736,6 +581,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         -- 就職状況（デフォルトは未就職）
         COALESCE(js.employment_status, 'unemployed') as employment_status,
         -- フロントエンドで必要なデフォルト値
+        js.interview_enabled,
         '[]' as skills,
         0 as experience_years,
         '' as desired_job_title,
@@ -793,8 +639,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
           if (docData?.livePhoneNumber) phone = docData.livePhoneNumber;
           if (docData?.birthDate) birthDate = docData.birthDate;
           if (docData?.gender) gender = docData.gender;
-        }
-        
+          }
+          
         // 直近1件で写真が見つからない場合、最新20件を走査して最初の写真を使用
         if (!photoUrl) {
           const scan = await query(`
@@ -806,7 +652,14 @@ app.get('/api/admin/jobseekers', async (req, res) => {
           `, [row.user_id]);
           for (const r of scan.rows) {
             const d = r.document_data || {};
-            if (d?.resume?.photoUrl) { photoUrl = d.resume.photoUrl; break; }
+            if (d?.resume?.photoUrl && !photoUrl) { photoUrl = d.resume.photoUrl; }
+            if (!birthDate && (d?.birthDate || d?.resume?.basicInfo?.dateOfBirth)) {
+              birthDate = d.birthDate || d?.resume?.basicInfo?.dateOfBirth;
+            }
+            if (!nationality && (d?.nationality || d?.resume?.basicInfo?.nationality)) {
+              nationality = d.nationality || d?.resume?.basicInfo?.nationality;
+            }
+            if (photoUrl && birthDate && nationality) break;
           }
         }
         
@@ -819,16 +672,16 @@ app.get('/api/admin/jobseekers', async (req, res) => {
           japaneseLevel = docData.nextJapaneseTestLevel;
         } else if (docData?.certificateStatus?.name) {
           japaneseLevel = docData.certificateStatus.name;
-        }
-        
-        // 詳細情報を設定
-        detailedInfo = {
-          japaneseLevel: japaneseLevel,
+          }
+
+          // 詳細情報を設定
+          detailedInfo = {
+            japaneseLevel: japaneseLevel,
           nextJapaneseTest: docData?.nextJapaneseTestDate || docData?.nextJapaneseTestLevel || '未設定',
           selfIntroduction: docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction || '',
           hasSelfIntroduction: !!(docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction),
           documentData: docData
-        };
+          };
       } catch (error) {
         console.warn(`詳細情報取得エラー (ユーザーID: ${row.user_id}):`, error);
       }
@@ -940,19 +793,44 @@ app.get('/api/jobseekers/:id', async (req, res) => {
     const { query } = await import('../integrations/postgres/client.js');
     
     const base = await query(`
-      SELECT js.*, u.email
+      SELECT js.*, u.email, js.interview_enabled
       FROM job_seekers js
       LEFT JOIN users u ON u.id = js.user_id
       WHERE js.user_id::text = $1 OR js.id::text = $1
       LIMIT 1
     `, [id]);
     
-    if (base.rows.length === 0) {
-      return res.status(404).json({ success: false, message: '求職者が見つかりません' });
+    let row = base.rows[0];
+    if (!row) {
+      // フォールバック: users から基本情報を取得して最低限のプロフィールを構築
+      const userOnly = await query(`
+        SELECT id as user_id, email, status as user_status, created_at, updated_at
+        FROM users
+        WHERE id::text = $1
+        LIMIT 1
+      `, [id]);
+      if (userOnly.rows.length === 0) {
+        return res.status(404).json({ success: false, message: '求職者が見つかりません' });
+      }
+      const u = userOnly.rows[0];
+      row = {
+        id: u.user_id, // job_seekers.id 不明のため user_id を割当
+        user_id: u.user_id,
+        email: u.email,
+        first_name: null,
+        last_name: null,
+        phone: null,
+        address: null,
+        date_of_birth: null,
+        gender: null,
+        nationality: null,
+        profile_photo: null,
+        completion_rate: 0,
+        created_at: u.created_at,
+        updated_at: u.updated_at,
+      } as any;
     }
-
-    const row = base.rows[0];
-
+ 
     // すべての書類データを取得してマージ
     const allDocs = await query(`
       SELECT document_type, document_data, created_at
@@ -960,7 +838,7 @@ app.get('/api/jobseekers/:id', async (req, res) => {
         WHERE user_id = $1 
       ORDER BY created_at ASC
     `, [row.user_id]);
-
+ 
     const merged: any = {
       id: row.id,
       user_id: row.user_id,
@@ -975,6 +853,7 @@ app.get('/api/jobseekers/:id', async (req, res) => {
       nationality: row.nationality,
       profile_photo: row.profile_photo,
       completion_rate: row.completion_rate || 0,
+      interview_enabled: row.interview_enabled || false,
       created_at: row.created_at,
       updated_at: row.updated_at,
     };
@@ -1154,7 +1033,7 @@ app.put('/api/jobseekers/profile', async (req, res) => {
       res.json({
         success: true,
       message: 'プロフィールを更新しました'
-    });
+      });
     
   } catch (error) {
     console.error('プロフィール更新エラー:', error);
@@ -1551,7 +1430,7 @@ app.get('/api/documents/:userId', async (req, res) => {
       }
       return res.status(404).json({ success: false, message: 'ドキュメントデータが見つかりません' });
     }
-
+    
     const merged: any = {}; const liftBasic = (d:any)=>{ if(!d) return; const b=d.resume?.basicInfo; if(b){ merged.lastName=merged.lastName||b.lastName; merged.firstName=merged.firstName||b.firstName; merged.kanaLastName=merged.kanaLastName||b.kanaLastName; merged.kanaFirstName=merged.kanaFirstName||b.kanaFirstName; merged.birthDate=merged.birthDate||b.dateOfBirth; merged.gender=merged.gender||b.gender; merged.nationality=merged.nationality||b.nationality; merged.liveAddress=merged.liveAddress||b.address; merged.livePhoneNumber=merged.livePhoneNumber||b.phone; merged.liveMail=merged.liveMail||b.email; }};
     for (const row of result.rows) {
       try {
@@ -1815,6 +1694,17 @@ app.post('/api/login', async (req, res) => {
         FROM users
         WHERE email = $1 AND user_type = $2
       `, [email, userType]);
+      // フォールバック: 指定タイプで見つからなければメールのみで再検索
+      if (result.rows.length === 0) {
+        console.log('指定タイプでは見つからず、メールのみで再検索します');
+        result = await query(`
+          SELECT id, email, password_hash, user_type as role, status, created_at, updated_at
+          FROM users
+          WHERE email = $1
+          ORDER BY CASE user_type WHEN 'admin' THEN 0 WHEN 'company' THEN 1 ELSE 2 END
+          LIMIT 1
+        `, [email]);
+      }
     } else {
       console.log('全ユーザータイプで検索');
       result = await query(`

@@ -1758,7 +1758,7 @@ export function AdminJobSeekers() {
                             <div>
                               <p><strong>生年月日:</strong> {jobSeeker.date_of_birth ? new Date(jobSeeker.date_of_birth).toLocaleDateString('ja-JP') : '未設定'}</p>
                               <p><strong>国籍:</strong> {jobSeeker.nationality || '未設定'}</p>
-                              <p><strong>日本語資格:</strong> {jobSeeker.certificateStatus?.name || '未設定'}</p>
+                              <p><strong>日本語資格:</strong> {jobSeeker.certificateStatus?.name || jobSeeker.japaneseLevel || jobSeeker.japanese_level || '未設定'}</p>
                               <p><strong>メール:</strong> {jobSeeker.email || jobSeeker.user_email || '未設定'}</p>
                             </div>
                             <div>
