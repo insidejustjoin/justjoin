@@ -246,26 +246,28 @@ router.post('/generate-documents', async (req, res) => {
 // 書類データ保存APIエンドポイント
 router.post('/', async (req, res) => {
     try {
-        const { userId, documentType, documentData, timestamp } = req.body;
-        if (!userId || !documentType || !documentData) {
+        const { userId, documentType = 'resume', documentData, timestamp } = req.body;
+        if (!userId || !documentData) {
             logger.warn('書類保存API: 必須パラメータ不足', { userId, documentType }, undefined, 'api_validation');
             return res.status(400).json({
                 success: false,
-                message: 'ユーザーID、書類タイプ、書類データは必須です'
+                message: 'ユーザーID、書類データは必須です'
             });
         }
+        const userIdStr = String(userId);
+        const normalizedData = typeof documentData === 'string' ? JSON.parse(documentData) : documentData;
         // データベースに保存（メインストレージ）
         try {
-            const checkQuery = 'SELECT id FROM user_documents WHERE user_id = $1';
-            const checkResult = await query(checkQuery, [userId]);
+            const checkQuery = 'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2 ORDER BY created_at DESC LIMIT 1';
+            const checkResult = await query(checkQuery, [userIdStr, documentType]);
             if (checkResult.rows.length > 0) {
                 // 既存データを更新
                 const updateQuery = `
           UPDATE user_documents 
-          SET document_data = $1, document_type = $2, updated_at = $3 
-          WHERE user_id = $4
+          SET document_data = $1, updated_at = $2 
+          WHERE id = $3
         `;
-                await query(updateQuery, [JSON.stringify(documentData), documentType, timestamp || new Date().toISOString(), userId]);
+                await query(updateQuery, [JSON.stringify(normalizedData), timestamp || new Date().toISOString(), checkResult.rows[0].id]);
             }
             else {
                 // 新規データを挿入
@@ -274,19 +276,19 @@ router.post('/', async (req, res) => {
           VALUES ($1, $2, $3, $4, $5)
         `;
                 const now = timestamp || new Date().toISOString();
-                await query(insertQuery, [userId, documentType, JSON.stringify(documentData), now, now]);
+                await query(insertQuery, [userIdStr, documentType, JSON.stringify(normalizedData), now, now]);
             }
             // 完成度を計算して更新
             let completionRate = 0;
-            if (documentType === 'resume') {
-                completionRate = calculateCompletionRate(documentData);
+            if (documentType === 'resume' || documentType === 'jobseeker_documents' || documentType === 'all') {
+                completionRate = calculateCompletionRate(normalizedData);
                 // job_seekersテーブルのcompletion_rateを更新
-                await query('UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2', [completionRate, userId]);
+                await query('UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2', [completionRate, Number(userId)]);
             }
-            logger.info('書類保存成功（データベース）', { userId, documentType, completionRate }, undefined, 'api_success');
+            logger.info('書類保存成功（データベース）', { userId: userIdStr, documentType, completionRate }, undefined, 'api_success');
         }
         catch (dbError) {
-            logger.error('データベース保存エラー', { userId, documentType, error: dbError.message }, undefined, 'db_error');
+            logger.error('データベース保存エラー', { userId: userIdStr, documentType, error: dbError.message }, undefined, 'db_error');
             throw new Error(`データベース保存に失敗しました: ${dbError.message}`);
         }
         res.status(200).json({
@@ -489,111 +491,87 @@ router.delete('/:userId', async (req, res) => {
     }
 });
 // 入力率計算関数
-const calculateCompletionRate = (documentData) => {
-    const requiredFields = [
-        // 基本情報
-        documentData.lastName, documentData.firstName,
-        documentData.kanaLastName, documentData.kanaFirstName,
-        documentData.birthDate, documentData.gender,
-        // 現住所情報
-        documentData.livePostNumber, documentData.liveAddress,
-        documentData.kanaLiveAddress, documentData.livePhoneNumber,
-        documentData.liveMail, documentData.nationality,
-        // 連絡先情報（現住所と同じ場合は完了とみなす）
-        documentData.contactSameAsLive ? true : documentData.contactPostNumber,
-        documentData.contactSameAsLive ? true : documentData.contactAddress,
-        documentData.contactSameAsLive ? true : documentData.kanaContactAddress,
-        documentData.contactSameAsLive ? true : documentData.contactPhoneNumber,
-        documentData.contactSameAsLive ? true : documentData.contactMail,
-        // 履歴書（selfIntroductionを使用）
-        documentData.selfIntroduction,
-        // 学歴（ない場合はチェックボックスで完了とみなす）
-        documentData.resume?.noEducation ? true : (documentData.resume?.education && documentData.resume.education.length > 0),
-        // 職歴（ない場合はチェックボックスで完了とみなす）
-        documentData.resume?.noWorkExperience ? true : (documentData.resume?.workExperience && documentData.resume.workExperience.length > 0),
-        // 資格（ない場合はチェックボックスで完了とみなす）
-        documentData.resume?.noQualifications ? true : (documentData.resume?.qualifications && documentData.resume?.qualifications.length > 0),
-        // 職務経歴書（ない場合はチェックボックスで完了とみなす）
-        documentData.workHistory?.noWorkHistory ? true : (documentData.workHistory?.workExperiences && documentData.workHistory?.workExperiences.length > 0),
-        // スキルシート（主要スキル）- 評価が設定されているかチェック
-        documentData.skillSheet?.skills?.Windows?.evaluation && documentData.skillSheet?.skills?.Windows?.evaluation !== '-',
-        documentData.skillSheet?.skills?.MacOS?.evaluation && documentData.skillSheet?.skills?.MacOS?.evaluation !== '-',
-        documentData.skillSheet?.skills?.Linux?.evaluation && documentData.skillSheet?.skills?.Linux?.evaluation !== '-',
-        // 日本語関連（300文字以上の場合のみ完了とみなす）
-        documentData.certificateStatus?.name,
-        documentData.whyJapan && documentData.whyJapan.length >= 300 ? true : false,
-        documentData.whyInterestJapan && documentData.whyInterestJapan.length >= 300 ? true : false,
-        // 追加情報（300文字以上の場合のみ完了とみなす）
-        documentData.selfIntroduction && documentData.selfIntroduction.length >= 300 ? true : false,
-        documentData.spouse, documentData.spouseSupport
-    ];
-    // デバッグ用：各フィールドの状態をログ出力
-    console.log('=== サーバー側入力率計算デバッグ ===');
-    console.log('基本情報:', {
-        lastName: !!documentData.lastName,
-        firstName: !!documentData.firstName,
-        kanaLastName: !!documentData.kanaLastName,
-        kanaFirstName: !!documentData.kanaFirstName,
-        birthDate: !!documentData.birthDate,
-        gender: !!documentData.gender,
-        nationality: !!documentData.nationality
-    });
-    console.log('現住所情報:', {
-        livePostNumber: !!documentData.livePostNumber,
-        liveAddress: !!documentData.liveAddress,
-        kanaLiveAddress: !!documentData.kanaLiveAddress,
-        livePhoneNumber: !!documentData.livePhoneNumber,
-        liveMail: !!documentData.liveMail
-    });
-    console.log('連絡先情報:', {
-        contactSameAsLive: documentData.contactSameAsLive,
-        contactPostNumber: !!documentData.contactPostNumber,
-        contactAddress: !!documentData.contactAddress,
-        kanaContactAddress: !!documentData.kanaContactAddress,
-        contactPhoneNumber: !!documentData.contactPhoneNumber,
-        contactMail: !!documentData.contactMail
-    });
-    console.log('履歴書:', {
-        selfPR: !!documentData.resume?.selfPR,
-        noEducation: documentData.resume?.noEducation,
-        noWorkExperience: documentData.resume?.noWorkExperience,
-        noQualifications: documentData.resume?.noQualifications,
-        education: documentData.resume?.education?.length || 0,
-        workExperience: documentData.resume?.workExperience?.length || 0,
-        qualifications: documentData.resume?.qualifications?.length || 0
-    });
-    console.log('職務経歴書:', {
-        noWorkHistory: documentData.workHistory?.noWorkHistory,
-        workExperiences: documentData.workHistory?.workExperiences?.length || 0
-    });
-    console.log('スキルシート:', {
-        Windows: documentData.skillSheet?.skills?.Windows?.evaluation,
-        MacOS: documentData.skillSheet?.skills?.MacOS?.evaluation,
-        Linux: documentData.skillSheet?.skills?.Linux?.evaluation
-    });
-    console.log('日本語関連:', {
-        certificateStatus: !!documentData.certificateStatus?.name,
-        whyJapan: documentData.whyJapan && documentData.whyJapan.length >= 300,
-        whyInterestJapan: documentData.whyInterestJapan && documentData.whyInterestJapan.length >= 300
-    });
-    console.log('追加情報:', {
-        selfIntroduction: documentData.selfIntroduction && documentData.selfIntroduction.length >= 300,
-        spouse: !!documentData.spouse,
-        spouseSupport: !!documentData.spouseSupport
-    });
-    const filledFields = requiredFields.filter((field) => {
-        if (typeof field === 'string') {
-            return field && field.trim() !== '';
+const calculateCompletionRate = (data) => {
+    let score = 0;
+    let maxScore = 0;
+    const addField = (value) => {
+        maxScore += 1;
+        if (typeof value === 'string') {
+            if (value.trim() !== '')
+                score += 1;
         }
-        if (typeof field === 'boolean') {
-            return field === true;
+        else if (typeof value === 'boolean') {
+            if (value)
+                score += 1;
         }
-        if (Array.isArray(field)) {
-            return field.length > 0;
+        else if (Array.isArray(value)) {
+            if (value.length > 0)
+                score += 1;
         }
-        return field;
-    });
-    return Math.round((filledFields.length / requiredFields.length) * 100);
+        else if (value !== null && value !== undefined) {
+            score += 1;
+        }
+    };
+    // 基本情報
+    addField(data.lastName);
+    addField(data.firstName);
+    addField(data.kanaLastName);
+    addField(data.kanaFirstName);
+    addField(data.birthDate);
+    addField(data.gender);
+    addField(data.nationality);
+    // 現住所情報
+    addField(data.livePostNumber);
+    addField(data.liveAddress);
+    addField(data.kanaLiveAddress);
+    addField(data.livePhoneNumber);
+    addField(data.liveMail);
+    // 連絡先情報（現住所と同じ場合は充足）
+    addField(data.contactSameAsLive ? true : data.contactPostNumber);
+    addField(data.contactSameAsLive ? true : data.contactAddress);
+    addField(data.contactSameAsLive ? true : data.kanaContactAddress);
+    addField(data.contactSameAsLive ? true : data.contactPhoneNumber);
+    addField(data.contactSameAsLive ? true : data.contactMail);
+    // 履歴書
+    addField(data.resume?.photoUrl);
+    addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
+    addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
+    addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume?.qualifications.length > 0));
+    // 職務経歴書
+    addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
+    // スキル（全スキルの評価入力率に応じて最大3点）
+    const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
+    const skillsMaxWeight = 3;
+    if (skills.length > 0) {
+        const completed = skills.filter((s) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
+        maxScore += skillsMaxWeight;
+        score += skillsMaxWeight * (completed / skills.length);
+    }
+    // 日本語資格（現在）: 「なし/None」でも充足扱い、日付も同様
+    const currentLevelName = data.japaneseLevel || (data.certificateStatus?.name || '');
+    const isNoneCurrent = (currentLevelName === 'なし' || currentLevelName === 'なし / None');
+    addField(isNoneCurrent ? true : currentLevelName);
+    const currentQualDate = data.qualificationDate || data.certificateStatus?.date || '';
+    addField(isNoneCurrent ? true : currentQualDate);
+    // 日本語資格（予定）: 「未定/Not yet」でも充足扱い、日付も同様
+    const plannedLevelName = data.nextJapaneseTestLevel || '';
+    const isNotYetPlanned = (plannedLevelName === '未定' || plannedLevelName === '未定 / Not yet');
+    addField(isNotYetPlanned ? true : plannedLevelName);
+    const plannedDate = data.nextJapaneseTestDate || '';
+    addField(isNotYetPlanned ? true : plannedDate);
+    // 追加情報
+    addField(data.selfIntroduction);
+    addField(data.spouse);
+    addField(data.spouseSupport);
+    // ベース→百分率
+    const baseRate = maxScore > 0 ? (score / maxScore) * 100 : 0;
+    // 任意ボーナス: whyJapan / whyInterestJapan 各+2%（上限100%）
+    let bonus = 0;
+    if (data.whyJapan && data.whyJapan.length >= 300)
+        bonus += 2;
+    if (data.whyInterestJapan && data.whyInterestJapan.length >= 300)
+        bonus += 2;
+    return Math.min(100, Math.round(baseRate + bonus));
 };
 // 書類データ保存APIエンドポイント
 router.post('/jobseekers/documents', async (req, res) => {
@@ -602,20 +580,22 @@ router.post('/jobseekers/documents', async (req, res) => {
         if (!userId || !documentData) {
             return res.status(400).json({ error: 'userIdとdocumentDataが必要です' });
         }
+        const userIdStr = String(userId);
         // 入力率を計算
         const completionRate = calculateCompletionRate(documentData);
         // 既存のデータを確認
-        const existingData = await query('SELECT * FROM user_documents WHERE user_id = $1 AND document_type = $2', [userId, 'jobseeker_documents']);
+        const existingData = await query('SELECT * FROM user_documents WHERE user_id = $1 AND document_type = $2', [userIdStr, 'jobseeker_documents']);
         if (existingData.rows.length > 0) {
             // 既存データを更新
-            await query('UPDATE user_documents SET document_data = $1, updated_at = NOW() WHERE user_id = $2 AND document_type = $3', [JSON.stringify(documentData), userId, 'jobseeker_documents']);
+            await query('UPDATE user_documents SET document_data = $1, updated_at = NOW() WHERE user_id = $2 AND document_type = $3', [JSON.stringify(documentData), userIdStr, 'jobseeker_documents']);
         }
         else {
             // 新規データを挿入
-            await query('INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())', [userId, 'jobseeker_documents', JSON.stringify(documentData)]);
+            await query('INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())', [userIdStr, 'jobseeker_documents', JSON.stringify(documentData)]);
         }
-        // job_seekersテーブルのcompletion_rateを更新
-        await query('UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2', [completionRate, userId]);
+        // job_seekersテーブルのcompletion_rateを更新（数値IDを使用）
+        const userIdNum = Number(userId);
+        await query('UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2', [completionRate, userIdNum]);
         res.json({ success: true, message: '書類データを保存しました', completionRate });
     }
     catch (error) {
@@ -1139,11 +1119,26 @@ router.get('/interview-verify/:token', async (req, res) => {
     }
 });
 // 書類データを保存
-router.post('/documents', async (req, res) => {
+router.post('/', async (req, res) => {
     try {
-        const { userId, documentType, documentData } = req.body;
-        const result = await query('INSERT INTO user_documents (user_id, document_type, document_data) VALUES ($1, $2, $3) ON CONFLICT (user_id, document_type) DO UPDATE SET document_data = $3, updated_at = NOW() RETURNING *', [userId, documentType, JSON.stringify(documentData)]);
-        res.json({ success: true, data: result.rows[0] });
+        const { userId, documentType = 'resume', documentData } = req.body || {};
+        if (!userId || !documentData) {
+            return res.status(400).json({ success: false, message: 'userIdとdocumentDataは必須です' });
+        }
+        const userIdStr = String(userId);
+        const normalizedData = typeof documentData === 'string' ? JSON.parse(documentData) : documentData;
+        console.log('[DOCS][POST] save start', { userId: userIdStr, documentType, keys: Object.keys(normalizedData || {}) });
+        const existing = await query('SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2 ORDER BY created_at DESC LIMIT 1', [userIdStr, documentType]);
+        let saved;
+        if (existing.rows.length > 0) {
+            const id = existing.rows[0].id;
+            saved = await query('UPDATE user_documents SET document_data = $1, updated_at = NOW() WHERE id = $2 RETURNING *', [JSON.stringify(normalizedData), id]);
+        }
+        else {
+            saved = await query('INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW()) RETURNING *', [userIdStr, documentType, JSON.stringify(normalizedData)]);
+        }
+        console.log('[DOCS][POST] save done id=', saved.rows[0]?.id);
+        res.json({ success: true, data: saved.rows[0] });
     }
     catch (error) {
         console.error('書類保存エラー:', error);
@@ -1212,8 +1207,8 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
         const updateQuery = `
       UPDATE job_seekers 
       SET interview_enabled = $1, updated_at = NOW()
-      WHERE user_id = $2
-      RETURNING id, user_id, interview_enabled
+      WHERE id = $2
+      RETURNING id, interview_enabled
     `;
         const result = await query(updateQuery, [interviewEnabled, id]);
         if (result.rows.length === 0) {
@@ -1226,7 +1221,6 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
             success: true,
             data: {
                 id: result.rows[0].id,
-                userId: result.rows[0].user_id,
                 interviewEnabled: result.rows[0].interview_enabled
             },
             message: `面接表示設定を${interviewEnabled ? '有効' : '無効'}にしました`

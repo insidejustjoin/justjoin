@@ -502,7 +502,6 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         -- 就職状況（デフォルトは未就職）
         COALESCE(js.employment_status, 'unemployed') as employment_status,
         -- フロントエンドで必要なデフォルト値
-        js.interview_enabled,
         '[]' as skills,
         0 as experience_years,
         '' as desired_job_title,
@@ -561,6 +560,12 @@ app.get('/api/admin/jobseekers', async (req, res) => {
                         birthDate = docData.birthDate;
                     if (docData?.gender)
                         gender = docData.gender;
+                    if (docData?.livePhoneNumber)
+                        phone = docData.livePhoneNumber;
+                    if (docData?.birthDate)
+                        birthDate = docData.birthDate;
+                    if (docData?.gender)
+                        gender = docData.gender;
                 }
                 // 直近1件で写真が見つからない場合、最新20件を走査して最初の写真を使用
                 if (!photoUrl) {
@@ -573,17 +578,10 @@ app.get('/api/admin/jobseekers', async (req, res) => {
           `, [row.user_id]);
                     for (const r of scan.rows) {
                         const d = r.document_data || {};
-                        if (d?.resume?.photoUrl && !photoUrl) {
+                        if (d?.resume?.photoUrl) {
                             photoUrl = d.resume.photoUrl;
-                        }
-                        if (!birthDate && (d?.birthDate || d?.resume?.basicInfo?.dateOfBirth)) {
-                            birthDate = d.birthDate || d?.resume?.basicInfo?.dateOfBirth;
-                        }
-                        if (!nationality && (d?.nationality || d?.resume?.basicInfo?.nationality)) {
-                            nationality = d.nationality || d?.resume?.basicInfo?.nationality;
-                        }
-                        if (photoUrl && birthDate && nationality)
                             break;
+                        }
                     }
                 }
                 // 日本語レベル（従来ロジックをdocDataで）
@@ -715,7 +713,7 @@ app.get('/api/jobseekers/:id', async (req, res) => {
         const { id } = req.params;
         const { query } = await import('../integrations/postgres/client.js');
         const base = await query(`
-      SELECT js.*, u.email, js.interview_enabled
+      SELECT js.*, u.email
       FROM job_seekers js
       LEFT JOIN users u ON u.id = js.user_id
       WHERE js.user_id::text = $1 OR js.id::text = $1
@@ -772,7 +770,6 @@ app.get('/api/jobseekers/:id', async (req, res) => {
             nationality: row.nationality,
             profile_photo: row.profile_photo,
             completion_rate: row.completion_rate || 0,
-            interview_enabled: row.interview_enabled || false,
             created_at: row.created_at,
             updated_at: row.updated_at,
         };

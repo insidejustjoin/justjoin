@@ -587,7 +587,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
             contactSameAsLive: savedDocumentData.contactSameAsLive || savedDocumentData.addressInfo?.contactSameAsLive || false,
             
             resume: {
-              photoUrl: savedDocumentData.resume?.photoUrl || jobSeekerData.profile_photo || '',
+              photoUrl: savedDocumentData.resume?.photoUrl || savedDocumentData.resume?.photoUrl || '',
               education: savedDocumentData.resume?.education || savedDocumentData.resume?.education || [{ year: '', month: '', content: '' }],
               workExperience: savedDocumentData.resume?.workExperience || savedDocumentData.resume?.workExperience || [{ year: '', month: '', content: '' }],
               qualifications: savedDocumentData.resume?.qualifications || savedDocumentData.resume?.qualifications || [{ year: '', month: '', name: '' }],
