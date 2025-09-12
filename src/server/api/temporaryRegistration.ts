@@ -19,15 +19,6 @@ router.post('/temporary', async (req, res) => {
       });
     }
 
-    // メール形式チェック
-    const emailRegex = /^[^\[\completed, token\]@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: '有効なメールアドレスを入力してください。' 
-      });
-    }
-
     // 既存ユーザーチェック（activeなユーザーのみ）
     console.log('Checking existing active user for email:', email);
     const existingUser = await query(
