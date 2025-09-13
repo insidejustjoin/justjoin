@@ -1758,12 +1758,13 @@ export function AdminJobSeekers() {
                             <div>
                               <p><strong>生年月日:</strong> {jobSeeker.date_of_birth ? new Date(jobSeeker.date_of_birth).toLocaleDateString('ja-JP') : '未設定'}</p>
                               <p><strong>国籍:</strong> {jobSeeker.nationality || '未設定'}</p>
-                              <p><strong>日本語資格:</strong> {jobSeeker.certificateStatus?.name || '未設定'}</p>
+                              <p><strong>日本語資格:</strong> {jobSeeker.japaneseLevel || jobSeeker.japanese_level || '未設定'}</p>
                               <p><strong>メール:</strong> {jobSeeker.email || jobSeeker.user_email || '未設定'}</p>
                             </div>
                             <div>
                               <p><strong>電話:</strong> {jobSeeker.phone || '未設定'}</p>
                               <p><strong>登録日:</strong> {new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</p>
+                              <p><strong>入力率:</strong> <span className="font-semibold text-blue-600">{jobSeeker.completion_rate || 0}%</span></p>
                             </div>
                           </div>
                         </div>

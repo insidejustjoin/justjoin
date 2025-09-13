@@ -673,6 +673,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
                 phone: phone,
                 date_of_birth: birthDate,
                 gender: gender,
+                // 入力率を追加
+                completion_rate: row.completion_rate || 0,
                 // 詳細情報を設定
                 detailed_info: detailedInfo ? {
                     ...detailedInfo,
@@ -742,16 +744,42 @@ app.get('/api/jobseekers/:id', async (req, res) => {
         const { id } = req.params;
         const { query } = await import('../integrations/postgres/client.js');
         const base = await query(`
-      SELECT js.*, u.email
+      SELECT js.*, u.email, u.status as user_status, js.completion_rate
       FROM job_seekers js
       LEFT JOIN users u ON u.id = js.user_id
       WHERE js.user_id::text = $1 OR js.id::text = $1
       LIMIT 1
     `, [id]);
-        if (base.rows.length === 0) {
-            return res.status(404).json({ success: false, message: '求職者が見つかりません' });
+        let row = base.rows[0];
+        if (!row) {
+            // フォールバック: users から基本情報を取得して最低限のプロフィールを構築
+            const userOnly = await query(`
+        SELECT id as user_id, email, status as user_status, created_at, updated_at
+        FROM users
+        WHERE id::text = $1
+        LIMIT 1
+      `, [id]);
+            if (userOnly.rows.length === 0) {
+                return res.status(404).json({ success: false, message: '求職者が見つかりません' });
+            }
+            const u = userOnly.rows[0];
+            row = {
+                id: u.user_id, // job_seekers.id 不明のため user_id を割当
+                user_id: u.user_id,
+                email: u.email,
+                first_name: null,
+                last_name: null,
+                phone: null,
+                address: null,
+                date_of_birth: null,
+                gender: null,
+                nationality: null,
+                profile_photo: null,
+                completion_rate: 0,
+                created_at: u.created_at,
+                updated_at: u.updated_at,
+            };
         }
-        const row = base.rows[0];
         // すべての書類データを取得してマージ
         const allDocs = await query(`
       SELECT document_type, document_data, created_at
@@ -1553,6 +1581,17 @@ app.post('/api/login', async (req, res) => {
         FROM users
         WHERE email = $1 AND user_type = $2
       `, [email, userType]);
+            // フォールバック: 指定タイプで見つからなければメールのみで再検索
+            if (result.rows.length === 0) {
+                console.log('指定タイプでは見つからず、メールのみで再検索します');
+                result = await query(`
+          SELECT id, email, password_hash, user_type as role, status, created_at, updated_at
+          FROM users
+          WHERE email = $1
+          ORDER BY CASE user_type WHEN 'admin' THEN 0 WHEN 'company' THEN 1 ELSE 2 END
+          LIMIT 1
+        `, [email]);
+            }
         }
         else {
             console.log('全ユーザータイプで検索');

@@ -1244,11 +1244,21 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       score += skillsMaxWeight * (completed / skills.length);
     }
 
-    // 日本語資格（必須）
-    const japaneseLevel = data.japaneseLevel || (data.certificateStatus?.name && data.certificateStatus.name !== 'なし' ? data.certificateStatus.name : '');
-    const qualificationDate = data.qualificationDate || data.certificateStatus?.date || '';
-    addField(japaneseLevel);
-    addField(qualificationDate);
+    // 日本語資格（必須・「なし/None」でも充足扱い）
+    const currentLevelName = data.japaneseLevel || (data.certificateStatus?.name || '');
+    const isNoneCurrent = (currentLevelName === 'なし' || currentLevelName === 'なし / None');
+    // レベル: 値がある or なし を選択で加点
+    addField(isNoneCurrent ? true : currentLevelName);
+    // 取得日: 「なし」の場合は日付不要だが加点、それ以外は日付で加点
+    const currentQualDate = data.qualificationDate || data.certificateStatus?.date || '';
+    addField(isNoneCurrent ? true : currentQualDate);
+
+    // 予定の日本語資格（「未定/Not yet」でも充足扱い）
+    const plannedLevelName = data.nextJapaneseTestLevel || '';
+    const isNotYetPlanned = (plannedLevelName === '未定' || plannedLevelName === '未定 / Not yet');
+    addField(isNotYetPlanned ? true : plannedLevelName);
+    const plannedDate = data.nextJapaneseTestDate || '';
+    addField(isNotYetPlanned ? true : plannedDate);
 
     // 追加情報（従来通り）
     addField(data.selfIntroduction);
@@ -1506,7 +1516,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
           
           // 履歴書固有
           resume: {
-            photoUrl: savedData.resume?.photoUrl || savedData.photoUrl || '',
+            photoUrl: savedData.resume?.photoUrl || '',
             education: savedData.resume?.education || [{ year: '', month: '', content: '' }],
             workExperience: savedData.resume?.workExperience || [{ year: '', month: '', content: '' }],
             qualifications: savedData.resume?.qualifications || [{ year: '', month: '', name: '' }],

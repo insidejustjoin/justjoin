@@ -19,28 +19,25 @@ router.post('/temporary', async (req, res) => {
       });
     }
 
-    // メール形式チェック
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: '有効なメールアドレスを入力してください。' 
-      });
-    }
-
-    // 既存ユーザーチェック（activeなユーザーのみ）
-    console.log('Checking existing active user for email:', email);
+    // 既存ユーザーチェック（すべてのユーザーを確認）
+    console.log('Checking existing user for email:', email);
     const existingUser = await query(
-      'SELECT id, status FROM users WHERE email = $1 AND status = $2',
-      [email, 'active']
+      'SELECT id, status FROM users WHERE email = $1',
+      [email]
     );
-    console.log('Existing active user query result:', existingUser.rows);
+    console.log('Existing user query result:', existingUser.rows);
 
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'このメールアドレスは既に登録されています。' 
-      });
+      const user = existingUser.rows[0];
+      console.log('既存ユーザーを発見:', user);
+      
+      // 削除されたユーザーの関連データを強制的にクリーンアップ
+      console.log('関連データを強制的にクリーンアップ中...');
+      await query('DELETE FROM user_documents WHERE user_id = $1', [user.id]);
+      await query('DELETE FROM job_seekers WHERE user_id = $1', [user.id]);
+      await query('DELETE FROM user_status_history WHERE user_id = $1', [user.id]);
+      await query('DELETE FROM users WHERE id = $1', [user.id]);
+      console.log('ユーザーと関連データを削除完了');
     }
 
     // 削除されたユーザーの関連データをクリーンアップ
@@ -138,7 +135,7 @@ router.get('/verify/:token', async (req, res) => {
     // 仮登録データ取得（pending または documents_completed を許可）
     const tempReg = await query(
       `SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND status IN ($2, $3)`,
+       WHERE verification_token = $1 AND status IN ($2, $3) AND expires_at > NOW()`,
       [token, 'pending', 'documents_completed']
     );
 
@@ -184,7 +181,7 @@ router.post('/documents/:token', async (req, res) => {
     // 仮登録データ取得
     const tempReg = await query(
       `SELECT * FROM temporary_registrations 
-       WHERE verification_token = $1 AND status = $2`,
+       WHERE verification_token = $1 AND status = $2 AND expires_at > NOW() AND expires_at > NOW()`,
       [token, 'pending']
     );
 
@@ -248,7 +245,7 @@ router.post('/documents/:token', async (req, res) => {
     await query(
       `UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
-       WHERE verification_token = $3`,
+       WHERE verification_token = $2`,
       [JSON.stringify(documentsData), 'documents_completed', token]
     );
 
@@ -302,7 +299,7 @@ router.post('/update-documents/:token', async (req, res) => {
     await query(
       `UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
-       WHERE verification_token = $3`,
+       WHERE verification_token = $2`,
       [JSON.stringify(documentsData), 'documents_completed', token]
     );
 
@@ -362,7 +359,7 @@ router.post('/complete/:token', async (req, res) => {
     }
 
     // 英数字混合チェック
-    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9@$!%*?&]{8,}$/;
     if (!passwordRegex.test(password)) {
       return res.status(400).json({ 
         success: false, 
@@ -424,13 +421,161 @@ router.post('/complete/:token', async (req, res) => {
       userId = userResult.rows[0].id;
     }
 
-    console.log('[REGISTER][COMPLETE] userId=', userId);
+        console.log('[REGISTER][COMPLETE] userId=', userId);
+    // 書類データから入力率を計算
+    let completionRate = 0;
+    if (registration.documents_data) {
+      try {
+        let documentsData: any;
+        try {
+          documentsData = typeof registration.documents_data === 'string'
+            ? JSON.parse(registration.documents_data)
+            : registration.documents_data;
+        } catch (e) {
+          documentsData = registration.documents_data;
+        }
+        
+        // 入力率計算（DocumentGenerator.tsxと同じロジック）
+        const calculateCompletionRate = (data: any): number => {
+          let score = 0;
+          let maxScore = 0;
+
+          const addField = (value: any) => {
+            maxScore += 1;
+            if (typeof value === 'string') {
+              if (value.trim() !== '') score += 1;
+            } else if (typeof value === 'boolean') {
+              if (value) score += 1;
+            } else if (Array.isArray(value)) {
+              if (value.length > 0) score += 1;
+            } else if (value !== null && value !== undefined) {
+              score += 1;
+            }
+          };
+
+          // 基本情報
+          addField(data.lastName);
+          addField(data.firstName);
+          addField(data.kanaLastName);
+          addField(data.kanaFirstName);
+          addField(data.birthDate);
+          addField(data.gender);
+          addField(data.nationality);
+          
+          // 現住所情報
+          addField(data.livePostNumber);
+          addField(data.liveAddress);
+          addField(data.kanaLiveAddress);
+          addField(data.livePhoneNumber);
+          addField(data.liveMail);
+          
+          // 連絡先情報（同一の場合は自動充足）
+          addField(data.contactSameAsLive ? true : data.contactPostNumber);
+          addField(data.contactSameAsLive ? true : data.contactAddress);
+          addField(data.contactSameAsLive ? true : data.kanaContactAddress);
+          addField(data.contactSameAsLive ? true : data.contactPhoneNumber);
+          addField(data.contactSameAsLive ? true : data.contactMail);
+          
+          // 職歴情報
+          addField(data.workHistory);
+          if (data.workHistory && Array.isArray(data.workHistory)) {
+            data.workHistory.forEach((work: any) => {
+              addField(work.company);
+              addField(work.position);
+              addField(work.startDate);
+              addField(work.endDate);
+              addField(work.description);
+            });
+          }
+          
+          // 学歴情報
+          addField(data.education);
+          if (data.education && Array.isArray(data.education)) {
+            data.education.forEach((edu: any) => {
+              addField(edu.school);
+              addField(edu.department);
+              addField(edu.startDate);
+              addField(edu.endDate);
+            });
+          }
+          
+          // スキル（全スキルの評価入力率に応じて最大3点）
+          const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
+          const skillsMaxWeight = 3;
+          if (skills.length > 0) {
+            const completed = (skills as any[]).filter((s: any) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
+            maxScore += skillsMaxWeight;
+            score += skillsMaxWeight * (completed / (skills as any[]).length);
+          }
+          
+          // 日本語資格（現在）: 「なし/None」でも充足扱い、日付も同様
+          const currentLevelName = data.japaneseLevel || (data.certificateStatus?.name || '');
+          const isNoneCurrent = (currentLevelName === 'なし' || currentLevelName === 'なし / None');
+          addField(isNoneCurrent ? true : currentLevelName);
+          const currentQualDate = data.qualificationDate || data.certificateStatus?.date || '';
+          addField(isNoneCurrent ? true : currentQualDate);
+          
+          // 日本語資格（予定）: 「未定/Not yet」でも充足扱い、日付も同様
+          const plannedLevelName = data.nextJapaneseTestLevel || '';
+          const isNotYetPlanned = (plannedLevelName === '未定' || plannedLevelName === '未定 / Not yet');
+          addField(isNotYetPlanned ? true : plannedLevelName);
+          const plannedDate = data.nextJapaneseTestDate || '';
+          addField(isNotYetPlanned ? true : plannedDate);
+          
+          // その他の必須項目
+          addField(data.desiredJobTitle);
+          addField(data.desiredSalary);
+          addField(data.availableStartDate);
+          addField(data.whyJapan);
+          addField(data.whyInterestJapan);
+          
+          const baseRate = maxScore > 0 ? (score / maxScore) * 100 : 0;
+          
+          // 任意ボーナス: whyJapan / whyInterestJapan 各+2%（上限100%）
+          let bonus = 0;
+          if (data.whyJapan && data.whyJapan.length >= 300) bonus += 2;
+          if (data.whyInterestJapan && data.whyInterestJapan.length >= 300) bonus += 2;
+          
+          return Math.min(100, Math.round(baseRate + bonus));
+        };
+        
+        completionRate = calculateCompletionRate(documentsData);
+        console.log('[REGISTER][COMPLETE] completionRate calculated:', completionRate);
+      } catch (e) {
+        console.error('[REGISTER][COMPLETE] completion rate calculation error:', e);
+        completionRate = 0;
+      }
+    }
+
+    // 書類データから顔写真を取得
+    let profilePhoto = null;
+    if (registration.documents_data) {
+      try {
+        let documentsData: any;
+        try {
+          documentsData = typeof registration.documents_data === 'string'
+            ? JSON.parse(registration.documents_data)
+            : registration.documents_data;
+        } catch (e) {
+          documentsData = registration.documents_data;
+        }
+        
+        // 顔写真を取得（複数の場所から確認）
+        profilePhoto = documentsData.resume?.photoUrl || 
+                     documentsData.resume?.basicInfo?.photoUrl ||
+                     documentsData.photoUrl;
+        
+        console.log('[REGISTER][COMPLETE] profilePhoto found:', !!profilePhoto);
+      } catch (e) {
+        console.warn('[REGISTER][COMPLETE] profilePhoto extraction warning:', e);
+      }
+    }
 
     // 求職者詳細情報作成
     await query(
-      `INSERT INTO job_seekers (user_id, first_name, last_name, created_at, updated_at) 
+      `INSERT INTO job_seekers (user_id, first_name, last_name, profile_photo, completion_rate, created_at, updated_at) 
        VALUES ($1, $2, $3, NOW(), NOW())`,
-      [userId, registration.first_name, registration.last_name]
+      [userId, registration.first_name, registration.last_name, profilePhoto, completionRate]
     );
 
     // 求職者ステータスを'active'で初期化
@@ -595,9 +740,9 @@ router.post('/complete/:token', async (req, res) => {
     // 仮登録完了
     await query(
       `UPDATE temporary_registrations 
-       SET status = $1, password_hash = $2, updated_at = NOW() 
-       WHERE verification_token = $3`,
-      ['completed', passwordHash, token]
+       SET status = $1, updated_at = NOW() 
+       WHERE verification_token = $2`,
+      ['completed', token]
     );
 
     res.json({ 
