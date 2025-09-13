@@ -122,6 +122,8 @@ export const RegistrationVerification: React.FC = () => {
   }
 
   if (step === 'completed') {
+    const [language, setLanguage] = useState<'ja' | 'en'>('ja');
+    
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="w-full max-w-md mx-auto">
@@ -129,12 +131,26 @@ export const RegistrationVerification: React.FC = () => {
             <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
               <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
-            <CardTitle className="text-xl text-green-600">登録完了</CardTitle>
+            <CardTitle className="text-xl text-green-600">
+              {language === 'ja' ? '登録完了' : 'Registration Complete'}
+            </CardTitle>
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setLanguage(language === 'ja' ? 'en' : 'ja')}
+                className="text-sm text-blue-600 hover:text-blue-800 underline"
+              >
+                {language === 'ja' ? 'Switch to English' : '日本語に切り替え'}
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
             <Alert className="border-green-200 bg-green-50">
               <AlertDescription className="text-green-800">
-                登録が完了しました！マイページにリダイレクトします...
+                {language === 'ja' 
+                  ? '登録が完了しました！マイページにリダイレクトします...' 
+                  : 'Registration completed! Redirecting to your page...'
+                }
               </AlertDescription>
             </Alert>
           </CardContent>
