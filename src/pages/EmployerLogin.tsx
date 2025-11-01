@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Building, Mail, Lock, UserPlus, ArrowLeft, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -35,6 +36,8 @@ export function EmployerLogin() {
   const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
+  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
 
   // 動的バリデーションメッセージ
   const loginSchemaWithTranslation = z.object({
@@ -59,7 +62,16 @@ export function EmployerLogin() {
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const success = await login(data.email, data.password, 'company');
+      let recaptchaToken: string | undefined;
+      if (siteKey && recaptchaRef.current) {
+        try {
+          recaptchaToken = await recaptchaRef.current.executeAsync();
+          recaptchaRef.current.reset();
+        } catch (e) {
+          console.warn('reCAPTCHA 実行に失敗しました。', e);
+        }
+      }
+      const success = await login(data.email, data.password, 'company', recaptchaToken);
       if (success) {
         navigate('/employer/my-page');
       }
@@ -179,6 +191,15 @@ export function EmployerLogin() {
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? t('auth.loggingIn') : t('auth.loginButton')}
                   </Button>
+
+                {/* Invisible reCAPTCHA */}
+                {siteKey && (
+                  <ReCAPTCHA
+                    ref={recaptchaRef}
+                    sitekey={siteKey}
+                    size="invisible"
+                  />
+                )}
 
                   <div className="text-center mt-4">
                     <Link 

@@ -461,7 +461,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     if (!documentData.livePhoneNumber) missingFields.push('電話番号');
     if (!documentData.birthDate) missingFields.push('生年月日');
     if (!documentData.liveAddress) missingFields.push('住所');
-    if (!documentData.resume?.photoUrl) missingFields.push('顔写真');
+    // 登録モードでは顔写真は任意
+    if (!isRegistrationMode && !documentData.resume?.photoUrl) missingFields.push('顔写真');
     
     // スキルシートの必須項目（仮登録モードでは任意）
     if (!isRegistrationMode && (!documentData.skillSheet?.skills || Object.keys(documentData.skillSheet.skills).length === 0)) {
@@ -487,8 +488,11 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       ? '' 
       : (documentData.qualificationDate || documentData.certificateStatus?.date || '');
     
-    if (!japaneseLevel && !isNone) missingFields.push('日本語資格');
-    if (!qualificationDate && !isNone) missingFields.push('資格取得日');
+    // 登録モードでは日本語資格関連は任意
+    if (!isRegistrationMode) {
+      if (!japaneseLevel && !isNone) missingFields.push('日本語資格');
+      if (!qualificationDate && !isNone) missingFields.push('資格取得日');
+    }
     
     console.log('チェック後の値:', { japaneseLevel, qualificationDate, certName, isNone });
     console.log('missingFields:', missingFields);

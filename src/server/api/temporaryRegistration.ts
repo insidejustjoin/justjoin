@@ -199,8 +199,7 @@ router.post('/documents/:token', async (req, res) => {
       'resume.basicInfo.email',
       'resume.basicInfo.phone',
       'resume.basicInfo.dateOfBirth',
-      'resume.basicInfo.address',
-      'skillSheet.skills'
+      'resume.basicInfo.address'
     ];
 
     const missingFields = [] as string[];
@@ -211,27 +210,7 @@ router.post('/documents/:token', async (req, res) => {
       }
     }
 
-    // 学歴、職歴、資格のチェック（ない場合はチェックボックスで完了とみなす）
-    if (!documentsData.resume?.noEducation && (!documentsData.resume?.education || documentsData.resume.education.length === 0)) {
-      missingFields.push('resume.education');
-    }
-    if (!documentsData.resume?.noWorkExperience && (!documentsData.resume?.workExperience || documentsData.resume.workExperience.length === 0)) {
-      missingFields.push('resume.workExperience');
-    }
-
-    // 日本語資格: name==='なし' の場合は date を必須にしない
-    if (documentsData.certificateStatus?.name && documentsData.certificateStatus.name !== 'なし') {
-      if (!documentsData.certificateStatus?.date) {
-        missingFields.push('certificateStatus.date');
-      }
-    }
-
-    // 予定の日本語資格: level==='未定' の場合は nextJapaneseTestDate を必須にしない
-    if (documentsData.nextJapaneseTestLevel && documentsData.nextJapaneseTestLevel !== '未定') {
-      if (!documentsData.nextJapaneseTestDate) {
-        missingFields.push('nextJapaneseTestDate');
-      }
-    }
+    // 学歴・職歴・資格系は登録モードでは任意に緩和
 
     if (missingFields.length > 0) {
       return res.status(400).json({ 
@@ -245,7 +224,7 @@ router.post('/documents/:token', async (req, res) => {
     await query(
       `UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
-       WHERE verification_token = $2`,
+       WHERE verification_token = $3`,
       [JSON.stringify(documentsData), 'documents_completed', token]
     );
 
@@ -299,7 +278,7 @@ router.post('/update-documents/:token', async (req, res) => {
     await query(
       `UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
-       WHERE verification_token = $2`,
+       WHERE verification_token = $3`,
       [JSON.stringify(documentsData), 'documents_completed', token]
     );
 

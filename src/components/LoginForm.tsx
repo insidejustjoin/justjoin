@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const loginSchema = z.object({
   email: z.string().email('有効なメールアドレスを入力してください'),
@@ -38,6 +39,8 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
   const { login, registerJobSeeker, registerCompany } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
+  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -58,7 +61,16 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
     setIsLoading(true);
     try {
       console.log('ログイン処理開始:', { email: data.email, userType: data.userType });
-      const success = await login(data.email, data.password, data.userType);
+      let recaptchaToken: string | undefined;
+      if (siteKey && recaptchaRef.current) {
+        try {
+          recaptchaToken = await recaptchaRef.current.executeAsync();
+          recaptchaRef.current.reset();
+        } catch (e) {
+          console.warn('reCAPTCHA 実行に失敗しました。', e);
+        }
+      }
+      const success = await login(data.email, data.password, data.userType, recaptchaToken);
       console.log('ログイン結果:', success);
       
       if (success) {
@@ -181,6 +193,15 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
                       <p className="text-sm text-red-500">{loginForm.formState.errors.userType.message}</p>
                     )}
                   </div>
+
+                {/* Invisible reCAPTCHA */}
+                {siteKey && (
+                  <ReCAPTCHA
+                    ref={recaptchaRef}
+                    sitekey={siteKey}
+                    size="invisible"
+                  />
+                )}
 
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'ログイン中...' : 'ログイン'}

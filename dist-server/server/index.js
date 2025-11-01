@@ -116,6 +116,106 @@ app.get('/api/admin/companies', authenticate, async (req, res) => {
         });
     }
 });
+// 管理者ダッシュボード：統計情報
+app.get('/api/admin/dashboard/stats', authenticate, async (req, res) => {
+    try {
+        const { query } = await import('../integrations/postgres/client.js');
+        const period = req.query.period || '30d';
+        const interval = period === '7d' ? '7 days' : period === '90d' ? '90 days' : '30 days';
+        const [jobSeekers, companies, documents, notifications, recentRegs, activeUsers, totalViews, currentPeriodRegs, prevPeriodRegs] = await Promise.all([
+            query('SELECT COUNT(*)::int AS c FROM job_seekers'),
+            query('SELECT COUNT(*)::int AS c FROM companies'),
+            query('SELECT COUNT(*)::int AS c FROM user_documents'),
+            query('SELECT COUNT(*)::int AS c FROM notifications'),
+            query(`SELECT COUNT(*)::int AS c FROM users WHERE created_at > NOW() - INTERVAL '${interval}'`),
+            query(`SELECT COUNT(*)::int AS c FROM users WHERE status = 'active'`),
+            query(`SELECT COALESCE(SUM(view_count),0)::int AS c FROM blog_posts`),
+            query(`SELECT COUNT(*)::int AS c FROM users WHERE created_at > NOW() - INTERVAL '${interval}'`),
+            query(`SELECT COUNT(*)::int AS c FROM users WHERE created_at BETWEEN NOW() - INTERVAL '${interval}'*2 AND NOW() - INTERVAL '${interval}'`),
+        ]);
+        const cur = currentPeriodRegs.rows[0].c || 0;
+        const prev = prevPeriodRegs.rows[0].c || 0;
+        const monthlyGrowth = prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 100);
+        const data = {
+            totalJobSeekers: jobSeekers.rows[0].c || 0,
+            totalCompanies: companies.rows[0].c || 0,
+            totalDocuments: documents.rows[0].c || 0,
+            totalNotifications: notifications.rows[0].c || 0,
+            recentRegistrations: recentRegs.rows[0].c || 0,
+            activeUsers: activeUsers.rows[0].c || 0,
+            totalViews: totalViews.rows[0].c || 0,
+            monthlyGrowth,
+        };
+        res.json({ success: true, data });
+    }
+    catch (error) {
+        console.error('/api/admin/dashboard/stats エラー:', error);
+        res.status(500).json({ success: false, error: '統計情報の取得に失敗しました' });
+    }
+});
+// 管理者ダッシュボード：最近のアクティビティ
+app.get('/api/admin/dashboard/activity', authenticate, async (req, res) => {
+    try {
+        const { query } = await import('../integrations/postgres/client.js');
+        const limit = 20;
+        // 登録、書類、通知を統合
+        const result = await query(`
+      (
+        SELECT 
+          u.id::text AS id,
+          'registration' AS type,
+          CONCAT('新規登録: ', u.email) AS title,
+          'ユーザーが登録しました' AS description,
+          u.created_at AS timestamp,
+          u.id AS user_id
+        FROM users u
+        ORDER BY u.created_at DESC
+        LIMIT $1
+      )
+      UNION ALL
+      (
+        SELECT 
+          ud.id::text AS id,
+          'document' AS type,
+          CONCAT('書類更新: ', ud.document_type) AS title,
+          'ユーザーの書類が保存されました' AS description,
+          ud.updated_at AS timestamp,
+          ud.user_id::int AS user_id
+        FROM user_documents ud
+        ORDER BY ud.updated_at DESC
+        LIMIT $1
+      )
+      UNION ALL
+      (
+        SELECT 
+          n.id::text AS id,
+          'notification' AS type,
+          n.title AS title,
+          n.message AS description,
+          n.created_at AS timestamp,
+          n.user_id AS user_id
+        FROM notifications n
+        ORDER BY n.created_at DESC
+        LIMIT $1
+      )
+      ORDER BY timestamp DESC
+      LIMIT $1
+    `, [limit]);
+        const data = result.rows.map((r) => ({
+            id: r.id,
+            type: r.type,
+            title: r.title,
+            description: r.description,
+            timestamp: r.timestamp,
+            user_id: r.user_id,
+        }));
+        res.json({ success: true, data });
+    }
+    catch (error) {
+        console.error('/api/admin/dashboard/activity エラー:', error);
+        res.status(500).json({ success: false, error: 'アクティビティの取得に失敗しました' });
+    }
+});
 // 企業承認API
 app.post('/api/admin/companies/approve', authenticate, async (req, res) => {
     try {
@@ -399,7 +499,36 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
 // 管理者ログインAPI
 app.post('/api/admin/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, recaptchaToken } = req.body;
+        // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
+        if (process.env.RECAPTCHA_SECRET_KEY) {
+            if (!recaptchaToken) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'reCAPTCHA 検証が必要です'
+                });
+            }
+            try {
+                const params = new URLSearchParams();
+                params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+                params.append('response', recaptchaToken);
+                if (req.ip)
+                    params.append('remoteip', req.ip);
+                const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                });
+                const verifyJson = await verifyResp.json();
+                if (!verifyJson.success) {
+                    return res.status(403).json({ success: false, message: 'reCAPTCHA 検証に失敗しました' });
+                }
+            }
+            catch (e) {
+                console.error('reCAPTCHA 検証エラー:', e);
+                return res.status(500).json({ success: false, message: 'reCAPTCHA 検証エラー' });
+            }
+        }
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
@@ -1550,7 +1679,33 @@ app.delete('/api/user/account/:userId', async (req, res) => {
 // 統一ログインAPI（求職者・企業・管理者対応）
 app.post('/api/login', async (req, res) => {
     try {
-        const { email, password, userType } = req.body;
+        const { email, password, userType, recaptchaToken } = req.body;
+        // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
+        if (process.env.RECAPTCHA_SECRET_KEY) {
+            if (!recaptchaToken) {
+                return res.status(400).json({ success: false, message: 'reCAPTCHA 検証が必要です' });
+            }
+            try {
+                const params = new URLSearchParams();
+                params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+                params.append('response', recaptchaToken);
+                if (req.ip)
+                    params.append('remoteip', req.ip);
+                const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                });
+                const verifyJson = await verifyResp.json();
+                if (!verifyJson.success) {
+                    return res.status(403).json({ success: false, message: 'reCAPTCHA 検証に失敗しました' });
+                }
+            }
+            catch (e) {
+                console.error('reCAPTCHA 検証エラー:', e);
+                return res.status(500).json({ success: false, message: 'reCAPTCHA 検証エラー' });
+            }
+        }
         console.log('=== ログインリクエスト開始 ===');
         console.log('リクエストボディ:', { email, userType, hasPassword: !!password, passwordLength: password ? password.length : 0 });
         if (!email || !password) {

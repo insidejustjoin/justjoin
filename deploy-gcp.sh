@@ -8,10 +8,10 @@ set -e  # エラー時に停止
 echo "🚀 GCPデプロイを開始します..."
 echo "🌐 ターゲットドメイン: justjoin.jp"
 
-# 環境変数の確認
-if [ ! -f .env.gcp ]; then
-    echo "❌ .env.gcpファイルが見つかりません"
-    echo "env.gcp.exampleをコピーして.env.gcpを作成し、実際の値を設定してください"
+# 環境変数ファイルの確認（env.gcp.yaml）
+if [ ! -f env.gcp.yaml ]; then
+    echo "❌ env.gcp.yaml が見つかりません"
+    echo "env.gcp.example または README を参照して env.gcp.yaml を整備してください"
     exit 1
 fi
 
@@ -41,25 +41,15 @@ fi
 
 echo "✅ ビルド完了"
 
-# 2. Dockerイメージのビルド
-echo "🐳 Dockerイメージをビルド中..."
+# 2. Dockerイメージのビルド＆プッシュ
+echo "🐳 Dockerイメージをビルド＆プッシュ中..."
 docker buildx build --platform linux/amd64 -f Dockerfile.gcp -t gcr.io/$PROJECT_ID/justjoin:latest . --push
 if [ $? -ne 0 ]; then
-    echo "❌ Dockerビルドに失敗しました"
+    echo "❌ Dockerビルド/プッシュに失敗しました"
     exit 1
 fi
 
-echo "✅ Dockerビルド完了"
-
-# 3. GCP Container Registryにプッシュ
-echo "📤 GCP Container Registryにプッシュ中..."
-docker push gcr.io/$PROJECT_ID/justjoin:latest
-if [ $? -ne 0 ]; then
-    echo "❌ イメージのプッシュに失敗しました"
-    exit 1
-fi
-
-echo "✅ イメージプッシュ完了"
+echo "✅ Dockerビルド/プッシュ完了"
 
 # 4. Cloud Runにデプロイ
 echo "🚀 Cloud Runにデプロイ中..."
@@ -69,14 +59,14 @@ gcloud run deploy justjoin \
     --region asia-northeast1 \
     --allow-unauthenticated \
     --port 8080 \
-    --memory 1Gi \
+    --memory 512Mi \
     --cpu 1 \
-    --max-instances 10 \
+    --max-instances 5 \
     --min-instances 0 \
     --env-vars-file env.gcp.yaml \
-    --add-cloudsql-instances $PROJECT_ID:asia-northeast1:justjoin \
+    --add-cloudsql-instances $PROJECT_ID:asia-northeast1:justjoin-enterprise \
     --timeout 300 \
-    --concurrency 80
+    --concurrency 150
 
 if [ $? -ne 0 ]; then
     echo "❌ Cloud Runデプロイに失敗しました"

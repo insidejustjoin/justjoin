@@ -137,15 +137,14 @@ router.post('/documents/:token', async (req, res) => {
                 message: '無効なトークンまたは期限切れです。'
             });
         }
-        // 必須項目チェック（既存のDocumentGeneratorと同じバリデーション）
+        // 必須項目チェック（本登録をスムーズにするため、最小限に緩和）
         const requiredFields = [
             'resume.basicInfo.firstName',
             'resume.basicInfo.lastName',
             'resume.basicInfo.email',
             'resume.basicInfo.phone',
             'resume.basicInfo.dateOfBirth',
-            'resume.basicInfo.address',
-            'skillSheet.skills'
+            'resume.basicInfo.address'
         ];
         const missingFields = [];
         for (const field of requiredFields) {
@@ -154,25 +153,7 @@ router.post('/documents/:token', async (req, res) => {
                 missingFields.push(field);
             }
         }
-        // 学歴、職歴、資格のチェック（ない場合はチェックボックスで完了とみなす）
-        if (!documentsData.resume?.noEducation && (!documentsData.resume?.education || documentsData.resume.education.length === 0)) {
-            missingFields.push('resume.education');
-        }
-        if (!documentsData.resume?.noWorkExperience && (!documentsData.resume?.workExperience || documentsData.resume.workExperience.length === 0)) {
-            missingFields.push('resume.workExperience');
-        }
-        // 日本語資格: name==='なし' の場合は date を必須にしない
-        if (documentsData.certificateStatus?.name && documentsData.certificateStatus.name !== 'なし') {
-            if (!documentsData.certificateStatus?.date) {
-                missingFields.push('certificateStatus.date');
-            }
-        }
-        // 予定の日本語資格: level==='未定' の場合は nextJapaneseTestDate を必須にしない
-        if (documentsData.nextJapaneseTestLevel && documentsData.nextJapaneseTestLevel !== '未定') {
-            if (!documentsData.nextJapaneseTestDate) {
-                missingFields.push('nextJapaneseTestDate');
-            }
-        }
+        // 学歴／職歴／資格系は任意に緩和（登録モードでは未入力でもOK）
         if (missingFields.length > 0) {
             return res.status(400).json({
                 success: false,
@@ -180,10 +161,10 @@ router.post('/documents/:token', async (req, res) => {
                 missingFields
             });
         }
-        // 書類データ保存
+        // 書類データ保存（プレースホルダ修正）
         await query(`UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
-       WHERE verification_token = $2`, [JSON.stringify(documentsData), 'documents_completed', token]);
+       WHERE verification_token = $3`, [JSON.stringify(documentsData), 'documents_completed', token]);
         res.json({
             success: true,
             message: '書類入力が完了しました。パスワードを設定してください。'
@@ -220,10 +201,10 @@ router.post('/update-documents/:token', async (req, res) => {
         }
         const email = tempReg.rows[0].email;
         console.log('[REGISTER][UPDATE_DOCS] email=', email, 'size=', JSON.stringify(documentsData).length);
-        // 書類データを更新
+        // 書類データを更新（プレースホルダ修正）
         await query(`UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
-       WHERE verification_token = $2`, [JSON.stringify(documentsData), 'documents_completed', token]);
+       WHERE verification_token = $3`, [JSON.stringify(documentsData), 'documents_completed', token]);
         console.log('[REGISTER][UPDATE_DOCS] saved.');
         res.json({
             success: true,
@@ -455,9 +436,9 @@ router.post('/complete/:token', async (req, res) => {
                 console.warn('[REGISTER][COMPLETE] profilePhoto extraction warning:', e);
             }
         }
-        // 求職者詳細情報作成
+        // 求職者詳細情報作成（プレースホルダ修正）
         await query(`INSERT INTO job_seekers (user_id, first_name, last_name, profile_photo, completion_rate, created_at, updated_at) 
-       VALUES ($1, $2, $3, NOW(), NOW())`, [userId, registration.first_name, registration.last_name, profilePhoto, completionRate]);
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`, [userId, registration.first_name, registration.last_name, profilePhoto, completionRate]);
         // 求職者ステータスを'active'で初期化
         try {
             await query(`INSERT INTO job_seeker_status_history (user_id, status, created_at, updated_at) 

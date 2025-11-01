@@ -28,7 +28,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isInitialized: boolean;
-  login: (email: string, password: string, userType: 'job_seeker' | 'company' | 'admin') => Promise<boolean>;
+  login: (email: string, password: string, userType: 'job_seeker' | 'company' | 'admin', recaptchaToken?: string) => Promise<boolean>;
   logout: () => void;
   registerJobSeeker: (email: string, firstName: string, lastName: string, language?: 'ja' | 'en') => Promise<boolean>;
   registerCompany: (email: string, companyName: string, description: string) => Promise<boolean>;
@@ -221,7 +221,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [isInitialized]); // userを依存配列から削除
 
-  const login = async (email: string, password: string, userType: 'job_seeker' | 'company' | 'admin'): Promise<boolean> => {
+  const login = async (email: string, password: string, userType: 'job_seeker' | 'company' | 'admin', recaptchaToken?: string): Promise<boolean> => {
     try {
       console.log('Login requested for:', email, userType);
       
@@ -238,8 +238,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // 管理者の場合は専用APIを使用
       const apiEndpoint = userType === 'admin' ? '/api/admin/login' : '/api/login';
       const requestBody = userType === 'admin' 
-        ? { email, password }
-        : { email, password, userType };
+        ? { email, password, recaptchaToken }
+        : { email, password, userType, recaptchaToken };
       
       const response = await fetch(`${apiUrl}${apiEndpoint}`, {
         method: 'POST',
