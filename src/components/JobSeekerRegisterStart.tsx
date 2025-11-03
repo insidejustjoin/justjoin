@@ -11,8 +11,12 @@ import { useNavigate } from 'react-router-dom';
 declare global {
   interface Window {
     grecaptcha: {
+      // v3
       ready: (callback: () => void) => void;
       execute: (siteKey: string, options: { action: string }) => Promise<string>;
+      // v2
+      getResponse: () => string;
+      render?: (container: any, parameters: any) => any;
     };
   }
 }
@@ -38,9 +42,16 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
     setMessage(null);
 
     try {
-      // reCAPTCHA v3トークン取得
+      // reCAPTCHA v2（チェックボックス）のレスポンスを優先
+      let recaptchaV2Response = '';
+      if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
+        try {
+          recaptchaV2Response = window.grecaptcha.getResponse();
+        } catch {}
+      }
+      // v3はフォールバックとして取得（将来のスコア評価用）
       let recaptchaToken: string | undefined;
-      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
+      if (!recaptchaV2Response && siteKey && typeof window !== 'undefined' && window.grecaptcha) {
         try {
           recaptchaToken = await new Promise<string>((resolve, reject) => {
             window.grecaptcha.ready(() => {
@@ -65,6 +76,7 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
           firstName,
           lastName,
           recaptchaToken,
+          'g-recaptcha-response': recaptchaV2Response || undefined,
         }),
       });
 
@@ -167,6 +179,14 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
               <AlertDescription>{message.text}</AlertDescription>
             </Alert>
           )}
+
+          {/* reCAPTCHA v2 チェックボックス */}
+          <div className="my-2 flex justify-center">
+            {/* 自動レンダリング（data-sitekey）に任せる */}
+            {siteKey && (
+              <div className="g-recaptcha" data-sitekey={siteKey}></div>
+            )}
+          </div>
 
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? (

@@ -10,16 +10,14 @@ router.post('/check', async (req, res) => {
   try {
     const { email, firstName, lastName, recaptchaToken } = req.body;
 
-    // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
+    // reCAPTCHA 検証（v2優先、v3フォールバック）
     if (process.env.RECAPTCHA_SECRET_KEY) {
-      // トークン未提供時は暫定的に通過（本番安定化まで）
-      if (!recaptchaToken) {
-        console.warn('reCAPTCHA トークン未提供。暫定的に通過させます。');
-      } else {
+      const recaptchaV2 = (req.body && (req.body['g-recaptcha-response'] as string)) || '';
+      const recaptchaV3 = recaptchaToken || '';
       try {
         const params = new URLSearchParams();
         params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-        params.append('response', recaptchaToken);
+        params.append('response', recaptchaV2 || recaptchaV3);
         if (req.ip) params.append('remoteip', req.ip);
         const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
           method: 'POST',
@@ -28,15 +26,11 @@ router.post('/check', async (req, res) => {
         });
         const verifyJson = await verifyResp.json();
         if (!verifyJson.success) {
-          console.warn('reCAPTCHA 検証失敗。暫定的に通過させます。');
-        }
-        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
-        if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
-          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}。暫定的に通過させます。`);
+          return res.status(403).json({ success: false, message: 'reCAPTCHA 検証に失敗しました' });
         }
       } catch (e) {
-        console.error('reCAPTCHA 検証エラー（暫定通過）:', e);
-      }
+        console.error('reCAPTCHA 検証エラー:', e);
+        return res.status(500).json({ success: false, message: 'reCAPTCHA 検証エラー' });
       }
     }
 
