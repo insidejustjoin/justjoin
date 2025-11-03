@@ -12,7 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { LoginGuidance } from '@/components/LoginGuidance';
 import { BetaNotice } from '@/components/BetaNotice';
-import { TemporaryRegistrationForm } from '@/components/TemporaryRegistrationForm';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { User, Mail, Lock, UserPlus, ArrowLeft, Briefcase, Key } from 'lucide-react';
@@ -32,7 +31,6 @@ export function JobSeekerLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [showGuidance, setShowGuidance] = useState(false);
   const [currentTab, setCurrentTab] = useState<'login' | 'register'>('login');
-  const [showTemporaryRegistration, setShowTemporaryRegistration] = useState(false);
   const navigate = useNavigate();
 
   // 初回訪問時にガイダンスを表示（少し遅延させて表示）
@@ -51,9 +49,8 @@ export function JobSeekerLogin() {
   const handleTabChange = (tab: 'login' | 'register') => {
     setCurrentTab(tab);
     if (tab === 'register') {
-      setShowTemporaryRegistration(true);
-    } else {
-      setShowTemporaryRegistration(false);
+      // 新しい登録フローにリダイレクト
+      navigate('/jobseeker/register');
     }
   };
 
@@ -79,17 +76,6 @@ export function JobSeekerLogin() {
     }
   };
 
-  const handleTemporaryRegistrationSuccess = () => {
-    toast.success(t('temporaryRegistration.successMessage') || '仮登録が完了しました。確認メールをご確認ください。');
-    // ログインタブに切り替え
-    setCurrentTab('login');
-    setShowTemporaryRegistration(false);
-    // メールアドレスをログインフォームに設定
-    const emailInput = document.getElementById('login-email') as HTMLInputElement;
-    if (emailInput) {
-      emailInput.focus();
-    }
-  };
 
   return (
     <>
@@ -213,34 +199,30 @@ export function JobSeekerLogin() {
               </TabsContent>
 
               <TabsContent value="register">
-                {showTemporaryRegistration ? (
-                  <TemporaryRegistrationForm onSuccess={handleTemporaryRegistrationSuccess} />
-                ) : (
-                  <Card>
-                    <CardHeader className="text-center">
-                      <CardTitle className="flex items-center justify-center gap-2">
-                        <UserPlus className="h-5 w-5 text-blue-600" />
-                        {t('auth.jobSeekerRegisterTitle')}
-                      </CardTitle>
-                      <CardDescription>
-                        {t('auth.jobSeekerRegisterDescription')}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-center space-y-4">
-                        <p className="text-sm text-gray-600">
-                          安全で簡単な仮登録システムをご利用いただけます。
-                        </p>
-                        <Button 
-                          onClick={() => setShowTemporaryRegistration(true)}
-                          className="w-full"
-                        >
-                          仮登録を開始
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+                <Card>
+                  <CardHeader className="text-center">
+                    <CardTitle className="flex items-center justify-center gap-2">
+                      <UserPlus className="h-5 w-5 text-blue-600" />
+                      {t('auth.jobSeekerRegisterTitle')}
+                    </CardTitle>
+                    <CardDescription>
+                      {t('auth.jobSeekerRegisterDescription')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center space-y-4">
+                      <p className="text-sm text-gray-600">
+                        新規登録ページへ移動します
+                      </p>
+                      <Button 
+                        onClick={() => navigate('/jobseeker/register')}
+                        className="w-full"
+                      >
+                        新規登録へ
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
             </Tabs>
             

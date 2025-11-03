@@ -5,7 +5,42 @@ const router = express.Router();
 // 既存ユーザーチェックAPI
 router.post('/check', async (req, res) => {
     try {
-        const { email, firstName, lastName } = req.body;
+        const { email, firstName, lastName, recaptchaToken } = req.body;
+        // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
+        if (process.env.RECAPTCHA_SECRET_KEY) {
+            if (!recaptchaToken) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'reCAPTCHA 検証が必要です'
+                });
+            }
+            try {
+                const params = new URLSearchParams();
+                params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+                params.append('response', recaptchaToken);
+                if (req.ip)
+                    params.append('remoteip', req.ip);
+                const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                });
+                const verifyJson = await verifyResp.json();
+                if (!verifyJson.success) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'reCAPTCHA 検証に失敗しました'
+                    });
+                }
+            }
+            catch (e) {
+                console.error('reCAPTCHA 検証エラー:', e);
+                return res.status(500).json({
+                    success: false,
+                    message: 'reCAPTCHA 検証エラー'
+                });
+            }
+        }
         // バリデーション
         if (!email || !firstName || !lastName) {
             return res.status(400).json({
@@ -45,7 +80,42 @@ router.post('/check', async (req, res) => {
 // エンジニア向け本登録API
 router.post('/engineer', async (req, res) => {
     try {
-        const { email, firstName, lastName, password, documentsData } = req.body;
+        const { email, firstName, lastName, password, documentsData, recaptchaToken } = req.body;
+        // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
+        if (process.env.RECAPTCHA_SECRET_KEY) {
+            if (!recaptchaToken) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'reCAPTCHA 検証が必要です'
+                });
+            }
+            try {
+                const params = new URLSearchParams();
+                params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+                params.append('response', recaptchaToken);
+                if (req.ip)
+                    params.append('remoteip', req.ip);
+                const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                });
+                const verifyJson = await verifyResp.json();
+                if (!verifyJson.success) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'reCAPTCHA 検証に失敗しました'
+                    });
+                }
+            }
+            catch (e) {
+                console.error('reCAPTCHA 検証エラー:', e);
+                return res.status(500).json({
+                    success: false,
+                    message: 'reCAPTCHA 検証エラー'
+                });
+            }
+        }
         // バリデーション
         if (!email || !firstName || !lastName || !password) {
             return res.status(400).json({
@@ -167,7 +237,42 @@ router.post('/engineer', async (req, res) => {
 // 一般職向け本登録API
 router.post('/general', async (req, res) => {
     try {
-        const { email, firstName, lastName, password, documentsData } = req.body;
+        const { email, firstName, lastName, password, documentsData, recaptchaToken } = req.body;
+        // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
+        if (process.env.RECAPTCHA_SECRET_KEY) {
+            if (!recaptchaToken) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'reCAPTCHA 検証が必要です'
+                });
+            }
+            try {
+                const params = new URLSearchParams();
+                params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+                params.append('response', recaptchaToken);
+                if (req.ip)
+                    params.append('remoteip', req.ip);
+                const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                });
+                const verifyJson = await verifyResp.json();
+                if (!verifyJson.success) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'reCAPTCHA 検証に失敗しました'
+                    });
+                }
+            }
+            catch (e) {
+                console.error('reCAPTCHA 検証エラー:', e);
+                return res.status(500).json({
+                    success: false,
+                    message: 'reCAPTCHA 検証エラー'
+                });
+            }
+        }
         // バリデーション
         if (!email || !firstName || !lastName || !password) {
             return res.status(400).json({

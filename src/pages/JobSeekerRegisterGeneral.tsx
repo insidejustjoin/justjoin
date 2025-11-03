@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import DocumentGenerator from '@/components/DocumentGenerator';
 import { ArrowLeft, Lock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const JobSeekerRegisterGeneral: React.FC = () => {
   const location = useLocation();
@@ -17,6 +18,8 @@ const JobSeekerRegisterGeneral: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
+  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   
   const { email, firstName, lastName } = (location.state as { email?: string; firstName?: string; lastName?: string }) || {};
 
@@ -61,6 +64,17 @@ const JobSeekerRegisterGeneral: React.FC = () => {
     setErrors([]);
     
     try {
+      // reCAPTCHAトークンを取得
+      let recaptchaToken: string | undefined;
+      if (siteKey && recaptchaRef.current) {
+        try {
+          recaptchaToken = await recaptchaRef.current.executeAsync();
+          recaptchaRef.current.reset();
+        } catch (e) {
+          console.warn('reCAPTCHA 実行に失敗しました。', e);
+        }
+      }
+
       const response = await fetch('/api/register/general', {
         method: 'POST',
         headers: {
@@ -71,7 +85,8 @@ const JobSeekerRegisterGeneral: React.FC = () => {
           firstName,
           lastName,
           password,
-          documentsData
+          documentsData,
+          recaptchaToken
         }),
       });
 
@@ -154,6 +169,15 @@ const JobSeekerRegisterGeneral: React.FC = () => {
                         ))}
                       </AlertDescription>
                     </Alert>
+                  )}
+
+                  {/* Invisible reCAPTCHA */}
+                  {siteKey && (
+                    <ReCAPTCHA
+                      ref={recaptchaRef}
+                      sitekey={siteKey}
+                      size="invisible"
+                    />
                   )}
 
                   <Button type="submit" className="w-full" disabled={isSubmitting || !password || !confirmPassword}>
