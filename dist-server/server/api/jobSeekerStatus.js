@@ -6,34 +6,104 @@ const router = Router();
 router.get('/admin/status', authenticate, async (req, res) => {
     try {
         const { status } = req.query;
+        // current_job_seeker_statusビューが存在しない場合のフォールバック
         let sqlQuery = `
       SELECT 
         js.user_id as id,
         js.user_id,
         js.first_name,
         js.last_name,
-        js.email,
+        u.email,
         js.phone,
         js.profile_photo,
         js.created_at,
-        jsh.status,
-        jsh.company_name,
-        jsh.company_url,
-        jsh.employment_date,
-        jsh.withdrawal_date,
-        jsh.reason,
-        jsh.notes,
-        jsh.updated_at as status_updated_at
+        COALESCE(
+          (SELECT status FROM job_seeker_status_history 
+           WHERE user_id = js.user_id 
+           ORDER BY created_at DESC LIMIT 1),
+          'active'
+        ) as status,
+        COALESCE(
+          (SELECT company_name FROM job_seeker_status_history 
+           WHERE user_id = js.user_id 
+           ORDER BY created_at DESC LIMIT 1),
+          NULL
+        ) as company_name,
+        COALESCE(
+          (SELECT company_url FROM job_seeker_status_history 
+           WHERE user_id = js.user_id 
+           ORDER BY created_at DESC LIMIT 1),
+          NULL
+        ) as company_url,
+        COALESCE(
+          (SELECT employment_date FROM job_seeker_status_history 
+           WHERE user_id = js.user_id 
+           ORDER BY created_at DESC LIMIT 1),
+          NULL
+        ) as employment_date,
+        COALESCE(
+          (SELECT withdrawal_date FROM job_seeker_status_history 
+           WHERE user_id = js.user_id 
+           ORDER BY created_at DESC LIMIT 1),
+          NULL
+        ) as withdrawal_date,
+        COALESCE(
+          (SELECT reason FROM job_seeker_status_history 
+           WHERE user_id = js.user_id 
+           ORDER BY created_at DESC LIMIT 1),
+          NULL
+        ) as reason,
+        COALESCE(
+          (SELECT notes FROM job_seeker_status_history 
+           WHERE user_id = js.user_id 
+           ORDER BY created_at DESC LIMIT 1),
+          NULL
+        ) as notes,
+        COALESCE(
+          (SELECT updated_at FROM job_seeker_status_history 
+           WHERE user_id = js.user_id 
+           ORDER BY created_at DESC LIMIT 1),
+          js.created_at
+        ) as status_updated_at
       FROM job_seekers js
-      LEFT JOIN current_job_seeker_status jsh ON js.user_id = jsh.user_id
+      INNER JOIN users u ON js.user_id = u.id
       WHERE 1=1
     `;
         const params = [];
         if (status && status !== 'all') {
-            sqlQuery += ` AND jsh.status = $${params.length + 1}`;
+            sqlQuery = `
+        SELECT 
+          js.user_id as id,
+          js.user_id,
+          js.first_name,
+          js.last_name,
+          u.email,
+          js.phone,
+          js.profile_photo,
+          js.created_at,
+          jsh.status,
+          jsh.company_name,
+          jsh.company_url,
+          jsh.employment_date,
+          jsh.withdrawal_date,
+          jsh.reason,
+          jsh.notes,
+          jsh.updated_at as status_updated_at
+        FROM job_seekers js
+        INNER JOIN users u ON js.user_id = u.id
+        INNER JOIN (
+          SELECT DISTINCT ON (user_id) 
+            user_id, status, company_name, company_url, 
+            employment_date, withdrawal_date, reason, notes, updated_at
+          FROM job_seeker_status_history
+          WHERE status = $${params.length + 1}
+          ORDER BY user_id, created_at DESC
+        ) jsh ON js.user_id = jsh.user_id
+        WHERE 1=1
+      `;
             params.push(status);
         }
-        sqlQuery += ` ORDER BY jsh.updated_at DESC NULLS LAST, js.created_at DESC`;
+        sqlQuery += ` ORDER BY status_updated_at DESC, js.created_at DESC`;
         const result = await query(sqlQuery, params);
         res.json({
             success: true,
@@ -42,7 +112,11 @@ router.get('/admin/status', authenticate, async (req, res) => {
     }
     catch (error) {
         console.error('求職者ステータス取得エラー:', error);
-        res.status(500).json({ success: false, error: '求職者ステータスの取得に失敗しました' });
+        res.status(500).json({
+            success: false,
+            error: '求職者ステータスの取得に失敗しました',
+            details: error instanceof Error ? error.message : String(error)
+        });
     }
 });
 // 求職者を就職済みに変更

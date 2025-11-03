@@ -1381,7 +1381,7 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
       res.json({ 
         success: true, 
         message: `ユーザー「${fullName}」を完全に削除しました`,
-        deletedRecords
+        deletedRecords: deletedRecords
       });
     } catch (deleteError) {
       // トランザクションロールバック
