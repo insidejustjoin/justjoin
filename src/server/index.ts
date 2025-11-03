@@ -734,7 +734,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         '' as desired_job_title,
         '' as self_introduction
       FROM job_seekers js
-      INNER JOIN users u ON js.user_id = u.id
+      LEFT JOIN users u ON js.user_id = u.id
       ${whereClause}
       ORDER BY js.created_at DESC
     `, params);
