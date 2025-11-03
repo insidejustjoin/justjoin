@@ -1435,8 +1435,10 @@ export function AdminJobSeekers() {
   useEffect(() => {
     if (activeTab === 'temporary') {
       fetchTemporaryRegistrations();
+    } else {
+      fetchJobSeekers();
     }
-  }, [activeTab]);
+  }, [activeTab, registrationTypeTab]);
 
   return (
     <AdminPageLayout title="管理者ダッシュボード">

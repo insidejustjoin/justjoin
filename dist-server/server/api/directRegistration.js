@@ -169,17 +169,15 @@ router.post('/engineer', async (req, res) => {
        LEFT JOIN job_seekers js ON js.user_id = u.id
        WHERE u.email = $1`, [email]);
         if (existingUser.rows.length > 0) {
-            const user = existingUser.rows[0];
-            // 同じregistration_typeが既に存在する場合はエラー
-            const existingRegistrations = existingUser.rows.filter((row) => row.jobseeker_id && row.registration_type === 'general');
+            // 同じregistration_type（エンジニア）が既に存在する場合はエラー
+            const existingRegistrations = existingUser.rows.filter((row) => row.jobseeker_id && row.registration_type === 'engineer');
             if (existingRegistrations.length > 0) {
                 return res.status(400).json({
                     success: false,
-                    message: 'このメールアドレスで一般職登録は既に完了しています。'
+                    message: 'このメールアドレスでエンジニア登録は既に完了しています。'
                 });
             }
-            // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
-            // （後続の処理でINSERT INTO usersではなく、既存のuser_idを使用）
+            // usersテーブルにのみ存在する場合、または一般職登録のみの場合は、既存のuser_idを再利用
         }
         // パスワードハッシュ化
         const passwordHash = await bcrypt.hash(password, 10);
