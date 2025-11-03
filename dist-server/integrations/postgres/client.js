@@ -229,14 +229,60 @@ export const query = async (text, params) => {
                 if (exists.rowCount === 0) {
                     const path = (await import('path')).default;
                     const fs = (await import('fs')).default;
-                    const schemaPath = path.join(process.cwd(), 'src/integrations/postgres/schema.sql');
-                    try {
-                        const schema = fs.readFileSync(schemaPath, 'utf8');
-                        await pool.query(schema);
-                        console.log('Executed schema.sql to initialize database');
+                    // 複数候補パスを順に試行（Cloud Runのdist配置にも対応）
+                    const candidates = [
+                        path.join(process.cwd(), 'src/integrations/postgres/schema.sql'),
+                        path.join(process.cwd(), 'dist-server/integrations/postgres/schema.sql'),
+                        path.join(path.dirname(process.cwd()), 'src/integrations/postgres/schema.sql')
+                    ];
+                    let executed = false;
+                    for (const p of candidates) {
+                        try {
+                            if (fs.existsSync(p)) {
+                                const schema = fs.readFileSync(p, 'utf8');
+                                await pool.query(schema);
+                                console.log('Executed schema.sql to initialize database:', p);
+                                executed = true;
+                                break;
+                            }
+                        }
+                        catch { }
                     }
-                    catch (e) {
-                        console.warn('Failed to execute schema.sql:', e?.message || e);
+                    if (!executed) {
+                        console.warn('schema.sql not found. Running minimal bootstrap DDL...');
+                        // 最小限のテーブルだけ生成（存在チェック付き）
+                        const bootstrap = `
+              CREATE EXTENSION IF NOT EXISTS pgcrypto;
+              CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT,
+                user_type TEXT,
+                status TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+              );
+              CREATE TABLE IF NOT EXISTS job_seekers (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                first_name TEXT,
+                last_name TEXT,
+                profile_photo TEXT,
+                registration_type TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+              );
+              CREATE TABLE IF NOT EXISTS user_documents (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                document_type VARCHAR(50) DEFAULT 'all',
+                document_data JSONB NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+              );
+            `;
+                        await pool.query(bootstrap);
+                        executed = true;
                     }
                 }
             }

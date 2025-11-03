@@ -199,6 +199,19 @@ router.post('/engineer', async (req, res) => {
         }
       }
 
+      // 念のため、usersに存在しなければ作成（DB初期化レース対策）
+      try {
+        const existsUser = await query('SELECT 1 FROM users WHERE id = $1', [userId]);
+        if (existsUser.rowCount === 0) {
+          const reUser = await query(
+            `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+             VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
+            [email, passwordHash]
+          );
+          userId = reUser.rows[0].id;
+        }
+      } catch {}
+
       // 求職者情報作成（エンジニア向け）
       try {
         await query(
@@ -220,13 +233,33 @@ router.post('/engineer', async (req, res) => {
             'engineer'
           ]
         );
-      } catch {
+      } catch (fkErr) {
+        // FK違反時はメールからusers.idを再取得してリトライ
+        try {
+          const u = await query('SELECT id FROM users WHERE email = $1 ORDER BY created_at DESC LIMIT 1', [email]);
+          if (u.rows.length > 0) {
+            userId = u.rows[0].id;
+          } else {
+            const make = await query(
+              `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
+               VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
+              [email, passwordHash]
+            );
+            userId = make.rows[0].id;
+          }
+          await query(
+            `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+             VALUES ($1, $2, $3, 'engineer', NOW(), NOW())`,
+            [userId, firstName, lastName]
+          );
+        } catch {
         // 最小カラムでフォールバック
-        await query(
-          `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, NOW(), NOW())`,
-          [userId, firstName, lastName, 'engineer']
-        );
+          await query(
+            `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+            [userId, firstName, lastName, 'engineer']
+          );
+        }
       }
 
       // 書類データ保存（失敗しても続行）
@@ -438,13 +471,35 @@ router.post('/general', async (req, res) => {
         );
       } else {
         // 新規ユーザー作成
-        const userResult = await query(
-          `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
-           VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
-          [email, passwordHash, 'job_seeker', 'active']
-        );
-        userId = userResult.rows[0].id;
+        try {
+          const userResult = await query(
+            `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
+            [email, passwordHash, 'job_seeker', 'active']
+          );
+          userId = userResult.rows[0].id;
+        } catch {
+          const userResult = await query(
+            `INSERT INTO users (email, password_hash, created_at, updated_at) 
+             VALUES ($1, $2, NOW(), NOW()) RETURNING id`,
+            [email, passwordHash]
+          );
+          userId = userResult.rows[0].id;
+        }
       }
+
+      // 念のため存在確認
+      try {
+        const existsUser = await query('SELECT 1 FROM users WHERE id = $1', [userId]);
+        if (existsUser.rowCount === 0) {
+          const reUser = await query(
+            `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
+             VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
+            [email, passwordHash]
+          );
+          userId = reUser.rows[0].id;
+        }
+      } catch {}
 
       // 求職者情報作成（一般職向けはスキルシートなし）
       try {
@@ -467,12 +522,31 @@ router.post('/general', async (req, res) => {
             'general'
           ]
         );
-      } catch {
+      } catch (fkErr) {
+        try {
+          const u = await query('SELECT id FROM users WHERE email = $1 ORDER BY created_at DESC LIMIT 1', [email]);
+          if (u.rows.length > 0) {
+            userId = u.rows[0].id;
+          } else {
+            const make = await query(
+              `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
+               VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
+              [email, passwordHash]
+            );
+            userId = make.rows[0].id;
+          }
+          await query(
+            `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+             VALUES ($1, $2, $3, 'general', NOW(), NOW())`,
+            [userId, firstName, lastName]
+          );
+        } catch {
         await query(
           `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
            VALUES ($1, $2, $3, $4, NOW(), NOW())`,
           [userId, firstName, lastName, 'general']
         );
+        }
       }
 
       // スキルシートを除外して書類データ保存（失敗しても続行）
