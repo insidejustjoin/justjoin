@@ -31,22 +31,27 @@ router.post('/check', async (req, res) => {
                 return res.status(500).json({ success: false, message: 'reCAPTCHA 検証エラー' });
             }
         }
-        // バリデーション
-        if (!email || !firstName || !lastName) {
-            return res.status(400).json({
-                success: false,
-                message: 'メールアドレス、姓、名は必須です。'
-            });
+        // バリデーション（最低限）
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'メールアドレスは必須です。' });
         }
         // 既存ユーザーチェック（job_seekersテーブルに対応するレコードがあるかもチェック）
-        const existingUser = await query(`SELECT 
-        u.id, 
-        u.email, 
-        u.status,
-        js.id as jobseeker_id
-       FROM users u
-       LEFT JOIN job_seekers js ON js.user_id = u.id
-       WHERE u.email = $1`, [email]);
+        let existingUser = { rows: [] };
+        try {
+            existingUser = await query(`SELECT 
+          u.id, 
+          u.email, 
+          u.status,
+          js.id as jobseeker_id
+         FROM users u
+         LEFT JOIN job_seekers js ON js.user_id = u.id
+         WHERE u.email = $1`, [email]);
+        }
+        catch (dbErr) {
+            console.warn('ユーザーチェックDBエラー（継続）:', dbErr);
+            // DBエラー時も新規扱いで継続
+            existingUser = { rows: [] };
+        }
         if (existingUser.rows.length > 0) {
             const user = existingUser.rows[0];
             // job_seekersテーブルに対応するレコードがある場合のみ「既に登録されています」と表示
@@ -68,18 +73,12 @@ router.post('/check', async (req, res) => {
                 console.warn(`ユーザー${user.id}（${email}）はusersテーブルに存在しますが、job_seekersテーブルに対応するレコードがありません。新規登録として処理します。`);
             }
         }
-        res.json({
-            success: true,
-            exists: false,
-            message: '新規ユーザーです。'
-        });
+        return res.json({ success: true, exists: false, message: '新規ユーザーです。' });
     }
     catch (error) {
         console.error('ユーザーチェックエラー:', error);
-        res.status(500).json({
-            success: false,
-            message: 'ユーザーチェック中にエラーが発生しました。'
-        });
+        // 500にせず新規扱いで返す（登録フローを妨げないため）
+        return res.json({ success: true, exists: false, message: '新規ユーザーです。（フォールバック）' });
     }
 });
 // エンジニア向け本登録API

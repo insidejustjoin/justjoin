@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import DocumentGenerator from '@/components/DocumentGenerator';
-import { ArrowLeft, Lock, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Lock, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 declare global {
   interface Window {
