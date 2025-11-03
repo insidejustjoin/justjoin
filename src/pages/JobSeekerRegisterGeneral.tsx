@@ -18,10 +18,15 @@ const JobSeekerRegisterGeneral: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const recaptchaRef = useRef<ReCAPTCHA | null>(null);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   
   const { email, firstName, lastName } = (location.state as { email?: string; firstName?: string; lastName?: string }) || {};
+
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token);
+  };
 
   if (!email || !firstName || !lastName) {
     navigate('/jobseeker/register');
@@ -49,6 +54,12 @@ const JobSeekerRegisterGeneral: React.FC = () => {
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // reCAPTCHAが設定されている場合、トークンの確認
+    if (siteKey && !recaptchaToken) {
+      setErrors(['「私はロボットではありません」のチェックボックスにチェックを入れてください。']);
+      return;
+    }
+    
     const passwordErrors = validatePassword(password);
     if (passwordErrors.length > 0) {
       setErrors(passwordErrors);
@@ -64,17 +75,6 @@ const JobSeekerRegisterGeneral: React.FC = () => {
     setErrors([]);
     
     try {
-      // reCAPTCHAトークンを取得
-      let recaptchaToken: string | undefined;
-      if (siteKey && recaptchaRef.current) {
-        try {
-          recaptchaToken = await recaptchaRef.current.executeAsync();
-          recaptchaRef.current.reset();
-        } catch (e) {
-          console.warn('reCAPTCHA 実行に失敗しました。', e);
-        }
-      }
-
       const response = await fetch('/api/register/general', {
         method: 'POST',
         headers: {
@@ -171,16 +171,19 @@ const JobSeekerRegisterGeneral: React.FC = () => {
                     </Alert>
                   )}
 
-                  {/* Invisible reCAPTCHA */}
+                  {/* reCAPTCHA */}
                   {siteKey && (
-                    <ReCAPTCHA
-                      ref={recaptchaRef}
-                      sitekey={siteKey}
-                      size="invisible"
-                    />
+                    <div className="flex justify-center">
+                      <ReCAPTCHA
+                        ref={recaptchaRef}
+                        sitekey={siteKey}
+                        size="normal"
+                        onChange={handleRecaptchaChange}
+                      />
+                    </div>
                   )}
 
-                  <Button type="submit" className="w-full" disabled={isSubmitting || !password || !confirmPassword}>
+                  <Button type="submit" className="w-full" disabled={isSubmitting || !password || !confirmPassword || (siteKey && !recaptchaToken)}>
                     {isSubmitting ? '登録中...' : '登録を完了する'}
                   </Button>
                 </form>

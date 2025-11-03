@@ -19,28 +19,32 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
   const [lastName, setLastName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const { t } = useLanguage();
   const navigate = useNavigate();
   const recaptchaRef = useRef<ReCAPTCHA | null>(null);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
 
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // reCAPTCHAが設定されている場合、トークンの確認
+    if (siteKey && !recaptchaToken) {
+      setMessage({ 
+        type: 'error', 
+        text: '「私はロボットではありません」のチェックボックスにチェックを入れてください。' 
+      });
+      return;
+    }
+
     setIsLoading(true);
     setMessage(null);
 
     try {
-      // reCAPTCHAトークンを取得
-      let recaptchaToken: string | undefined;
-      if (siteKey && recaptchaRef.current) {
-        try {
-          recaptchaToken = await recaptchaRef.current.executeAsync();
-          recaptchaRef.current.reset();
-        } catch (e) {
-          console.warn('reCAPTCHA 実行に失敗しました。', e);
-        }
-      }
-
       const response = await fetch('/api/register/check', {
         method: 'POST',
         headers: {
@@ -169,13 +173,16 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
           </Button>
         </form>
 
-        {/* Invisible reCAPTCHA */}
+        {/* reCAPTCHA */}
         {siteKey && (
-          <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={siteKey}
-            size="invisible"
-          />
+          <div className="mt-4 flex justify-center">
+            <ReCAPTCHA
+              ref={recaptchaRef}
+              sitekey={siteKey}
+              size="normal"
+              onChange={handleRecaptchaChange}
+            />
+          </div>
         )}
 
         <div className="mt-6 text-center text-sm text-muted-foreground">
