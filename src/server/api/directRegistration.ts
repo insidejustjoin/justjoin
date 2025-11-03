@@ -170,11 +170,12 @@ router.post('/engineer', async (req, res) => {
       });
     }
 
-    // 既存ユーザーチェック（job_seekersテーブルに対応するレコードがあるかもチェック）
+    // 既存ユーザーチェック（同じメールアドレスで最大2つまで登録可能：エンジニアと一般職）
     const existingUser = await query(
       `SELECT 
         u.id, 
-        js.id as jobseeker_id
+        js.id as jobseeker_id,
+        js.registration_type
        FROM users u
        LEFT JOIN job_seekers js ON js.user_id = u.id
        WHERE u.email = $1`,
@@ -183,11 +184,12 @@ router.post('/engineer', async (req, res) => {
 
     if (existingUser.rows.length > 0) {
       const user = existingUser.rows[0];
-      // job_seekersテーブルに対応するレコードがある場合のみエラー
-      if (user.jobseeker_id) {
+      // 同じregistration_typeが既に存在する場合はエラー
+      const existingRegistrations = existingUser.rows.filter((row: any) => row.jobseeker_id && row.registration_type === 'general');
+      if (existingRegistrations.length > 0) {
         return res.status(400).json({ 
           success: false, 
-          message: 'このメールアドレスは既に登録されています。' 
+          message: 'このメールアドレスで一般職登録は既に完了しています。' 
         });
       }
       // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
@@ -223,13 +225,13 @@ router.post('/engineer', async (req, res) => {
         userId = userResult.rows[0].id;
       }
 
-      // 求職者情報作成
+      // 求職者情報作成（エンジニア向け）
       const jobSeekerResult = await query(
         `INSERT INTO job_seekers (
           user_id, first_name, last_name, phone, 
           date_of_birth, gender, nationality, address,
-          profile_photo, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id`,
+          profile_photo, registration_type, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING id`,
         [
           userId,
           firstName,
@@ -239,7 +241,8 @@ router.post('/engineer', async (req, res) => {
           documentsData?.gender || null,
           documentsData?.nationality || null,
           documentsData?.liveAddress || null,
-          documentsData?.resume?.photoUrl || null
+          documentsData?.resume?.photoUrl || null,
+          'engineer'
         ]
       );
 
@@ -399,11 +402,12 @@ router.post('/general', async (req, res) => {
       });
     }
 
-    // 既存ユーザーチェック（job_seekersテーブルに対応するレコードがあるかもチェック）
+    // 既存ユーザーチェック（同じメールアドレスで最大2つまで登録可能：エンジニアと一般職）
     const existingUser = await query(
       `SELECT 
         u.id, 
-        js.id as jobseeker_id
+        js.id as jobseeker_id,
+        js.registration_type
        FROM users u
        LEFT JOIN job_seekers js ON js.user_id = u.id
        WHERE u.email = $1`,
@@ -412,11 +416,12 @@ router.post('/general', async (req, res) => {
 
     if (existingUser.rows.length > 0) {
       const user = existingUser.rows[0];
-      // job_seekersテーブルに対応するレコードがある場合のみエラー
-      if (user.jobseeker_id) {
+      // 同じregistration_typeが既に存在する場合はエラー
+      const existingRegistrations = existingUser.rows.filter((row: any) => row.jobseeker_id && row.registration_type === 'general');
+      if (existingRegistrations.length > 0) {
         return res.status(400).json({ 
           success: false, 
-          message: 'このメールアドレスは既に登録されています。' 
+          message: 'このメールアドレスで一般職登録は既に完了しています。' 
         });
       }
       // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
@@ -457,8 +462,8 @@ router.post('/general', async (req, res) => {
         `INSERT INTO job_seekers (
           user_id, first_name, last_name, phone, 
           date_of_birth, gender, nationality, address,
-          profile_photo, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id`,
+          profile_photo, registration_type, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING id`,
         [
           userId,
           firstName,
@@ -468,7 +473,8 @@ router.post('/general', async (req, res) => {
           documentsData?.gender || null,
           documentsData?.nationality || null,
           documentsData?.liveAddress || null,
-          documentsData?.resume?.photoUrl || null
+          documentsData?.resume?.photoUrl || null,
+          'general'
         ]
       );
 
