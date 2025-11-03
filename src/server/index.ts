@@ -565,6 +565,23 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
   }
 });
 
+// 求職者の登録タイプ一覧取得（エンジニア/一般職）
+app.get('/api/jobseekers/registration-types/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { query } = await import('../integrations/postgres/client.js');
+    const result = await query(
+      `SELECT registration_type FROM job_seekers WHERE user_id = $1`,
+      [userId]
+    );
+    const types = result.rows.map((r: any) => r.registration_type || 'engineer');
+    res.json({ success: true, types });
+  } catch (error) {
+    console.error('登録タイプ取得エラー:', error);
+    res.status(500).json({ success: false, message: '登録タイプの取得に失敗しました' });
+  }
+});
+
 // 管理者ログインAPI
 app.post('/api/admin/login', async (req, res) => {
   try {
