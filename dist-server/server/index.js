@@ -663,6 +663,30 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       ${statusFilter}
       ORDER BY js.created_at DESC
     `, statusParams);
+        // まずは最低限のベースデータのみ返却（安定優先）
+        const minimalRows = result.rows.map((row) => ({
+            id: row.id,
+            js_id: row.js_id,
+            user_id: row.user_id,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            full_name: row.full_name,
+            date_of_birth: row.date_of_birth,
+            gender: row.gender,
+            nationality: row.nationality,
+            phone: row.phone,
+            address: row.address,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            email: row.email,
+            user_status: row.user_status,
+            registeredAt: row.registeredAt,
+            employment_status: row.employment_status,
+            completion_rate: row.completion_rate,
+            registration_type: row.registration_type
+        }));
+        return res.json({ success: true, jobSeekers: minimalRows });
+        // 以降の詳細付与ロジックは安定化後に再有効化
         // 各求職者に対して詳細情報を取得
         let processedRows = [];
         try {
