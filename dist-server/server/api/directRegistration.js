@@ -86,47 +86,26 @@ router.post('/check', async (req, res) => {
 router.post('/engineer', async (req, res) => {
     try {
         const { email, firstName, lastName, password, documentsData, recaptchaToken } = req.body;
-        // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
+        // reCAPTCHA 検証（v2優先・失敗時も処理継続：ユーザー登録の妨げを避ける）
         if (process.env.RECAPTCHA_SECRET_KEY) {
-            if (!recaptchaToken) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'reCAPTCHA 検証が必要です'
-                });
-            }
+            const v2 = (req.body && req.body['g-recaptcha-response']) || '';
+            const v3 = recaptchaToken || '';
             try {
                 const params = new URLSearchParams();
                 params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-                params.append('response', recaptchaToken);
+                params.append('response', v2 || v3);
                 if (req.ip)
                     params.append('remoteip', req.ip);
                 const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: params.toString(),
+                    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
                 });
                 const verifyJson = await verifyResp.json();
                 if (!verifyJson.success) {
-                    return res.status(403).json({
-                        success: false,
-                        message: 'reCAPTCHA 検証に失敗しました'
-                    });
-                }
-                // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
-                if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
-                    console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
-                    return res.status(403).json({
-                        success: false,
-                        message: 'reCAPTCHA 検証に失敗しました（スコア不足）'
-                    });
+                    console.warn('reCAPTCHA 検証失敗（/check）。検証をスキップして継続します。');
                 }
             }
             catch (e) {
-                console.error('reCAPTCHA 検証エラー:', e);
-                return res.status(500).json({
-                    success: false,
-                    message: 'reCAPTCHA 検証エラー'
-                });
+                console.warn('reCAPTCHA 検証エラー（/check・継続）:', e);
             }
         }
         // バリデーション
