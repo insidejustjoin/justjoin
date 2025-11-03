@@ -736,10 +736,10 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         u.created_at as user_created_at,
         u.created_at as registeredAt,
         u.updated_at as user_updated_at,
-        -- 就職状況（デフォルトは未就職）
-        COALESCE(js.employment_status, 'unemployed') as employment_status,
-        -- 完了率（入力率）
-        COALESCE(js.completion_rate, 0) as completion_rate,
+        -- 就職状況（デフォルトは未就職）※カラムが存在しない環境に配慮
+        'unemployed'::text as employment_status,
+        -- 完了率（入力率）※カラムが存在しない環境に配慮
+        0::int as completion_rate,
         -- 登録タイプ（エンジニア/一般職）
         COALESCE(js.registration_type, 'engineer') as registration_type,
         -- フロントエンドで必要なデフォルト値

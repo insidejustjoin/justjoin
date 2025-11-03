@@ -664,71 +664,48 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       ORDER BY js.created_at DESC
     `, statusParams);
         // 各求職者に対して詳細情報を取得
-        const processedRows = await Promise.all(result.rows.map(async (row) => {
-            console.log('===DEBUG reached forEach start, user_id:', row.user_id);
-            // skillsフィールドの処理
-            if (row.skills && typeof row.skills === 'string') {
-                try {
-                    row.skills = JSON.parse(row.skills);
+        let processedRows = [];
+        try {
+            processedRows = await Promise.all(result.rows.map(async (row) => {
+                console.log('===DEBUG reached forEach start, user_id:', row.user_id);
+                // skillsフィールドの処理
+                if (row.skills && typeof row.skills === 'string') {
+                    try {
+                        row.skills = JSON.parse(row.skills);
+                    }
+                    catch (e) {
+                        console.warn('Skills JSON parse error:', e);
+                        row.skills = [];
+                    }
                 }
-                catch (e) {
-                    console.warn('Skills JSON parse error:', e);
+                else if (!row.skills) {
                     row.skills = [];
                 }
-            }
-            else if (!row.skills) {
-                row.skills = [];
-            }
-            // user_documentsから詳細情報を取得
-            let photoUrl = null;
-            let detailedInfo = null;
-            let japaneseLevel = '未設定'; // デフォルト値を外側で設定
-            let nationality = row.nationality; // 基本の国籍情報
-            let phone = row.phone; // 基本の電話番号
-            let birthDate = row.date_of_birth; // 基本の生年月日
-            let gender = row.gender; // 基本の性別
-            try {
-                // まず直近のドキュメント1件を見る（従来）
-                const docResult = await query(`
+                // user_documentsから詳細情報を取得
+                let photoUrl = null;
+                let detailedInfo = null;
+                let japaneseLevel = '未設定'; // デフォルト値を外側で設定
+                let nationality = row.nationality; // 基本の国籍情報
+                let phone = row.phone; // 基本の電話番号
+                let birthDate = row.date_of_birth; // 基本の生年月日
+                let gender = row.gender; // 基本の性別
+                try {
+                    // まず直近のドキュメント1件を見る（従来）
+                    const docResult = await query(`
           SELECT document_type, document_data
           FROM user_documents 
           WHERE user_id = $1 
           ORDER BY created_at DESC 
           LIMIT 1
         `, [row.user_id]);
-                let docData = null;
-                if (docResult.rows.length > 0) {
-                    docData = docResult.rows[0].document_data;
-                    // 写真URL（resume.photoUrl）
-                    if (docData?.resume?.photoUrl) {
-                        photoUrl = docData.resume.photoUrl;
-                    }
-                    // その他の情報も従来通り設定
-                    if (docData?.nationality)
-                        nationality = docData.nationality;
-                    if (docData?.livePhoneNumber)
-                        phone = docData.livePhoneNumber;
-                    if (docData?.birthDate)
-                        birthDate = docData.birthDate;
-                    if (docData?.gender)
-                        gender = docData.gender;
-                }
-                // 仮登録システムの書類情報も確認
-                if (!docData) {
-                    const tempRegResult = await query(`
-            SELECT documents_data
-            FROM temporary_registrations 
-            WHERE email = $1 
-            ORDER BY created_at DESC 
-            LIMIT 1
-          `, [row.email]);
-                    if (tempRegResult.rows.length > 0) {
-                        docData = tempRegResult.rows[0].documents_data;
+                    let docData = null;
+                    if (docResult.rows.length > 0) {
+                        docData = docResult.rows[0].document_data;
                         // 写真URL（resume.photoUrl）
                         if (docData?.resume?.photoUrl) {
                             photoUrl = docData.resume.photoUrl;
                         }
-                        // その他の情報も設定
+                        // その他の情報も従来通り設定
                         if (docData?.nationality)
                             nationality = docData.nationality;
                         if (docData?.livePhoneNumber)
@@ -738,135 +715,185 @@ app.get('/api/admin/jobseekers', async (req, res) => {
                         if (docData?.gender)
                             gender = docData.gender;
                     }
-                }
-                // 直近1件で写真が見つからない場合、最新20件を走査して最初の写真を使用
-                if (!photoUrl) {
-                    const scan = await query(`
+                    // 仮登録システムの書類情報も確認
+                    if (!docData) {
+                        const tempRegResult = await query(`
+            SELECT documents_data
+            FROM temporary_registrations 
+            WHERE email = $1 
+            ORDER BY created_at DESC 
+            LIMIT 1
+          `, [row.email]);
+                        if (tempRegResult.rows.length > 0) {
+                            docData = tempRegResult.rows[0].documents_data;
+                            // 写真URL（resume.photoUrl）
+                            if (docData?.resume?.photoUrl) {
+                                photoUrl = docData.resume.photoUrl;
+                            }
+                            // その他の情報も設定
+                            if (docData?.nationality)
+                                nationality = docData.nationality;
+                            if (docData?.livePhoneNumber)
+                                phone = docData.livePhoneNumber;
+                            if (docData?.birthDate)
+                                birthDate = docData.birthDate;
+                            if (docData?.gender)
+                                gender = docData.gender;
+                        }
+                    }
+                    // 直近1件で写真が見つからない場合、最新20件を走査して最初の写真を使用
+                    if (!photoUrl) {
+                        const scan = await query(`
             SELECT document_data
             FROM user_documents
             WHERE user_id = $1
             ORDER BY created_at DESC
             LIMIT 20
           `, [row.user_id]);
-                    for (const r of scan.rows) {
-                        const d = r.document_data || {};
-                        if (d?.resume?.photoUrl) {
-                            photoUrl = d.resume.photoUrl;
-                            break;
+                        for (const r of scan.rows) {
+                            const d = r.document_data || {};
+                            if (d?.resume?.photoUrl) {
+                                photoUrl = d.resume.photoUrl;
+                                break;
+                            }
                         }
                     }
-                }
-                // 日本語レベル（従来ロジックをdocDataで）
-                if (docData?.japaneseInfo?.nextJapaneseTestLevel) {
-                    japaneseLevel = docData.japaneseInfo.nextJapaneseTestLevel;
-                }
-                else if (docData?.japaneseInfo?.certificateStatus?.name) {
-                    japaneseLevel = docData.japaneseInfo.certificateStatus.name;
-                }
-                else if (docData?.nextJapaneseTestLevel) {
-                    japaneseLevel = docData.nextJapaneseTestLevel;
-                }
-                else if (docData?.certificateStatus?.name) {
-                    japaneseLevel = docData.certificateStatus.name;
-                }
-                // 詳細情報を設定
-                detailedInfo = {
-                    japaneseLevel: japaneseLevel,
-                    nextJapaneseTest: docData?.nextJapaneseTestDate || docData?.nextJapaneseTestLevel || '未設定',
-                    selfIntroduction: docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction || '',
-                    hasSelfIntroduction: !!(docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction),
-                    documentData: docData
-                };
-            }
-            catch (error) {
-                console.warn(`詳細情報取得エラー (ユーザーID: ${row.user_id}):`, error);
-            }
-            // デバッグ: japaneseLevelの値を出力
-            console.log('===DEBUG japaneseLevel:', japaneseLevel);
-            console.error('===DEBUG japaneseLevel (stderr):', japaneseLevel);
-            // 年齢計算
-            let calculatedAge = null;
-            if (birthDate) {
-                try {
-                    const birthDateObj = new Date(birthDate);
-                    const today = new Date();
-                    let age = today.getFullYear() - birthDateObj.getFullYear();
-                    const monthDiff = today.getMonth() - birthDateObj.getMonth();
-                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDateObj.getDate())) {
-                        age--;
+                    // 日本語レベル（従来ロジックをdocDataで）
+                    if (docData?.japaneseInfo?.nextJapaneseTestLevel) {
+                        japaneseLevel = docData.japaneseInfo.nextJapaneseTestLevel;
                     }
-                    calculatedAge = age;
+                    else if (docData?.japaneseInfo?.certificateStatus?.name) {
+                        japaneseLevel = docData.japaneseInfo.certificateStatus.name;
+                    }
+                    else if (docData?.nextJapaneseTestLevel) {
+                        japaneseLevel = docData.nextJapaneseTestLevel;
+                    }
+                    else if (docData?.certificateStatus?.name) {
+                        japaneseLevel = docData.certificateStatus.name;
+                    }
+                    // 詳細情報を設定
+                    detailedInfo = {
+                        japaneseLevel: japaneseLevel,
+                        nextJapaneseTest: docData?.nextJapaneseTestDate || docData?.nextJapaneseTestLevel || '未設定',
+                        selfIntroduction: docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction || '',
+                        hasSelfIntroduction: !!(docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction),
+                        documentData: docData
+                    };
                 }
                 catch (error) {
-                    console.warn(`年齢計算エラー (ユーザーID: ${row.user_id}):`, error);
+                    console.warn(`詳細情報取得エラー (ユーザーID: ${row.user_id}):`, error);
                 }
-            }
-            // 処理済みデータを返す
-            const processedRow = {
-                ...row,
-                // 写真情報をuser_documentsから取得
-                profile_photo: photoUrl,
-                // 日本語レベルを設定（両方のフィールド名に対応）
-                japaneseLevel: japaneseLevel,
-                japanese_level: japaneseLevel,
-                // 年齢情報を追加
-                age: calculatedAge,
-                // 基本情報を更新（user_documentsから取得した情報で上書き）
-                nationality: nationality,
-                phone: phone,
-                date_of_birth: birthDate,
-                gender: gender,
-                // 入力率を追加
-                completion_rate: row.completion_rate || 0,
-                // 詳細情報を設定
-                detailed_info: detailedInfo ? {
-                    ...detailedInfo,
-                    japaneseLevel: japaneseLevel
-                } : {
+                // デバッグ: japaneseLevelの値を出力
+                console.log('===DEBUG japaneseLevel:', japaneseLevel);
+                console.error('===DEBUG japaneseLevel (stderr):', japaneseLevel);
+                // 年齢計算
+                let calculatedAge = null;
+                if (birthDate) {
+                    try {
+                        const birthDateObj = new Date(birthDate);
+                        const today = new Date();
+                        let age = today.getFullYear() - birthDateObj.getFullYear();
+                        const monthDiff = today.getMonth() - birthDateObj.getMonth();
+                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDateObj.getDate())) {
+                            age--;
+                        }
+                        calculatedAge = age;
+                    }
+                    catch (error) {
+                        console.warn(`年齢計算エラー (ユーザーID: ${row.user_id}):`, error);
+                    }
+                }
+                // 処理済みデータを返す
+                const processedRow = {
+                    ...row,
+                    // 写真情報をuser_documentsから取得
+                    profile_photo: photoUrl,
+                    // 日本語レベルを設定（両方のフィールド名に対応）
                     japaneseLevel: japaneseLevel,
-                    nextJapaneseTest: '未設定',
-                    selfIntroduction: '',
-                    hasSelfIntroduction: false
-                },
-                // 配偶者情報はデータベースから取得
-                spouse: row.spouse || null,
-                spouse_support: row.spouse_support || null,
-                commuting_time: row.commuting_time || null,
-                family_number: row.family_number || null
-            };
-            // 面接受験回数を取得
-            try {
-                const attemptsResult = await query(`
+                    japanese_level: japaneseLevel,
+                    // 年齢情報を追加
+                    age: calculatedAge,
+                    // 基本情報を更新（user_documentsから取得した情報で上書き）
+                    nationality: nationality,
+                    phone: phone,
+                    date_of_birth: birthDate,
+                    gender: gender,
+                    // 入力率を追加
+                    completion_rate: row.completion_rate || 0,
+                    // 詳細情報を設定
+                    detailed_info: detailedInfo ? {
+                        ...detailedInfo,
+                        japaneseLevel: japaneseLevel
+                    } : {
+                        japaneseLevel: japaneseLevel,
+                        nextJapaneseTest: '未設定',
+                        selfIntroduction: '',
+                        hasSelfIntroduction: false
+                    },
+                    // 配偶者情報はデータベースから取得
+                    spouse: row.spouse || null,
+                    spouse_support: row.spouse_support || null,
+                    commuting_time: row.commuting_time || null,
+                    family_number: row.family_number || null
+                };
+                // 面接受験回数を取得
+                try {
+                    const attemptsResult = await query(`
           SELECT attempt_count, first_attempt_at, last_attempt_at
           FROM interview_attempts
           WHERE user_id = $1
         `, [row.user_id]);
-                if (attemptsResult.rows.length > 0) {
-                    const attemptsData = attemptsResult.rows[0];
-                    processedRow.interview_attempts = {
-                        count: attemptsData.attempt_count,
-                        firstAttemptAt: attemptsData.first_attempt_at,
-                        lastAttemptAt: attemptsData.last_attempt_at
-                    };
+                    if (attemptsResult.rows.length > 0) {
+                        const attemptsData = attemptsResult.rows[0];
+                        processedRow.interview_attempts = {
+                            count: attemptsData.attempt_count,
+                            firstAttemptAt: attemptsData.first_attempt_at,
+                            lastAttemptAt: attemptsData.last_attempt_at
+                        };
+                    }
+                    else {
+                        processedRow.interview_attempts = {
+                            count: 0,
+                            firstAttemptAt: null,
+                            lastAttemptAt: null
+                        };
+                    }
                 }
-                else {
+                catch (error) {
+                    console.warn(`面接受験回数取得エラー (ユーザーID: ${row.user_id}):`, error);
                     processedRow.interview_attempts = {
                         count: 0,
                         firstAttemptAt: null,
                         lastAttemptAt: null
                     };
                 }
-            }
-            catch (error) {
-                console.warn(`面接受験回数取得エラー (ユーザーID: ${row.user_id}):`, error);
-                processedRow.interview_attempts = {
-                    count: 0,
-                    firstAttemptAt: null,
-                    lastAttemptAt: null
-                };
-            }
-            return processedRow;
-        }));
+                return processedRow;
+            }));
+        }
+        catch (e) {
+            console.error('管理者求職者一覧 詳細情報付与に失敗。ベースデータで返却します:', e);
+            // 最低限のベースデータで返却（500にせずUIが表示できるように）
+            processedRows = result.rows.map((row) => ({
+                id: row.id,
+                js_id: row.js_id,
+                user_id: row.user_id,
+                first_name: row.first_name,
+                last_name: row.last_name,
+                full_name: row.full_name,
+                date_of_birth: row.date_of_birth,
+                gender: row.gender,
+                nationality: row.nationality,
+                phone: row.phone,
+                address: row.address,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                email: row.email,
+                user_status: row.user_status,
+                employment_status: row.employment_status,
+                completion_rate: row.completion_rate,
+                registration_type: row.registration_type,
+            }));
+        }
         console.log(`管理者求職者一覧取得: ${processedRows.length}件`);
         res.json({
             success: true,
