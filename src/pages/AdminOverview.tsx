@@ -19,7 +19,9 @@ import {
   Activity,
   BarChart3,
   PieChart,
-  LineChart
+  LineChart,
+  Bell,
+  Building2
 } from 'lucide-react';
 import { toast } from 'sonner';
 

@@ -43,18 +43,43 @@ echo "✅ ビルド完了"
 
 # 2. Dockerイメージのビルド＆プッシュ
 echo "🐳 Dockerイメージをビルド＆プッシュ中..."
-docker buildx build --platform linux/amd64 -f Dockerfile.gcp -t gcr.io/$PROJECT_ID/justjoin:latest . --push
-if [ $? -ne 0 ]; then
-    echo "❌ Dockerビルド/プッシュに失敗しました"
-    exit 1
+REV=$(date +%Y%m%d%H%M%S)-deploy
+IMAGE_TAG="gcr.io/$PROJECT_ID/justjoin:$REV"
+
+# Dockerが利用可能かチェック
+if docker ps >/dev/null 2>&1; then
+    echo "🐳 ローカルDockerを使用してビルド中..."
+    cp Dockerfile.gcp Dockerfile
+    docker buildx build --platform linux/amd64 -f Dockerfile.gcp -t $IMAGE_TAG . --push
+    rm -f Dockerfile
+    if [ $? -ne 0 ]; then
+        echo "⚠️  ローカルDockerビルドに失敗、Cloud Buildにフォールバック..."
+        # Cloud Buildにフォールバック
+        cp Dockerfile.gcp Dockerfile
+        gcloud builds submit --tag $IMAGE_TAG --timeout=1800 . || {
+            echo "❌ Cloud Buildにも失敗しました"
+            rm -f Dockerfile
+            exit 1
+        }
+        rm -f Dockerfile
+    fi
+else
+    echo "⚠️  Dockerデーモンが起動していません。Cloud Buildを使用します..."
+    cp Dockerfile.gcp Dockerfile
+    gcloud builds submit --tag $IMAGE_TAG --timeout=1800 . || {
+        echo "❌ Cloud Buildに失敗しました"
+        rm -f Dockerfile
+        exit 1
+    }
+    rm -f Dockerfile
 fi
 
-echo "✅ Dockerビルド/プッシュ完了"
+echo "✅ Dockerイメージビルド/プッシュ完了: $IMAGE_TAG"
 
 # 4. Cloud Runにデプロイ
 echo "🚀 Cloud Runにデプロイ中..."
 gcloud run deploy justjoin \
-    --image gcr.io/$PROJECT_ID/justjoin:latest \
+    --image $IMAGE_TAG \
     --platform managed \
     --region asia-northeast1 \
     --allow-unauthenticated \
