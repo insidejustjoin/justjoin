@@ -218,6 +218,33 @@ export const query = async (text, params) => {
     if (!pool) {
         pool = await createPool();
     }
+    // 初回クエリ前に必須テーブルの存在チェックと自動初期化
+    try {
+        if (text && typeof text === 'string') {
+            const lower = text.toLowerCase();
+            const needsUsers = lower.includes(' into users ') || lower.includes(' from users ') || lower.includes(' update users ');
+            if (needsUsers) {
+                // usersテーブルが無ければスキーマを実行
+                const exists = await pool.query(`SELECT 1 FROM information_schema.tables WHERE table_name = 'users'`);
+                if (exists.rowCount === 0) {
+                    const path = (await import('path')).default;
+                    const fs = (await import('fs')).default;
+                    const schemaPath = path.join(process.cwd(), 'src/integrations/postgres/schema.sql');
+                    try {
+                        const schema = fs.readFileSync(schemaPath, 'utf8');
+                        await pool.query(schema);
+                        console.log('Executed schema.sql to initialize database');
+                    }
+                    catch (e) {
+                        console.warn('Failed to execute schema.sql:', e?.message || e);
+                    }
+                }
+            }
+        }
+    }
+    catch (e) {
+        console.warn('Schema auto-initialize skipped:', e?.message || e);
+    }
     const start = Date.now();
     try {
         const res = await pool.query(text, params);
