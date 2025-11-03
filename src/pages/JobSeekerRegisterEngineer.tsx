@@ -72,22 +72,8 @@ const JobSeekerRegisterEngineer: React.FC = () => {
     setErrors([]);
     
     try {
-      // reCAPTCHA v3トークン取得
-      let recaptchaToken: string | undefined;
-      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
-        try {
-          recaptchaToken = await new Promise<string>((resolve, reject) => {
-            window.grecaptcha.ready(() => {
-              window.grecaptcha
-                .execute(siteKey, { action: 'register_engineer' })
-                .then(resolve)
-                .catch(reject);
-            });
-          });
-        } catch (error) {
-          console.error('reCAPTCHA v3実行エラー:', error);
-        }
-      }
+      // v2チェックボックス運用のため、v3実行は行わない
+      const recaptchaToken: string | undefined = undefined;
 
       // 送信サイズ削減: 画像などの大型データは除去
       const sanitizedDocuments = (() => {
