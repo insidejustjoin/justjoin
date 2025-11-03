@@ -31,13 +31,18 @@ fi
 
 echo "✅ 正しいプロジェクトIDが設定されています: $PROJECT_ID"
 
-# 1. ビルド
+# 1. ビルド（環境変数を設定）
 echo "📦 プロジェクトをビルド中..."
+# env.gcp.yamlからVITE_RECAPTCHA_SITE_KEYを取得して.env.productionを作成
+VITE_RECAPTCHA_SITE_KEY=$(grep "^VITE_RECAPTCHA_SITE_KEY:" env.gcp.yaml | sed 's/^VITE_RECAPTCHA_SITE_KEY: "\(.*\)"/\1/')
+echo "VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY" > .env.production
 npm run build
 if [ $? -ne 0 ]; then
     echo "❌ ビルドに失敗しました"
+    rm -f .env.production
     exit 1
 fi
+rm -f .env.production
 
 echo "✅ ビルド完了"
 
@@ -46,32 +51,36 @@ echo "🐳 Dockerイメージをビルド＆プッシュ中..."
 REV=$(date +%Y%m%d%H%M%S)-deploy
 IMAGE_TAG="gcr.io/$PROJECT_ID/justjoin:$REV"
 
+# Dockerビルド用に.env.productionを再作成
+echo "VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY" > .env.production
+
 # Dockerが利用可能かチェック
 if docker ps >/dev/null 2>&1; then
     echo "🐳 ローカルDockerを使用してビルド中..."
     cp Dockerfile.gcp Dockerfile
-    docker buildx build --platform linux/amd64 -f Dockerfile.gcp -t $IMAGE_TAG . --push
-    rm -f Dockerfile
+    docker buildx build --platform linux/amd64 -f Dockerfile.gcp \
+        -t $IMAGE_TAG . --push
+    rm -f Dockerfile .env.production
     if [ $? -ne 0 ]; then
         echo "⚠️  ローカルDockerビルドに失敗、Cloud Buildにフォールバック..."
         # Cloud Buildにフォールバック
         cp Dockerfile.gcp Dockerfile
         gcloud builds submit --tag $IMAGE_TAG --timeout=1800 . || {
             echo "❌ Cloud Buildにも失敗しました"
-            rm -f Dockerfile
+            rm -f Dockerfile .env.production
             exit 1
         }
-        rm -f Dockerfile
+        rm -f Dockerfile .env.production
     fi
 else
     echo "⚠️  Dockerデーモンが起動していません。Cloud Buildを使用します..."
     cp Dockerfile.gcp Dockerfile
     gcloud builds submit --tag $IMAGE_TAG --timeout=1800 . || {
         echo "❌ Cloud Buildに失敗しました"
-        rm -f Dockerfile
+        rm -f Dockerfile .env.production
         exit 1
     }
-    rm -f Dockerfile
+    rm -f Dockerfile .env.production
 fi
 
 echo "✅ Dockerイメージビルド/プッシュ完了: $IMAGE_TAG"
