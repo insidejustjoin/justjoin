@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -34,6 +34,31 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
   const { t } = useLanguage();
   const navigate = useNavigate();
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<number | null>(null);
+
+  // v2 明示レンダリング（SPAで自動レンダリングが効かない場合に対応）
+  useEffect(() => {
+    if (!siteKey) return;
+    const tryRender = () => {
+      try {
+        if (window.grecaptcha && typeof window.grecaptcha.render === 'function' && recaptchaContainerRef.current && widgetIdRef.current === null) {
+          const id = window.grecaptcha.render(recaptchaContainerRef.current, { sitekey: siteKey });
+          // @ts-ignore
+          widgetIdRef.current = id as number;
+        }
+      } catch {}
+    };
+
+    // 少し遅延してレンダリングを試みる
+    const t1 = setTimeout(tryRender, 300);
+    // 再試行
+    const t2 = setTimeout(tryRender, 1200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [siteKey]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +71,9 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
       let recaptchaV2Response = '';
       if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
         try {
-          recaptchaV2Response = window.grecaptcha.getResponse();
+          // 特定ウィジェットIDがある場合は指定して取得
+          // @ts-ignore
+          recaptchaV2Response = widgetIdRef.current !== null ? window.grecaptcha.getResponse(widgetIdRef.current) : window.grecaptcha.getResponse();
         } catch {}
       }
       // v3はフォールバックとして取得（将来のスコア評価用）
@@ -182,9 +209,8 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
 
           {/* reCAPTCHA v2 チェックボックス */}
           <div className="my-2 flex justify-center">
-            {/* 自動レンダリング（data-sitekey）に任せる */}
             {siteKey && (
-              <div className="g-recaptcha" data-sitekey={siteKey}></div>
+              <div ref={recaptchaContainerRef} className="g-recaptcha" data-sitekey={siteKey}></div>
             )}
           </div>
 
