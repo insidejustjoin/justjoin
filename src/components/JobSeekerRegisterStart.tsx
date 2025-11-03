@@ -158,7 +158,19 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
             </Alert>
           )}
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          {/* reCAPTCHA */}
+          {siteKey && (
+            <div className="flex justify-center">
+              <ReCAPTCHA
+                ref={recaptchaRef}
+                sitekey={siteKey}
+                size="normal"
+                onChange={handleRecaptchaChange}
+              />
+            </div>
+          )}
+
+          <Button type="submit" className="w-full" disabled={isLoading || (siteKey && !recaptchaToken)}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -172,18 +184,6 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
             )}
           </Button>
         </form>
-
-        {/* reCAPTCHA */}
-        {siteKey && (
-          <div className="mt-4 flex justify-center">
-            <ReCAPTCHA
-              ref={recaptchaRef}
-              sitekey={siteKey}
-              size="normal"
-              onChange={handleRecaptchaChange}
-            />
-          </div>
-        )}
 
         <div className="mt-6 text-center text-sm text-muted-foreground">
           <p>
