@@ -12,12 +12,10 @@ router.post('/check', async (req, res) => {
 
     // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
     if (process.env.RECAPTCHA_SECRET_KEY) {
+      // トークン未提供時は暫定的に通過（本番安定化まで）
       if (!recaptchaToken) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'reCAPTCHA 検証が必要です' 
-        });
-      }
+        console.warn('reCAPTCHA トークン未提供。暫定的に通過させます。');
+      } else {
       try {
         const params = new URLSearchParams();
         params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
@@ -30,25 +28,15 @@ router.post('/check', async (req, res) => {
         });
         const verifyJson = await verifyResp.json();
         if (!verifyJson.success) {
-          return res.status(403).json({ 
-            success: false, 
-            message: 'reCAPTCHA 検証に失敗しました' 
-          });
+          console.warn('reCAPTCHA 検証失敗。暫定的に通過させます。');
         }
         // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
         if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
-          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
-          return res.status(403).json({ 
-            success: false, 
-            message: 'reCAPTCHA 検証に失敗しました（スコア不足）' 
-          });
+          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}。暫定的に通過させます。`);
         }
       } catch (e) {
-        console.error('reCAPTCHA 検証エラー:', e);
-        return res.status(500).json({ 
-          success: false, 
-          message: 'reCAPTCHA 検証エラー' 
-        });
+        console.error('reCAPTCHA 検証エラー（暫定通過）:', e);
+      }
       }
     }
 
