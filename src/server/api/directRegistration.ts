@@ -318,11 +318,12 @@ router.post('/engineer', async (req, res) => {
       await query('ROLLBACK');
       throw error;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('エンジニア登録エラー:', error);
     res.status(500).json({ 
       success: false, 
-      message: '登録中にエラーが発生しました。' 
+      message: '登録中にエラーが発生しました。',
+      detail: error?.message || String(error)
     });
   }
 });
@@ -562,11 +563,12 @@ router.post('/general', async (req, res) => {
       await query('ROLLBACK');
       throw error;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('一般職登録エラー:', error);
     res.status(500).json({ 
       success: false, 
-      message: '登録中にエラーが発生しました。' 
+      message: '登録中にエラーが発生しました。',
+      detail: error?.message || String(error)
     });
   }
 });

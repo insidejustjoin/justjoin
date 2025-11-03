@@ -196,21 +196,23 @@ router.post('/engineer', async (req, res) => {
                 await query(`INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
            VALUES ($1, $2, $3, $4, NOW(), NOW())`, [userId, firstName, lastName, 'engineer']);
             }
-            // 書類データ保存
-            if (documentsData) {
-                // 既存データをチェック
-                const existingDoc = await query('SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2', [userId.toString(), 'resume']);
-                if (existingDoc.rows.length > 0) {
-                    // 更新
-                    await query(`UPDATE user_documents 
-             SET document_data = $1, updated_at = NOW() 
-             WHERE user_id = $2 AND document_type = $3`, [JSON.stringify(documentsData), userId.toString(), 'resume']);
+            // 書類データ保存（失敗しても続行）
+            try {
+                if (documentsData) {
+                    const existingDoc = await query('SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2', [userId.toString(), 'resume']);
+                    if (existingDoc.rows.length > 0) {
+                        await query(`UPDATE user_documents 
+               SET document_data = $1, updated_at = NOW() 
+               WHERE user_id = $2 AND document_type = $3`, [JSON.stringify(documentsData), userId.toString(), 'resume']);
+                    }
+                    else {
+                        await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+               VALUES ($1, $2, $3, NOW(), NOW())`, [userId.toString(), 'resume', JSON.stringify(documentsData)]);
+                    }
                 }
-                else {
-                    // 新規作成
-                    await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
-             VALUES ($1, $2, $3, NOW(), NOW())`, [userId.toString(), 'resume', JSON.stringify(documentsData)]);
-                }
+            }
+            catch (docErr) {
+                console.warn('user_documents 保存スキップ:', docErr);
             }
             // 入力率計算
             let completionRate = 0;
@@ -398,22 +400,24 @@ router.post('/general', async (req, res) => {
                 await query(`INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
            VALUES ($1, $2, $3, $4, NOW(), NOW())`, [userId, firstName, lastName, 'general']);
             }
-            // スキルシートを除外して書類データ保存
-            if (documentsData) {
-                const { skillSheet, ...documentsWithoutSkillSheet } = documentsData;
-                // 既存データをチェック
-                const existingDoc = await query('SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2', [userId.toString(), 'resume']);
-                if (existingDoc.rows.length > 0) {
-                    // 更新
-                    await query(`UPDATE user_documents 
-             SET document_data = $1, updated_at = NOW() 
-             WHERE user_id = $2 AND document_type = $3`, [JSON.stringify(documentsWithoutSkillSheet), userId.toString(), 'resume']);
+            // スキルシートを除外して書類データ保存（失敗しても続行）
+            try {
+                if (documentsData) {
+                    const { skillSheet, ...documentsWithoutSkillSheet } = documentsData;
+                    const existingDoc = await query('SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2', [userId.toString(), 'resume']);
+                    if (existingDoc.rows.length > 0) {
+                        await query(`UPDATE user_documents 
+               SET document_data = $1, updated_at = NOW() 
+               WHERE user_id = $2 AND document_type = $3`, [JSON.stringify(documentsWithoutSkillSheet), userId.toString(), 'resume']);
+                    }
+                    else {
+                        await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
+               VALUES ($1, $2, $3, NOW(), NOW())`, [userId.toString(), 'resume', JSON.stringify(documentsWithoutSkillSheet)]);
+                    }
                 }
-                else {
-                    // 新規作成
-                    await query(`INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
-             VALUES ($1, $2, $3, NOW(), NOW())`, [userId.toString(), 'resume', JSON.stringify(documentsWithoutSkillSheet)]);
-                }
+            }
+            catch (docErr) {
+                console.warn('user_documents 保存スキップ（general）:', docErr);
             }
             // 入力率計算（一般職向けはスキルシートを除外）
             let completionRate = 0;
