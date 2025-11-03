@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +8,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import DocumentGenerator from '@/components/DocumentGenerator';
 import { ArrowLeft, Lock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import ReCAPTCHA from 'react-google-recaptcha';
+
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+    };
+  }
+}
 
 const JobSeekerRegisterGeneral: React.FC = () => {
   const location = useLocation();
@@ -18,15 +26,9 @@ const JobSeekerRegisterGeneral: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
-  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   
   const { email, firstName, lastName } = (location.state as { email?: string; firstName?: string; lastName?: string }) || {};
-
-  const handleRecaptchaChange = (token: string | null) => {
-    setRecaptchaToken(token);
-  };
 
   if (!email || !firstName || !lastName) {
     navigate('/jobseeker/register');
@@ -54,12 +56,6 @@ const JobSeekerRegisterGeneral: React.FC = () => {
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // reCAPTCHAが設定されている場合、トークンの確認
-    if (siteKey && !recaptchaToken) {
-      setErrors(['「私はロボットではありません」のチェックボックスにチェックを入れてください。']);
-      return;
-    }
-    
     const passwordErrors = validatePassword(password);
     if (passwordErrors.length > 0) {
       setErrors(passwordErrors);
@@ -75,6 +71,23 @@ const JobSeekerRegisterGeneral: React.FC = () => {
     setErrors([]);
     
     try {
+      // reCAPTCHA v3トークン取得
+      let recaptchaToken: string | undefined;
+      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
+        try {
+          recaptchaToken = await new Promise<string>((resolve, reject) => {
+            window.grecaptcha.ready(() => {
+              window.grecaptcha
+                .execute(siteKey, { action: 'register_general' })
+                .then(resolve)
+                .catch(reject);
+            });
+          });
+        } catch (error) {
+          console.error('reCAPTCHA v3実行エラー:', error);
+        }
+      }
+
       const response = await fetch('/api/register/general', {
         method: 'POST',
         headers: {
@@ -171,19 +184,7 @@ const JobSeekerRegisterGeneral: React.FC = () => {
                     </Alert>
                   )}
 
-                  {/* reCAPTCHA */}
-                  {siteKey && (
-                    <div className="flex justify-center">
-                      <ReCAPTCHA
-                        ref={recaptchaRef}
-                        sitekey={siteKey}
-                        size="normal"
-                        onChange={handleRecaptchaChange}
-                      />
-                    </div>
-                  )}
-
-                  <Button type="submit" className="w-full" disabled={isSubmitting || !password || !confirmPassword || (siteKey && !recaptchaToken)}>
+                  <Button type="submit" className="w-full" disabled={isSubmitting || !password || !confirmPassword}>
                     {isSubmitting ? '登録中...' : '登録を完了する'}
                   </Button>
                 </form>

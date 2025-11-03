@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -7,7 +7,15 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Loader2, Mail, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
-import ReCAPTCHA from 'react-google-recaptcha';
+
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+    };
+  }
+}
 
 interface JobSeekerRegisterStartProps {
   onExistingUser?: () => void;
@@ -19,32 +27,34 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
   const [lastName, setLastName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
-
-  const handleRecaptchaChange = (token: string | null) => {
-    setRecaptchaToken(token);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // reCAPTCHAが設定されている場合、トークンの確認
-    if (siteKey && !recaptchaToken) {
-      setMessage({ 
-        type: 'error', 
-        text: '「私はロボットではありません」のチェックボックスにチェックを入れてください。' 
-      });
-      return;
-    }
 
     setIsLoading(true);
     setMessage(null);
 
     try {
+      // reCAPTCHA v3トークン取得
+      let recaptchaToken: string | undefined;
+      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
+        try {
+          recaptchaToken = await new Promise<string>((resolve, reject) => {
+            window.grecaptcha.ready(() => {
+              window.grecaptcha
+                .execute(siteKey, { action: 'register_check' })
+                .then(resolve)
+                .catch(reject);
+            });
+          });
+        } catch (error) {
+          console.error('reCAPTCHA v3実行エラー:', error);
+        }
+      }
+
       const response = await fetch('/api/register/check', {
         method: 'POST',
         headers: {
@@ -158,19 +168,7 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
             </Alert>
           )}
 
-          {/* reCAPTCHA */}
-          {siteKey && (
-            <div className="flex justify-center">
-              <ReCAPTCHA
-                ref={recaptchaRef}
-                sitekey={siteKey}
-                size="normal"
-                onChange={handleRecaptchaChange}
-              />
-            </div>
-          )}
-
-          <Button type="submit" className="w-full" disabled={isLoading || (siteKey && !recaptchaToken)}>
+          <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

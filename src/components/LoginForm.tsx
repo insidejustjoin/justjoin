@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,7 +11,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
-import ReCAPTCHA from 'react-google-recaptcha';
+
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+    };
+  }
+}
 
 const loginSchema = z.object({
   email: z.string().email('有効なメールアドレスを入力してください'),
@@ -39,7 +47,6 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
   const { login, registerJobSeeker, registerCompany } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
 
   const loginForm = useForm<LoginFormData>({
@@ -61,13 +68,20 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
     setIsLoading(true);
     try {
       console.log('ログイン処理開始:', { email: data.email, userType: data.userType });
+      // reCAPTCHA v3トークン取得
       let recaptchaToken: string | undefined;
-      if (siteKey && recaptchaRef.current) {
+      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
         try {
-          recaptchaToken = await recaptchaRef.current.executeAsync();
-          recaptchaRef.current.reset();
+          recaptchaToken = await new Promise<string>((resolve, reject) => {
+            window.grecaptcha.ready(() => {
+              window.grecaptcha
+                .execute(siteKey, { action: 'login' })
+                .then(resolve)
+                .catch(reject);
+            });
+          });
         } catch (e) {
-          console.warn('reCAPTCHA 実行に失敗しました。', e);
+          console.warn('reCAPTCHA v3実行に失敗しました。', e);
         }
       }
       const success = await login(data.email, data.password, data.userType, recaptchaToken);
@@ -193,15 +207,6 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
                       <p className="text-sm text-red-500">{loginForm.formState.errors.userType.message}</p>
                     )}
                   </div>
-
-                {/* Invisible reCAPTCHA */}
-                {siteKey && (
-                  <ReCAPTCHA
-                    ref={recaptchaRef}
-                    sitekey={siteKey}
-                    size="invisible"
-                  />
-                )}
 
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'ログイン中...' : 'ログイン'}

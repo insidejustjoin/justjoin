@@ -35,6 +35,14 @@ router.post('/check', async (req, res) => {
             message: 'reCAPTCHA 検証に失敗しました' 
           });
         }
+        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
+        if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
+          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
+          return res.status(403).json({ 
+            success: false, 
+            message: 'reCAPTCHA 検証に失敗しました（スコア不足）' 
+          });
+        }
       } catch (e) {
         console.error('reCAPTCHA 検証エラー:', e);
         return res.status(500).json({ 
@@ -114,6 +122,14 @@ router.post('/engineer', async (req, res) => {
           return res.status(403).json({ 
             success: false, 
             message: 'reCAPTCHA 検証に失敗しました' 
+          });
+        }
+        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
+        if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
+          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
+          return res.status(403).json({ 
+            success: false, 
+            message: 'reCAPTCHA 検証に失敗しました（スコア不足）' 
           });
         }
       } catch (e) {
@@ -310,6 +326,14 @@ router.post('/general', async (req, res) => {
           return res.status(403).json({ 
             success: false, 
             message: 'reCAPTCHA 検証に失敗しました' 
+          });
+        }
+        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
+        if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
+          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
+          return res.status(403).json({ 
+            success: false, 
+            message: 'reCAPTCHA 検証に失敗しました（スコア不足）' 
           });
         }
       } catch (e) {

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,7 +15,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Building, Mail, Lock, UserPlus, ArrowLeft, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import ReCAPTCHA from 'react-google-recaptcha';
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+    };
+  }
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -36,7 +43,6 @@ export function EmployerLogin() {
   const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
 
   // 動的バリデーションメッセージ
@@ -62,13 +68,20 @@ export function EmployerLogin() {
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
+      // reCAPTCHA v3トークン取得
       let recaptchaToken: string | undefined;
-      if (siteKey && recaptchaRef.current) {
+      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
         try {
-          recaptchaToken = await recaptchaRef.current.executeAsync();
-          recaptchaRef.current.reset();
+          recaptchaToken = await new Promise<string>((resolve, reject) => {
+            window.grecaptcha.ready(() => {
+              window.grecaptcha
+                .execute(siteKey, { action: 'employer_login' })
+                .then(resolve)
+                .catch(reject);
+            });
+          });
         } catch (e) {
-          console.warn('reCAPTCHA 実行に失敗しました。', e);
+          console.warn('reCAPTCHA v3実行に失敗しました。', e);
         }
       }
       const success = await login(data.email, data.password, 'company', recaptchaToken);
@@ -191,15 +204,6 @@ export function EmployerLogin() {
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? t('auth.loggingIn') : t('auth.loginButton')}
                   </Button>
-
-                {/* Invisible reCAPTCHA */}
-                {siteKey && (
-                  <ReCAPTCHA
-                    ref={recaptchaRef}
-                    sitekey={siteKey}
-                    size="invisible"
-                  />
-                )}
 
                   <div className="text-center mt-4">
                     <Link 
