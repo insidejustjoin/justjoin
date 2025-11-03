@@ -18,6 +18,15 @@ import { User, Mail, Lock, UserPlus, ArrowLeft, Briefcase, Key } from 'lucide-re
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+    };
+  }
+}
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6)
@@ -67,7 +76,25 @@ export function JobSeekerLogin() {
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const success = await login(data.email, data.password, 'job_seeker');
+      // reCAPTCHA v3トークン取得
+      const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
+      let recaptchaToken: string | undefined;
+      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
+        try {
+          recaptchaToken = await new Promise<string>((resolve, reject) => {
+            window.grecaptcha.ready(() => {
+              window.grecaptcha
+                .execute(siteKey, { action: 'jobseeker_login' })
+                .then(resolve)
+                .catch(reject);
+            });
+          });
+        } catch (e) {
+          console.warn('reCAPTCHA v3実行に失敗しました。', e);
+        }
+      }
+      
+      const success = await login(data.email, data.password, 'job_seeker', recaptchaToken);
       if (success) {
         navigate('/jobseeker/my-page');
       }

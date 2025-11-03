@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -106,12 +106,23 @@ const JobSeekerRegisterEngineer: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
+        // 登録成功を通知
+        toast.success('登録が完了しました！', {
+          description: 'マイページに移動します',
+          duration: 3000,
+        });
+        
         // 登録成功後、自動ログイン
         if (data.token) {
           localStorage.setItem('auth_token', data.token);
-          navigate('/jobseeker/my-page');
+          // 少し待ってからリダイレクト（ユーザーに成功メッセージを見せるため）
+          setTimeout(() => {
+            navigate('/jobseeker/my-page');
+          }, 1500);
         } else {
-          navigate('/jobseeker/login');
+          setTimeout(() => {
+            navigate('/jobseeker/login');
+          }, 1500);
         }
       } else {
         setErrors([data.message || '登録に失敗しました']);
@@ -123,6 +134,16 @@ const JobSeekerRegisterEngineer: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
+  // パスワード設定画面に遷移した時にスクロール
+  useEffect(() => {
+    if (documentsData) {
+      // 少し遅延させてスクロール（DOMが完全に描画された後）
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+    }
+  }, [documentsData]);
 
   if (documentsData) {
     // パスワード入力ステップ
@@ -185,7 +206,20 @@ const JobSeekerRegisterEngineer: React.FC = () => {
                   )}
 
                   <Button type="submit" className="w-full" disabled={isSubmitting || !password || !confirmPassword}>
-                    {isSubmitting ? '登録中...' : '登録を完了する'}
+                    {isSubmitting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        登録処理中...
+                      </>
+                    ) : (
+                      <>
+                        登録を完了する
+                        <CheckCircle className="ml-2 h-4 w-4" />
+                      </>
+                    )}
                   </Button>
                 </form>
               </CardContent>

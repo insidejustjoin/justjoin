@@ -56,20 +56,35 @@ router.post('/check', async (req, res) => {
                 message: 'メールアドレス、姓、名は必須です。'
             });
         }
-        // 既存ユーザーチェック
-        const existingUser = await query('SELECT id, email, status FROM users WHERE email = $1', [email]);
+        // 既存ユーザーチェック（job_seekersテーブルに対応するレコードがあるかもチェック）
+        const existingUser = await query(`SELECT 
+        u.id, 
+        u.email, 
+        u.status,
+        js.id as jobseeker_id
+       FROM users u
+       LEFT JOIN job_seekers js ON js.user_id = u.id
+       WHERE u.email = $1`, [email]);
         if (existingUser.rows.length > 0) {
             const user = existingUser.rows[0];
-            return res.json({
-                success: true,
-                exists: true,
-                message: 'このメールアドレスは既に登録されています。',
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    status: user.status
-                }
-            });
+            // job_seekersテーブルに対応するレコードがある場合のみ「既に登録されています」と表示
+            if (user.jobseeker_id) {
+                return res.json({
+                    success: true,
+                    exists: true,
+                    message: 'このメールアドレスは既に登録されています。',
+                    user: {
+                        id: user.id,
+                        email: user.email,
+                        status: user.status
+                    }
+                });
+            }
+            else {
+                // usersテーブルには存在するが、job_seekersテーブルに対応するレコードがない場合
+                // （不完全な登録データなど）は新規登録として扱う
+                console.warn(`ユーザー${user.id}（${email}）はusersテーブルに存在しますが、job_seekersテーブルに対応するレコードがありません。新規登録として処理します。`);
+            }
         }
         res.json({
             success: true,
@@ -145,23 +160,45 @@ router.post('/engineer', async (req, res) => {
                 message: 'パスワードは8文字以上で、英数字を含む必要があります。'
             });
         }
-        // 既存ユーザーチェック
-        const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
+        // 既存ユーザーチェック（job_seekersテーブルに対応するレコードがあるかもチェック）
+        const existingUser = await query(`SELECT 
+        u.id, 
+        js.id as jobseeker_id
+       FROM users u
+       LEFT JOIN job_seekers js ON js.user_id = u.id
+       WHERE u.email = $1`, [email]);
         if (existingUser.rows.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'このメールアドレスは既に登録されています。'
-            });
+            const user = existingUser.rows[0];
+            // job_seekersテーブルに対応するレコードがある場合のみエラー
+            if (user.jobseeker_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'このメールアドレスは既に登録されています。'
+                });
+            }
+            // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
+            // （後続の処理でINSERT INTO usersではなく、既存のuser_idを使用）
         }
         // パスワードハッシュ化
         const passwordHash = await bcrypt.hash(password, 10);
         // トランザクション開始
         await query('BEGIN');
         try {
-            // ユーザー作成
-            const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [email, passwordHash, 'job_seeker', 'active']);
-            const userId = userResult.rows[0].id;
+            let userId;
+            // 既存のusersレコードがある場合は再利用、なければ新規作成
+            if (existingUser.rows.length > 0 && !existingUser.rows[0].jobseeker_id) {
+                // 既存のusersレコードを再利用（パスワードとステータスを更新）
+                userId = existingUser.rows[0].id;
+                await query(`UPDATE users 
+           SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() 
+           WHERE id = $4`, [passwordHash, 'job_seeker', 'active', userId]);
+            }
+            else {
+                // 新規ユーザー作成
+                const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+           VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [email, passwordHash, 'job_seeker', 'active']);
+                userId = userResult.rows[0].id;
+            }
             // 求職者情報作成
             const jobSeekerResult = await query(`INSERT INTO job_seekers (
           user_id, first_name, last_name, phone, 
@@ -310,23 +347,45 @@ router.post('/general', async (req, res) => {
                 message: 'パスワードは8文字以上で、英数字を含む必要があります。'
             });
         }
-        // 既存ユーザーチェック
-        const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
+        // 既存ユーザーチェック（job_seekersテーブルに対応するレコードがあるかもチェック）
+        const existingUser = await query(`SELECT 
+        u.id, 
+        js.id as jobseeker_id
+       FROM users u
+       LEFT JOIN job_seekers js ON js.user_id = u.id
+       WHERE u.email = $1`, [email]);
         if (existingUser.rows.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'このメールアドレスは既に登録されています。'
-            });
+            const user = existingUser.rows[0];
+            // job_seekersテーブルに対応するレコードがある場合のみエラー
+            if (user.jobseeker_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'このメールアドレスは既に登録されています。'
+                });
+            }
+            // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
+            // （後続の処理でINSERT INTO usersではなく、既存のuser_idを使用）
         }
         // パスワードハッシュ化
         const passwordHash = await bcrypt.hash(password, 10);
         // トランザクション開始
         await query('BEGIN');
         try {
-            // ユーザー作成
-            const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [email, passwordHash, 'job_seeker', 'active']);
-            const userId = userResult.rows[0].id;
+            let userId;
+            // 既存のusersレコードがある場合は再利用、なければ新規作成
+            if (existingUser.rows.length > 0 && !existingUser.rows[0].jobseeker_id) {
+                // 既存のusersレコードを再利用（パスワードとステータスを更新）
+                userId = existingUser.rows[0].id;
+                await query(`UPDATE users 
+           SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() 
+           WHERE id = $4`, [passwordHash, 'job_seeker', 'active', userId]);
+            }
+            else {
+                // 新規ユーザー作成
+                const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+           VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [email, passwordHash, 'job_seeker', 'active']);
+                userId = userResult.rows[0].id;
+            }
             // 求職者情報作成（一般職向けはスキルシートなし）
             const jobSeekerResult = await query(`INSERT INTO job_seekers (
           user_id, first_name, last_name, phone, 
