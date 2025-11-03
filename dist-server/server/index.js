@@ -9,6 +9,7 @@ import notificationsRoutes from './api/notifications.js';
 import interviewAnalyticsRoutes from './api/interviewAnalytics.js';
 import interviewRoutes from './api/interview.js';
 import temporaryRegistrationRoutes from './api/temporaryRegistration.js';
+import directRegistrationRoutes from './api/directRegistration.js';
 import jobSeekerStatusRoutes from './api/jobSeekerStatus.js';
 import uploadImageRoutes from './api/uploadImage.js';
 import { generateHeadings } from './api/generateHeadings.js';
@@ -34,7 +35,10 @@ app.use('/api/documents', documentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin/interview', interviewAnalyticsRoutes);
 app.use('/api/interview', interviewRoutes);
-app.use('/api/register', temporaryRegistrationRoutes);
+// 新しい直接登録システム
+app.use('/api/register', directRegistrationRoutes);
+// 旧仮登録システム（互換性のため残す）
+app.use('/api/register/temporary', temporaryRegistrationRoutes);
 // リマインドAPI: 書類入力率が100%未満の求職者にメール送信（登録から指定日数経過）
 app.post('/api/reminders/incomplete-documents', async (req, res) => {
     try {

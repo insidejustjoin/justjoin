@@ -16,6 +16,9 @@ import DeployTest from "./pages/DeployTest";
 import JobSeekerLanding from "./pages/JobSeekerLanding";
 import { JobSeekerLogin } from "./pages/JobSeekerLogin";
 import JobSeekerRegister from "./pages/JobSeekerRegister";
+import JobSeekerRegisterType from "./pages/JobSeekerRegisterType";
+import JobSeekerRegisterEngineer from "./pages/JobSeekerRegisterEngineer";
+import JobSeekerRegisterGeneral from "./pages/JobSeekerRegisterGeneral";
 import { RegistrationVerification } from "./components/RegistrationVerification";
 import { JobSeekerDashboard } from "./pages/JobSeekerDashboard";
 import { JobSeekerMyPage } from "./pages/JobSeekerMyPage";
@@ -81,6 +84,10 @@ function App() {
               <Route path="/jobseeker" element={<JobSeekerLogin />} />
               <Route path="/jobseeker/login" element={<JobSeekerLogin />} />
               <Route path="/jobseeker/register" element={<JobSeekerRegister />} />
+              <Route path="/jobseeker/register/type" element={<JobSeekerRegisterType />} />
+              <Route path="/jobseeker/register/engineer" element={<JobSeekerRegisterEngineer />} />
+              <Route path="/jobseeker/register/general" element={<JobSeekerRegisterGeneral />} />
+              {/* 旧仮登録システム（互換性のため残す） */}
               <Route path="/register/verify/:token" element={<RegistrationVerification />} />
               <Route path="/jobseeker/auth" element={<JobSeekerAuth />} />
               <Route path="/jobseeker/dashboard" element={<JobSeekerDashboard />} />

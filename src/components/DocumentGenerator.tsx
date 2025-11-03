@@ -129,6 +129,8 @@ interface DocumentGeneratorProps {
   isAdminMode?: boolean;
   // 仮登録用のプロパティ
   isRegistrationMode?: boolean;
+  // スキルシートを非表示にする（一般職向け）
+  hideSkillSheet?: boolean;
   onDocumentsComplete?: (documentsData: any) => void;
   prefillData?: any;
   registrationToken?: string;
@@ -199,6 +201,7 @@ const UN_MEMBER_COUNTRIES = [
 const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({ 
   isAdminMode = false, 
   isRegistrationMode = false,
+  hideSkillSheet = false,
   onDocumentsComplete,
   prefillData,
   registrationToken,
@@ -464,8 +467,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     // 登録モードでは顔写真は任意
     if (!isRegistrationMode && !documentData.resume?.photoUrl) missingFields.push('顔写真');
     
-    // スキルシートの必須項目（仮登録モードでは任意）
-    if (!isRegistrationMode && (!documentData.skillSheet?.skills || Object.keys(documentData.skillSheet.skills).length === 0)) {
+    // スキルシートの必須項目（登録モードでは任意、hideSkillSheetの場合は除外）
+    if (!isRegistrationMode && !hideSkillSheet && (!documentData.skillSheet?.skills || Object.keys(documentData.skillSheet.skills).length === 0)) {
       missingFields.push('スキルシート');
     }
     
@@ -2708,10 +2711,10 @@ whiteCells.forEach(cell => {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className={`grid w-full ${hideSkillSheet ? 'grid-cols-2' : 'grid-cols-3'}`}>
           <TabsTrigger value="resume">{t('documents.resume')}</TabsTrigger>
           <TabsTrigger value="workHistory">{t('documents.jobHistory')}</TabsTrigger>
-          <TabsTrigger value="skills">{t('documents.skillSheet')}</TabsTrigger>
+          {!hideSkillSheet && <TabsTrigger value="skills">{t('documents.skillSheet')}</TabsTrigger>}
         </TabsList>
 
         {/* 履歴書タブ */}
@@ -4067,12 +4070,12 @@ whiteCells.forEach(cell => {
               )}
             </Button>
             
-            {/* 仮登録モードで次へボタンを表示 */}
+            {/* 登録モードで次へボタンを表示 */}
             {isRegistrationMode && onDocumentsComplete && (
               <Button
                 onClick={async () => {
-                  // temporaryRegistration.tsが期待する形式にデータを変換
-                  const convertedData = {
+                  // データを変換
+                  const convertedData: any = {
                     resume: {
                       basicInfo: {
                         firstName: documentData.firstName,
@@ -4102,37 +4105,27 @@ whiteCells.forEach(cell => {
                       qualifications: documentData.workHistory?.qualifications || '',
                       noWorkHistory: documentData.workHistory?.noWorkHistory || false,
                     },
-                    skillSheet: {
-                      skills: documentData.skillSheet?.skills || {}
-                    },
-                    // 連絡先（トップレベルにも複製）
-                    contact: {
-                      sameAsLive: !!documentData.contactSameAsLive,
-                      postNumber: documentData.contactPostNumber || '',
-                      address: documentData.contactAddress || '',
-                      kanaAddress: documentData.kanaContactAddress || '',
-                      phone: documentData.contactPhoneNumber || '',
-                      mail: documentData.contactMail || '',
-                    },
-                    contactSameAsLive: !!documentData.contactSameAsLive,
-                    contactPostNumber: documentData.contactPostNumber || '',
-                    contactAddress: documentData.contactAddress || '',
-                    kanaContactAddress: documentData.kanaContactAddress || '',
-                    contactPhoneNumber: documentData.contactPhoneNumber || '',
-                    contactMail: documentData.contactMail || '',
-                    // 現住所（トップレベルにも複製）
-                    live: {
-                      postNumber: documentData.livePostNumber || '',
-                      address: documentData.liveAddress || '',
-                      kanaAddress: documentData.kanaLiveAddress || '',
-                      phone: documentData.livePhoneNumber || '',
-                      mail: documentData.liveMail || '',
-                    },
+                    // 基本情報
+                    firstName: documentData.firstName,
+                    lastName: documentData.lastName,
+                    kanaFirstName: documentData.kanaFirstName,
+                    kanaLastName: documentData.kanaLastName,
+                    birthDate: documentData.birthDate,
+                    gender: documentData.gender,
+                    nationality: documentData.nationality,
+                    // 現住所情報
                     livePostNumber: documentData.livePostNumber || '',
                     liveAddress: documentData.liveAddress || '',
                     kanaLiveAddress: documentData.kanaLiveAddress || '',
                     livePhoneNumber: documentData.livePhoneNumber || '',
                     liveMail: documentData.liveMail || '',
+                    // 連絡先情報
+                    contactPostNumber: documentData.contactPostNumber || '',
+                    contactAddress: documentData.contactAddress || '',
+                    kanaContactAddress: documentData.kanaContactAddress || '',
+                    contactPhoneNumber: documentData.contactPhoneNumber || '',
+                    contactMail: documentData.contactMail || '',
+                    contactSameAsLive: !!documentData.contactSameAsLive,
                     // 日本語資格/試験
                     certificateStatus: documentData.certificateStatus,
                     japaneseLevel: documentData.japaneseLevel,
@@ -4145,15 +4138,19 @@ whiteCells.forEach(cell => {
                     // 配偶者
                     spouse: documentData.spouse,
                     spouseSupport: documentData.spouseSupport,
-                    // 入力率（任意）
-                    completionRateHint: typeof completionRate === 'number' ? completionRate : undefined,
                   };
+                  
+                  // スキルシート（hideSkillSheet=falseの場合のみ追加）
+                  if (!hideSkillSheet) {
+                    convertedData.skillSheet = {
+                      skills: documentData.skillSheet?.skills || {}
+                    };
+                  }
 
-                  try {
-                    // 書類データをtemporary_registrationsテーブルに保存
-                    const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-                    
-                    if (registrationToken) {
+                  // 旧仮登録システム用の保存（registrationTokenがある場合のみ）
+                  if (registrationToken) {
+                    try {
+                      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
                       const saveResponse = await fetch(`${apiUrl}/api/register/update-documents/${registrationToken}`, {
                         method: 'POST',
                         headers: {
@@ -4164,18 +4161,12 @@ whiteCells.forEach(cell => {
                       
                       if (saveResponse.ok) {
                         console.log('書類データがデータベースに保存されました');
-                        console.log('書類データが保存されました');
                       } else {
                         console.error('書類データ保存エラー:', saveResponse.status);
-                        console.error('書類データの保存に失敗しました');
                       }
-                    } else {
-                      console.error('トークンが見つかりません');
-                      console.error('トークンが見つかりません');
+                    } catch (error) {
+                      console.error('書類データ保存エラー:', error);
                     }
-                  } catch (error) {
-                    console.error('書類データ保存エラー:', error);
-                    console.error('書類データの保存に失敗しました');
                   }
                   
                   // 親コンポーネントに完了を通知
