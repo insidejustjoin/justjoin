@@ -684,32 +684,23 @@ app.get('/api/admin/jobseekers', async (req, res) => {
   try {
     const { query } = await import('../integrations/postgres/client.js');
     
-    // クエリパラメータでステータスフィルタリングと登録タイプフィルタリング
+    // クエリパラメータ（表示制御向け。DB値のばらつきに配慮して緩くフィルタ）
     const { status = 'all', registrationType = 'all' } = req.query;
     
-    let statusFilter = '';
-    let statusParams: string[] = [];
+    // WHERE句を柔軟に構築
+    const whereClauses: string[] = [];
+    const params: any[] = [];
     
-    if (status === 'active') {
-      statusFilter = 'WHERE u.status = $1';
-      statusParams = ['active'];
-    } else if (status === 'inactive') {
-      statusFilter = 'WHERE u.status = $1';
-      statusParams = ['inactive'];
-    } else if (status === 'employed') {
-      statusFilter = 'WHERE js.employment_status = $1';
-      statusParams = ['employed'];
-    }
+    // ステータスは暫定的にフィルタしない（u.statusは環境により未整備のため）
+    // if (status === 'employed') { ... } // 将来、履歴連携時に実装
     
-    // 登録タイプでフィルタリング
+    // 登録タイプはNULL=engineerとして扱い
     if (registrationType === 'engineer' || registrationType === 'general') {
-      if (statusFilter) {
-        statusFilter += ` AND js.registration_type = $${statusParams.length + 1}`;
-      } else {
-        statusFilter = `WHERE js.registration_type = $1`;
-      }
-      statusParams.push(registrationType);
+      whereClauses.push(`COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`);
+      params.push(registrationType);
     }
+    
+    const statusFilter = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
     
     // 基本的な求職者データを取得（ステータスフィルタリング対応）
     // データの整合性を保つため、対応するusersレコードが存在するもののみ取得
@@ -751,7 +742,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       INNER JOIN users u ON js.user_id = u.id
       ${statusFilter}
       ORDER BY js.created_at DESC
-    `, statusParams);
+    `, params);
     // まずは最低限のベースデータのみ返却（安定優先）
     const minimalRows = result.rows.map((row) => ({
       id: row.id,
