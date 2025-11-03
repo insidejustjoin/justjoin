@@ -754,7 +754,9 @@ app.get('/api/admin/jobseekers', async (req, res) => {
     `, statusParams);
     
     // 各求職者に対して詳細情報を取得
-    const processedRows = await Promise.all(result.rows.map(async (row) => {
+    let processedRows: any[] = [];
+    try {
+      processedRows = await Promise.all(result.rows.map(async (row) => {
       console.log('===DEBUG reached forEach start, user_id:', row.user_id);
       // skillsフィールドの処理
       if (row.skills && typeof row.skills === 'string') {
@@ -948,8 +950,32 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         };
       }
       
-      return processedRow;
-    }));
+        return processedRow;
+      }));
+    } catch (e) {
+      console.error('管理者求職者一覧 詳細情報付与に失敗。ベースデータで返却します:', e);
+      // 最低限のベースデータで返却（500にせずUIが表示できるように）
+      processedRows = result.rows.map((row) => ({
+        id: row.id,
+        js_id: row.js_id,
+        user_id: row.user_id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        full_name: row.full_name,
+        date_of_birth: row.date_of_birth,
+        gender: row.gender,
+        nationality: row.nationality,
+        phone: row.phone,
+        address: row.address,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        email: row.email,
+        user_status: row.user_status,
+        employment_status: row.employment_status,
+        completion_rate: row.completion_rate,
+        registration_type: row.registration_type,
+      }));
+    }
     
     console.log(`管理者求職者一覧取得: ${processedRows.length}件`);
     
