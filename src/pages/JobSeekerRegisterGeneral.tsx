@@ -103,6 +103,9 @@ const JobSeekerRegisterGeneral: React.FC = () => {
       });
 
       const data = await response.json();
+      if (!response.ok) {
+        console.error('登録APIエラー詳細:', data);
+      }
       
       if (data.success) {
         // 登録成功を通知
@@ -124,7 +127,7 @@ const JobSeekerRegisterGeneral: React.FC = () => {
           }, 1500);
         }
       } else {
-        setErrors([data.message || '登録に失敗しました']);
+        setErrors([data.message || '登録に失敗しました', data.detail].filter(Boolean) as string[]);
       }
     } catch (error) {
       console.error('登録エラー:', error);
