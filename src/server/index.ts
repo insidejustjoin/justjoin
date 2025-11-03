@@ -684,23 +684,17 @@ app.get('/api/admin/jobseekers', async (req, res) => {
   try {
     const { query } = await import('../integrations/postgres/client.js');
     
-    // クエリパラメータ（表示制御向け。DB値のばらつきに配慮して緩くフィルタ）
-    const { status = 'all', registrationType = 'all' } = req.query;
+    // クエリパラメータ（まずは登録タイプのみで確実に抽出。statusは本番DBの値ばらつきのため一旦無視）
+    const { registrationType = 'all' } = req.query;
     
-    // WHERE句を柔軟に構築
-    const whereClauses: string[] = [];
+    let whereClause = 'WHERE 1=1';
     const params: any[] = [];
     
-    // ステータスは暫定的にフィルタしない（u.statusは環境により未整備のため）
-    // if (status === 'employed') { ... } // 将来、履歴連携時に実装
-    
-    // 登録タイプはNULL=engineerとして扱い
+    // 登録タイプ（NULLはengineerとして扱う）
     if (registrationType === 'engineer' || registrationType === 'general') {
-      whereClauses.push(`COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`);
+      whereClause += ` AND COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`;
       params.push(registrationType);
     }
-    
-    const statusFilter = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
     
     // 基本的な求職者データを取得（ステータスフィルタリング対応）
     // データの整合性を保つため、対応するusersレコードが存在するもののみ取得
@@ -740,7 +734,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         '' as self_introduction
       FROM job_seekers js
       INNER JOIN users u ON js.user_id = u.id
-      ${statusFilter}
+      ${whereClause}
       ORDER BY js.created_at DESC
     `, params);
     // まずは最低限のベースデータのみ返却（安定優先）
