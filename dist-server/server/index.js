@@ -625,6 +625,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         u.updated_at as user_updated_at,
         -- 就職状況（デフォルトは未就職）
         COALESCE(js.employment_status, 'unemployed') as employment_status,
+        -- 完了率（入力率）
+        COALESCE(js.completion_rate, 0) as completion_rate,
         -- フロントエンドで必要なデフォルト値
         '[]' as skills,
         0 as experience_years,

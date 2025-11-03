@@ -667,8 +667,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
   try {
     const { query } = await import('../integrations/postgres/client.js');
     
-    // クエリパラメータでステータスフィルタリング
-    const { status = 'all' } = req.query;
+    // クエリパラメータでステータスフィルタリングと登録タイプフィルタリング
+    const { status = 'all', registrationType = 'all' } = req.query;
     
     let statusFilter = '';
     let statusParams: string[] = [];
@@ -682,6 +682,16 @@ app.get('/api/admin/jobseekers', async (req, res) => {
     } else if (status === 'employed') {
       statusFilter = 'WHERE js.employment_status = $1';
       statusParams = ['employed'];
+    }
+    
+    // 登録タイプでフィルタリング
+    if (registrationType === 'engineer' || registrationType === 'general') {
+      if (statusFilter) {
+        statusFilter += ` AND js.registration_type = $${statusParams.length + 1}`;
+      } else {
+        statusFilter = `WHERE js.registration_type = $1`;
+      }
+      statusParams.push(registrationType);
     }
     
     // 基本的な求職者データを取得（ステータスフィルタリング対応）
@@ -713,6 +723,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         COALESCE(js.employment_status, 'unemployed') as employment_status,
         -- 完了率（入力率）
         COALESCE(js.completion_rate, 0) as completion_rate,
+        -- 登録タイプ（エンジニア/一般職）
+        COALESCE(js.registration_type, 'engineer') as registration_type,
         -- フロントエンドで必要なデフォルト値
         '[]' as skills,
         0 as experience_years,

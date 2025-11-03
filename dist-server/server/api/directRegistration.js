@@ -160,20 +160,22 @@ router.post('/engineer', async (req, res) => {
                 message: 'パスワードは8文字以上で、英数字を含む必要があります。'
             });
         }
-        // 既存ユーザーチェック（job_seekersテーブルに対応するレコードがあるかもチェック）
+        // 既存ユーザーチェック（同じメールアドレスで最大2つまで登録可能：エンジニアと一般職）
         const existingUser = await query(`SELECT 
         u.id, 
-        js.id as jobseeker_id
+        js.id as jobseeker_id,
+        js.registration_type
        FROM users u
        LEFT JOIN job_seekers js ON js.user_id = u.id
        WHERE u.email = $1`, [email]);
         if (existingUser.rows.length > 0) {
             const user = existingUser.rows[0];
-            // job_seekersテーブルに対応するレコードがある場合のみエラー
-            if (user.jobseeker_id) {
+            // 同じregistration_typeが既に存在する場合はエラー
+            const existingRegistrations = existingUser.rows.filter((row) => row.jobseeker_id && row.registration_type === 'general');
+            if (existingRegistrations.length > 0) {
                 return res.status(400).json({
                     success: false,
-                    message: 'このメールアドレスは既に登録されています。'
+                    message: 'このメールアドレスで一般職登録は既に完了しています。'
                 });
             }
             // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
@@ -185,10 +187,11 @@ router.post('/engineer', async (req, res) => {
         await query('BEGIN');
         try {
             let userId;
-            // 既存のusersレコードがある場合は再利用、なければ新規作成
-            if (existingUser.rows.length > 0 && !existingUser.rows[0].jobseeker_id) {
+            // 既存のusersレコードがある場合は再利用（一般職登録のみの場合も含む）
+            const existingUserRecord = existingUser.rows.find((row) => row.id);
+            if (existingUserRecord && existingUserRecord.id) {
                 // 既存のusersレコードを再利用（パスワードとステータスを更新）
-                userId = existingUser.rows[0].id;
+                userId = existingUserRecord.id;
                 await query(`UPDATE users 
            SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() 
            WHERE id = $4`, [passwordHash, 'job_seeker', 'active', userId]);
@@ -199,12 +202,12 @@ router.post('/engineer', async (req, res) => {
            VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [email, passwordHash, 'job_seeker', 'active']);
                 userId = userResult.rows[0].id;
             }
-            // 求職者情報作成
+            // 求職者情報作成（エンジニア向け）
             const jobSeekerResult = await query(`INSERT INTO job_seekers (
           user_id, first_name, last_name, phone, 
           date_of_birth, gender, nationality, address,
-          profile_photo, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id`, [
+          profile_photo, registration_type, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING id`, [
                 userId,
                 firstName,
                 lastName,
@@ -213,7 +216,8 @@ router.post('/engineer', async (req, res) => {
                 documentsData?.gender || null,
                 documentsData?.nationality || null,
                 documentsData?.liveAddress || null,
-                documentsData?.resume?.photoUrl || null
+                documentsData?.resume?.photoUrl || null,
+                'engineer'
             ]);
             // 書類データ保存
             if (documentsData) {
@@ -347,20 +351,22 @@ router.post('/general', async (req, res) => {
                 message: 'パスワードは8文字以上で、英数字を含む必要があります。'
             });
         }
-        // 既存ユーザーチェック（job_seekersテーブルに対応するレコードがあるかもチェック）
+        // 既存ユーザーチェック（同じメールアドレスで最大2つまで登録可能：エンジニアと一般職）
         const existingUser = await query(`SELECT 
         u.id, 
-        js.id as jobseeker_id
+        js.id as jobseeker_id,
+        js.registration_type
        FROM users u
        LEFT JOIN job_seekers js ON js.user_id = u.id
        WHERE u.email = $1`, [email]);
         if (existingUser.rows.length > 0) {
             const user = existingUser.rows[0];
-            // job_seekersテーブルに対応するレコードがある場合のみエラー
-            if (user.jobseeker_id) {
+            // 同じregistration_typeが既に存在する場合はエラー
+            const existingRegistrations = existingUser.rows.filter((row) => row.jobseeker_id && row.registration_type === 'general');
+            if (existingRegistrations.length > 0) {
                 return res.status(400).json({
                     success: false,
-                    message: 'このメールアドレスは既に登録されています。'
+                    message: 'このメールアドレスで一般職登録は既に完了しています。'
                 });
             }
             // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
@@ -372,10 +378,11 @@ router.post('/general', async (req, res) => {
         await query('BEGIN');
         try {
             let userId;
-            // 既存のusersレコードがある場合は再利用、なければ新規作成
-            if (existingUser.rows.length > 0 && !existingUser.rows[0].jobseeker_id) {
+            // 既存のusersレコードがある場合は再利用（一般職登録のみの場合も含む）
+            const existingUserRecord = existingUser.rows.find((row) => row.id);
+            if (existingUserRecord && existingUserRecord.id) {
                 // 既存のusersレコードを再利用（パスワードとステータスを更新）
-                userId = existingUser.rows[0].id;
+                userId = existingUserRecord.id;
                 await query(`UPDATE users 
            SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() 
            WHERE id = $4`, [passwordHash, 'job_seeker', 'active', userId]);
@@ -390,8 +397,8 @@ router.post('/general', async (req, res) => {
             const jobSeekerResult = await query(`INSERT INTO job_seekers (
           user_id, first_name, last_name, phone, 
           date_of_birth, gender, nationality, address,
-          profile_photo, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id`, [
+          profile_photo, registration_type, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING id`, [
                 userId,
                 firstName,
                 lastName,
@@ -400,7 +407,8 @@ router.post('/general', async (req, res) => {
                 documentsData?.gender || null,
                 documentsData?.nationality || null,
                 documentsData?.liveAddress || null,
-                documentsData?.resume?.photoUrl || null
+                documentsData?.resume?.photoUrl || null,
+                'general'
             ]);
             // スキルシートを除外して書類データ保存
             if (documentsData) {

@@ -54,6 +54,7 @@ export function AdminJobSeekers() {
   const [showDocumentGenerator, setShowDocumentGenerator] = useState(false);
   const [selectedJobSeeker, setSelectedJobSeeker] = useState<JobSeeker | null>(null);
   const [activeTab, setActiveTab] = useState('active');
+  const [registrationTypeTab, setRegistrationTypeTab] = useState<'engineer' | 'general'>('engineer');
   const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
@@ -361,7 +362,10 @@ export function AdminJobSeekers() {
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
       console.log('API URL:', apiUrl);
       
-      const response = await fetch(`${apiUrl}/api/admin/jobseekers`, {
+      // 登録タイプに基づいてフィルタリング
+      const url = `${apiUrl}/api/admin/jobseekers?status=${activeTab}&registrationType=${registrationTypeTab}`;
+      
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -1617,6 +1621,28 @@ export function AdminJobSeekers() {
             <TabsTrigger value="withdrawn">退会済み一覧</TabsTrigger>
             <TabsTrigger value="temporary">仮登録</TabsTrigger>
           </TabsList>
+          
+          {/* エンジニア/一般職タブ */}
+          <div className="mt-4 flex gap-2">
+            <Button
+              variant={registrationTypeTab === 'engineer' ? 'default' : 'outline'}
+              onClick={() => {
+                setRegistrationTypeTab('engineer');
+                fetchJobSeekers(true);
+              }}
+            >
+              エンジニア
+            </Button>
+            <Button
+              variant={registrationTypeTab === 'general' ? 'default' : 'outline'}
+              onClick={() => {
+                setRegistrationTypeTab('general');
+                fetchJobSeekers(true);
+              }}
+            >
+              一般職
+            </Button>
+          </div>
 
           {/* 求職者一覧タブ */}
           <TabsContent value="active" className="space-y-4">

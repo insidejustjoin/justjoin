@@ -22,6 +22,8 @@ import JobSeekerRegisterGeneral from "./pages/JobSeekerRegisterGeneral";
 import { RegistrationVerification } from "./components/RegistrationVerification";
 import { JobSeekerDashboard } from "./pages/JobSeekerDashboard";
 import { JobSeekerMyPage } from "./pages/JobSeekerMyPage";
+import { JobSeekerMyPageEngineer } from "./pages/JobSeekerMyPageEngineer";
+import { JobSeekerMyPageGeneral } from "./pages/JobSeekerMyPageGeneral";
 import JobSeekerAuth from "./pages/JobSeekerAuth";
 
 // 企業関連ページ
@@ -94,6 +96,16 @@ function App() {
               <Route path="/jobseeker/my-page" element={
                 <AuthGuard requiredUserType="job_seeker">
                   <JobSeekerMyPage />
+                </AuthGuard>
+              } />
+              <Route path="/jobseeker/my-page-engineer" element={
+                <AuthGuard requiredUserType="job_seeker">
+                  <JobSeekerMyPageEngineer />
+                </AuthGuard>
+              } />
+              <Route path="/jobseeker/my-page-general" element={
+                <AuthGuard requiredUserType="job_seeker">
+                  <JobSeekerMyPageGeneral />
                 </AuthGuard>
               } />
               <Route path="/jobseeker/documents" element={

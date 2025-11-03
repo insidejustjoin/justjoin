@@ -110,7 +110,7 @@ router.post('/check', async (req, res) => {
 
 // エンジニア向け本登録API
 router.post('/engineer', async (req, res) => {
-  try {
+    try {
     const { email, firstName, lastName, password, documentsData, recaptchaToken } = req.body;
 
     // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
@@ -183,17 +183,15 @@ router.post('/engineer', async (req, res) => {
     );
 
     if (existingUser.rows.length > 0) {
-      const user = existingUser.rows[0];
-      // 同じregistration_typeが既に存在する場合はエラー
-      const existingRegistrations = existingUser.rows.filter((row: any) => row.jobseeker_id && row.registration_type === 'general');
+      // 同じregistration_type（エンジニア）が既に存在する場合はエラー
+      const existingRegistrations = existingUser.rows.filter((row: any) => row.jobseeker_id && row.registration_type === 'engineer');
       if (existingRegistrations.length > 0) {
         return res.status(400).json({ 
           success: false, 
-          message: 'このメールアドレスで一般職登録は既に完了しています。' 
+          message: 'このメールアドレスでエンジニア登録は既に完了しています。' 
         });
       }
-      // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
-      // （後続の処理でINSERT INTO usersではなく、既存のuser_idを使用）
+      // usersテーブルにのみ存在する場合、または一般職登録のみの場合は、既存のuser_idを再利用
     }
 
     // パスワードハッシュ化
@@ -205,10 +203,11 @@ router.post('/engineer', async (req, res) => {
     try {
       let userId: string;
       
-      // 既存のusersレコードがある場合は再利用、なければ新規作成
-      if (existingUser.rows.length > 0 && !existingUser.rows[0].jobseeker_id) {
+      // 既存のusersレコードがある場合は再利用（一般職登録のみの場合も含む）
+      const existingUserRecord = existingUser.rows.find((row: any) => row.id);
+      if (existingUserRecord && existingUserRecord.id) {
         // 既存のusersレコードを再利用（パスワードとステータスを更新）
-        userId = existingUser.rows[0].id;
+        userId = existingUserRecord.id;
         await query(
           `UPDATE users 
            SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() 
@@ -437,10 +436,11 @@ router.post('/general', async (req, res) => {
     try {
       let userId: string;
       
-      // 既存のusersレコードがある場合は再利用、なければ新規作成
-      if (existingUser.rows.length > 0 && !existingUser.rows[0].jobseeker_id) {
+      // 既存のusersレコードがある場合は再利用（一般職登録のみの場合も含む）
+      const existingUserRecord = existingUser.rows.find((row: any) => row.id);
+      if (existingUserRecord && existingUserRecord.id) {
         // 既存のusersレコードを再利用（パスワードとステータスを更新）
-        userId = existingUser.rows[0].id;
+        userId = existingUserRecord.id;
         await query(
           `UPDATE users 
            SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() 
