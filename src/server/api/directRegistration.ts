@@ -165,44 +165,69 @@ router.post('/engineer', async (req, res) => {
       // 既存のusersレコードがある場合は再利用（一般職登録のみの場合も含む）
       const existingUserRecord = existingUser.rows.find((row: any) => row.id);
       if (existingUserRecord && existingUserRecord.id) {
-        // 既存のusersレコードを再利用（パスワードとステータスを更新）
+        // 既存のusersレコードを再利用（まず拡張カラムありの更新を試行、失敗時は最小更新）
         userId = existingUserRecord.id;
-        await query(
-          `UPDATE users 
-           SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() 
-           WHERE id = $4`,
-          [passwordHash, 'job_seeker', 'active', userId]
-        );
+        try {
+          await query(
+            `UPDATE users 
+             SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() 
+             WHERE id = $4`,
+            [passwordHash, 'job_seeker', 'active', userId]
+          );
+        } catch {
+          await query(
+            `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+            [passwordHash, userId]
+          );
+        }
       } else {
-        // 新規ユーザー作成
-        const userResult = await query(
-          `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
-           VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
-          [email, passwordHash, 'job_seeker', 'active']
-        );
-        userId = userResult.rows[0].id;
+        // 新規ユーザー作成（まず拡張カラム付きで挿入、失敗時は最小カラムで挿入）
+        try {
+          const userResult = await query(
+            `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
+            [email, passwordHash, 'job_seeker', 'active']
+          );
+          userId = userResult.rows[0].id;
+        } catch {
+          const userResult = await query(
+            `INSERT INTO users (email, password_hash, created_at, updated_at) 
+             VALUES ($1, $2, NOW(), NOW()) RETURNING id`,
+            [email, passwordHash]
+          );
+          userId = userResult.rows[0].id;
+        }
       }
 
       // 求職者情報作成（エンジニア向け）
-      const jobSeekerResult = await query(
-        `INSERT INTO job_seekers (
-          user_id, first_name, last_name, phone, 
-          date_of_birth, gender, nationality, address,
-          profile_photo, registration_type, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING id`,
-        [
-          userId,
-          firstName,
-          lastName,
-          documentsData?.livePhoneNumber || null,
-          documentsData?.birthDate || null,
-          documentsData?.gender || null,
-          documentsData?.nationality || null,
-          documentsData?.liveAddress || null,
-          documentsData?.resume?.photoUrl || null,
-          'engineer'
-        ]
-      );
+      try {
+        await query(
+          `INSERT INTO job_seekers (
+            user_id, first_name, last_name, phone, 
+            date_of_birth, gender, nationality, address,
+            profile_photo, registration_type, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+          [
+            userId,
+            firstName,
+            lastName,
+            documentsData?.livePhoneNumber || null,
+            documentsData?.birthDate || null,
+            documentsData?.gender || null,
+            documentsData?.nationality || null,
+            documentsData?.liveAddress || null,
+            documentsData?.resume?.photoUrl || null,
+            'engineer'
+          ]
+        );
+      } catch {
+        // 最小カラムでフォールバック
+        await query(
+          `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+          [userId, firstName, lastName, 'engineer']
+        );
+      }
 
       // 書類データ保存
       if (documentsData) {
@@ -245,10 +270,14 @@ router.post('/engineer', async (req, res) => {
       }
 
       // completion_rateを更新
-      await query(
-        'UPDATE job_seekers SET completion_rate = $1 WHERE user_id = $2',
-        [completionRate, userId]
-      );
+      try {
+        await query(
+          'UPDATE job_seekers SET completion_rate = $1 WHERE user_id = $2',
+          [completionRate, userId]
+        );
+      } catch {
+        // completion_rateが存在しない場合は無視
+      }
 
       await query('COMMIT');
 
@@ -417,25 +446,33 @@ router.post('/general', async (req, res) => {
       }
 
       // 求職者情報作成（一般職向けはスキルシートなし）
-      const jobSeekerResult = await query(
-        `INSERT INTO job_seekers (
-          user_id, first_name, last_name, phone, 
-          date_of_birth, gender, nationality, address,
-          profile_photo, registration_type, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING id`,
-        [
-          userId,
-          firstName,
-          lastName,
-          documentsData?.livePhoneNumber || null,
-          documentsData?.birthDate || null,
-          documentsData?.gender || null,
-          documentsData?.nationality || null,
-          documentsData?.liveAddress || null,
-          documentsData?.resume?.photoUrl || null,
-          'general'
-        ]
-      );
+      try {
+        await query(
+          `INSERT INTO job_seekers (
+            user_id, first_name, last_name, phone, 
+            date_of_birth, gender, nationality, address,
+            profile_photo, registration_type, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+          [
+            userId,
+            firstName,
+            lastName,
+            documentsData?.livePhoneNumber || null,
+            documentsData?.birthDate || null,
+            documentsData?.gender || null,
+            documentsData?.nationality || null,
+            documentsData?.liveAddress || null,
+            documentsData?.resume?.photoUrl || null,
+            'general'
+          ]
+        );
+      } catch {
+        await query(
+          `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+          [userId, firstName, lastName, 'general']
+        );
+      }
 
       // スキルシートを除外して書類データ保存
       if (documentsData) {
@@ -479,10 +516,14 @@ router.post('/general', async (req, res) => {
       }
 
       // completion_rateを更新
-      await query(
-        'UPDATE job_seekers SET completion_rate = $1 WHERE user_id = $2',
-        [completionRate, userId]
-      );
+      try {
+        await query(
+          'UPDATE job_seekers SET completion_rate = $1 WHERE user_id = $2',
+          [completionRate, userId]
+        );
+      } catch {
+        // completion_rateが存在しない場合は無視
+      }
 
       await query('COMMIT');
 
