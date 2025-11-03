@@ -568,41 +568,19 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
 // 管理者ログインAPI
 app.post('/api/admin/login', async (req, res) => {
   try {
-    const { email, password, recaptchaToken } = req.body;
-    // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
-    if (process.env.RECAPTCHA_SECRET_KEY) {
-      if (!recaptchaToken) {
-        return res.status(400).json({
-          success: false,
-          message: 'reCAPTCHA 検証が必要です'
-        });
-      }
-      try {
-        const params = new URLSearchParams();
-        params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-        params.append('response', recaptchaToken);
-        if (req.ip) params.append('remoteip', req.ip);
-        const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString(),
-        });
-        const verifyJson = await verifyResp.json();
-        if (!verifyJson.success) {
-          return res.status(403).json({ success: false, message: 'reCAPTCHA 検証に失敗しました' });
-        }
-        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
-        if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
-          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
-          return res.status(403).json({ 
-            success: false, 
-            message: 'reCAPTCHA 検証に失敗しました（スコア不足）' 
-          });
-        }
-      } catch (e) {
-        console.error('reCAPTCHA 検証エラー:', e);
-        return res.status(500).json({ success: false, message: 'reCAPTCHA 検証エラー' });
-      }
+    const { email, password } = req.body;
+    
+    // IPアドレス制限（124.144.153.50のみ許可）
+    const allowedIP = '124.144.153.50';
+    // Cloud RunではX-Forwarded-ForヘッダーからIPを取得
+    const clientIP = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.ip || req.socket.remoteAddress;
+    
+    if (clientIP !== allowedIP) {
+      console.warn(`管理者ログイン試行が許可されていないIPアドレスから: ${clientIP}`);
+      return res.status(403).json({
+        success: false,
+        message: 'アクセスが拒否されました。許可されたIPアドレスからのみ管理者ログインが可能です。'
+      });
     }
     
     if (!email || !password) {

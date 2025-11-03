@@ -235,10 +235,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // 開発環境ではローカルAPIを使用、本番環境では本番APIを使用
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
       
-      // 管理者の場合は専用APIを使用
+      // 管理者の場合は専用APIを使用（reCAPTCHAなし）
       const apiEndpoint = userType === 'admin' ? '/api/admin/login' : '/api/login';
       const requestBody = userType === 'admin' 
-        ? { email, password, recaptchaToken }
+        ? { email, password }
         : { email, password, userType, recaptchaToken };
       
       const response = await fetch(`${apiUrl}${apiEndpoint}`, {
