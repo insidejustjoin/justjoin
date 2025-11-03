@@ -137,7 +137,7 @@ router.post('/documents/:token', async (req, res) => {
                 message: '無効なトークンまたは期限切れです。'
             });
         }
-        // 必須項目チェック（本登録をスムーズにするため、最小限に緩和）
+        // 必須項目チェック（既存のDocumentGeneratorと同じバリデーション）
         const requiredFields = [
             'resume.basicInfo.firstName',
             'resume.basicInfo.lastName',
@@ -153,7 +153,7 @@ router.post('/documents/:token', async (req, res) => {
                 missingFields.push(field);
             }
         }
-        // 学歴／職歴／資格系は任意に緩和（登録モードでは未入力でもOK）
+        // 学歴・職歴・資格系は登録モードでは任意に緩和
         if (missingFields.length > 0) {
             return res.status(400).json({
                 success: false,
@@ -161,7 +161,7 @@ router.post('/documents/:token', async (req, res) => {
                 missingFields
             });
         }
-        // 書類データ保存（プレースホルダ修正）
+        // 書類データ保存
         await query(`UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
        WHERE verification_token = $3`, [JSON.stringify(documentsData), 'documents_completed', token]);
@@ -201,7 +201,7 @@ router.post('/update-documents/:token', async (req, res) => {
         }
         const email = tempReg.rows[0].email;
         console.log('[REGISTER][UPDATE_DOCS] email=', email, 'size=', JSON.stringify(documentsData).length);
-        // 書類データを更新（プレースホルダ修正）
+        // 書類データを更新
         await query(`UPDATE temporary_registrations 
        SET documents_data = $1, status = $2, updated_at = NOW() 
        WHERE verification_token = $3`, [JSON.stringify(documentsData), 'documents_completed', token]);
@@ -436,9 +436,9 @@ router.post('/complete/:token', async (req, res) => {
                 console.warn('[REGISTER][COMPLETE] profilePhoto extraction warning:', e);
             }
         }
-        // 求職者詳細情報作成（プレースホルダ修正）
+        // 求職者詳細情報作成
         await query(`INSERT INTO job_seekers (user_id, first_name, last_name, profile_photo, completion_rate, created_at, updated_at) 
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`, [userId, registration.first_name, registration.last_name, profilePhoto, completionRate]);
+       VALUES ($1, $2, $3, NOW(), NOW())`, [userId, registration.first_name, registration.last_name, profilePhoto, completionRate]);
         // 求職者ステータスを'active'で初期化
         try {
             await query(`INSERT INTO job_seeker_status_history (user_id, status, created_at, updated_at) 

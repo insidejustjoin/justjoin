@@ -10,9 +10,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useAdminCachedApi } from '@/hooks/useCachedApi';
 import { 
   Users, 
-  Building2, 
   FileText, 
-  Bell, 
   TrendingUp, 
   Eye,
   Calendar,
@@ -353,22 +351,6 @@ export function AdminOverview() {
                 >
                   <Users className="h-6 w-6 mb-2" />
                   <span>求職者管理</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-20 flex flex-col items-center justify-center"
-                  onClick={() => window.location.href = '/admin/companies'}
-                >
-                  <Building2 className="h-6 w-6 mb-2" />
-                  <span>企業管理</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-20 flex flex-col items-center justify-center"
-                  onClick={() => window.location.href = '/admin/notifications'}
-                >
-                  <Bell className="h-6 w-6 mb-2" />
-                  <span>通知管理</span>
                 </Button>
               </div>
             </CardContent>

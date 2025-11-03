@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Activity, Users, Building, FileText, Shield, Bell, BarChart3, BookOpen } from 'lucide-react';
+import { Activity, Users, FileText, Shield, BarChart3, BookOpen } from 'lucide-react';
 import { AdminOverview } from '@/pages/AdminOverview';
 
 export function AdminNavigation() {
@@ -22,22 +22,10 @@ export function AdminNavigation() {
       description: '求職者データと書類'
     },
     {
-      path: '/admin/companies',
-      label: '企業管理',
-      icon: Building,
-      description: '企業データと承認'
-    },
-    {
       path: '/admin/users',
       label: '管理者管理',
       icon: Shield,
       description: '管理者アカウント管理'
-    },
-    {
-      path: '/admin/notification-history',
-      label: '通知履歴',
-      icon: Bell,
-      description: '送信された通知の履歴'
     },
     {
       path: '/admin/interview-analytics',

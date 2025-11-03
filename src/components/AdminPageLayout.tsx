@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, Users, Building, Shield } from 'lucide-react';
+import { Users, Shield } from 'lucide-react';
 
 interface AdminPageLayoutProps {
   children: React.ReactNode;
@@ -17,21 +17,10 @@ export function AdminPageLayout({ children, title }: AdminPageLayoutProps) {
       icon: Users,
     },
     {
-      path: '/admin/companies',
-      label: '企業管理',
-      icon: Building,
-    },
-    {
       path: '/admin/users',
       label: '管理者管理',
       icon: Shield,
     },
-    {
-      path: '/admin/notification-history',
-      label: '通知履歴',
-      icon: Activity,
-    },
-
   ];
 
   return (
