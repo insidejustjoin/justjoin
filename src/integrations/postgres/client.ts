@@ -172,6 +172,31 @@ const createPool = async () => {
     console.log('開発環境でSSL無効で接続します');
   }
 
+  // データベースが存在しない場合は自動作成を試行
+  try {
+    const { Client } = await import('pg');
+    const targetDb = String(connectionConfig.database || 'postgres');
+    if (targetDb !== 'postgres') {
+      const adminConn: any = { ...connectionConfig, database: 'postgres' };
+      const adminClient = new Client(adminConn);
+      try {
+        await adminClient.connect();
+        const exists = await adminClient.query('SELECT 1 FROM pg_database WHERE datname = $1', [targetDb]);
+        if (exists.rowCount === 0) {
+          console.warn(`Database "${targetDb}" not found. Creating...`);
+          await adminClient.query(`CREATE DATABASE "${targetDb}"`);
+          console.log(`Database "${targetDb}" created.`);
+        }
+      } catch (e) {
+        console.warn('Database existence check/create skipped:', e?.message || e);
+      } finally {
+        try { await adminClient.end(); } catch {}
+      }
+    }
+  } catch (e) {
+    console.warn('Database auto-create routine skipped:', e?.message || e);
+  }
+
   pool = new Pool(connectionConfig);
 
   // 接続テスト
