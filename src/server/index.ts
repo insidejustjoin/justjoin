@@ -673,306 +673,79 @@ app.post('/api/admin/login', async (req, res) => {
 app.get('/api/admin/jobseekers', async (req, res) => {
   try {
     const { query } = await import('../integrations/postgres/client.js');
-    
-    // クエリパラメータ（まずは登録タイプのみで確実に抽出。statusは本番DBの値ばらつきのため一旦無視）
+
     const { registrationType = 'all' } = req.query;
-    
-    let whereClause = 'WHERE 1=1';
-    const params: any[] = [];
-    
-    // 登録タイプ（NULLはengineerとして扱う）
-    if (registrationType === 'general') {
-      whereClause += ` AND COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`;
-      params.push('general');
-    } else if (registrationType === 'engineer') {
-      whereClause += ` AND COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`;
-      params.push('engineer');
-    }
-    
-    // 基本的な求職者データを取得（ステータスフィルタリング対応）
-    // データの整合性を保つため、対応するusersレコードが存在するもののみ取得
-    const result = await query(`
-      SELECT 
-        u.id as id, -- フロントエンドが期待するidフィールドをuser_id（UUID）に設定
-        js.id as js_id,
-        u.id as user_id,
-        js.first_name,
-        js.last_name,
-        CONCAT(js.first_name, ' ', js.last_name) as full_name,
-        CONCAT(js.first_name, ' ', js.last_name) as fullName,
-        js.date_of_birth,
-        js.date_of_birth as dateOfBirth,
-        js.gender,
-        js.nationality,
-        js.phone,
-        js.address,
-        js.created_at,
-        js.updated_at,
-        u.email as user_email,
-        u.email as email,
-        u.status as user_status,
-        u.created_at as user_created_at,
-        u.created_at as registeredAt,
-        u.updated_at as user_updated_at,
-        -- 就職状況（デフォルトは未就職）※カラムが存在しない環境に配慮
-        'unemployed'::text as employment_status,
-        -- 完了率（入力率）※カラムが存在しない環境に配慮
-        COALESCE(js.completion_rate, 0)::int as completion_rate,
-        -- 登録タイプ（エンジニア/一般職）
-        COALESCE(js.registration_type, 'engineer') as registration_type,
-        COALESCE(
-          js.profile_photo,
-          doc.document_data -> 'resume' ->> 'photoUrl'
-        ) as profile_photo,
-        -- フロントエンドで必要なデフォルト値
-        '[]' as skills,
-        0 as experience_years,
-        '' as desired_job_title,
-        '' as self_introduction
-      FROM job_seekers js
-      LEFT JOIN users u ON js.user_id = u.id
-      LEFT JOIN LATERAL (
-        SELECT document_data
-        FROM user_documents ud
-        WHERE ud.user_id = u.id
-          AND COALESCE(ud.registration_type, 'engineer') = COALESCE(js.registration_type, 'engineer')
-        ORDER BY ud.updated_at DESC
-        LIMIT 1
-      ) doc ON TRUE
-      ${whereClause}
-      ORDER BY js.created_at DESC
-    `, params);
-    // まずは最低限のベースデータのみ返却（安定優先）
-    const minimalRows = result.rows.map((row) => ({
-      id: row.id,
-      js_id: row.js_id,
-      user_id: row.user_id,
-      first_name: row.first_name,
-      last_name: row.last_name,
-      full_name: row.full_name,
-      date_of_birth: row.date_of_birth,
-      gender: row.gender,
-      nationality: row.nationality,
-      phone: row.phone,
-      address: row.address,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      email: row.email,
-      user_status: row.user_status,
-      registeredAt: row.registeredAt,
-      employment_status: row.employment_status,
-      completion_rate: row.completion_rate,
-      registration_type: row.registration_type,
-      profile_photo: row.profile_photo
-    }));
-    
-    return res.json({ success: true, jobSeekers: minimalRows });
-
-    // 以降の詳細付与ロジックは安定化後に再有効化
-    
-    // 各求職者に対して詳細情報を取得
-    let processedRows: any[] = [];
-    try {
-      processedRows = await Promise.all(result.rows.map(async (row) => {
-      console.log('===DEBUG reached forEach start, user_id:', row.user_id);
-      // skillsフィールドの処理
-      if (row.skills && typeof row.skills === 'string') {
-        try {
-          row.skills = JSON.parse(row.skills);
-        } catch (e) {
-          console.warn('Skills JSON parse error:', e);
-          row.skills = [];
-        }
-      } else if (!row.skills) {
-        row.skills = [];
+    const normalizeRegistrationType = (value: any) => {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim().toLowerCase();
+      if (trimmed === 'engineer' || trimmed === 'general') {
+        return trimmed as 'engineer' | 'general';
       }
-      
-      // user_documentsから詳細情報を取得
-      let photoUrl = null;
-      let detailedInfo = null;
-      let japaneseLevel = '未設定'; // デフォルト値を外側で設定
-      let nationality = row.nationality; // 基本の国籍情報
-      let phone = row.phone; // 基本の電話番号
-      let birthDate = row.date_of_birth; // 基本の生年月日
-      let gender = row.gender; // 基本の性別
-      
-      try {
-        // まず直近のドキュメント1件を見る（従来）
-        const docResult = await query(`
-          SELECT document_type, document_data
-          FROM user_documents 
-          WHERE user_id = $1 
-          ORDER BY created_at DESC 
-          LIMIT 1
-        `, [row.user_id]);
-        
-        let docData: any = null;
-        
-        if (docResult.rows.length > 0) {
-          docData = docResult.rows[0].document_data;
-          // 写真URL（resume.photoUrl）
-          if (docData?.resume?.photoUrl) {
-            photoUrl = docData.resume.photoUrl;
-          }
-          // その他の情報も従来通り設定
-          if (docData?.nationality) nationality = docData.nationality;
-          if (docData?.livePhoneNumber) phone = docData.livePhoneNumber;
-          if (docData?.birthDate) birthDate = docData.birthDate;
-          if (docData?.gender) gender = docData.gender;
-        }
-        
-        // 仮登録システムの書類情報も確認
-        if (!docData) {
-          const tempRegResult = await query(`
-            SELECT documents_data
-            FROM temporary_registrations 
-            WHERE email = $1 
-            ORDER BY created_at DESC 
-            LIMIT 1
-          `, [row.email]);
-          
-          if (tempRegResult.rows.length > 0) {
-            docData = tempRegResult.rows[0].documents_data;
-            // 写真URL（resume.photoUrl）
-            if (docData?.resume?.photoUrl) {
-              photoUrl = docData.resume.photoUrl;
-            }
-            // その他の情報も設定
-            if (docData?.nationality) nationality = docData.nationality;
-            if (docData?.livePhoneNumber) phone = docData.livePhoneNumber;
-            if (docData?.birthDate) birthDate = docData.birthDate;
-            if (docData?.gender) gender = docData.gender;
-          }
-        }
-        
-        // 直近1件で写真が見つからない場合、最新20件を走査して最初の写真を使用
-        if (!photoUrl) {
-          const scan = await query(`
+      return null;
+    };
+
+    const normalizedType = normalizeRegistrationType(registrationType);
+
+    const buildQuery = async (type: 'engineer' | 'general' | 'all') => {
+      let whereClause = 'WHERE 1=1';
+      const params: any[] = [];
+
+      if (type !== 'all') {
+        whereClause += ` AND LOWER(TRIM(COALESCE(js.registration_type, 'engineer'))) = $${params.length + 1}`;
+        params.push(type);
+      }
+
+      const result = await query(
+        `
+          SELECT 
+            u.id as id,
+            js.id as js_id,
+            u.id as user_id,
+            js.first_name,
+            js.last_name,
+            CONCAT(js.first_name, ' ', js.last_name) as full_name,
+            js.date_of_birth,
+            js.date_of_birth as dateOfBirth,
+            js.gender,
+            js.nationality,
+            js.phone,
+            js.address,
+            js.created_at,
+            js.updated_at,
+            u.email as user_email,
+            u.email as email,
+            u.status as user_status,
+            u.created_at as user_created_at,
+            u.created_at as registeredAt,
+            u.updated_at as user_updated_at,
+            'unemployed'::text as employment_status,
+            COALESCE(js.completion_rate, 0)::int as completion_rate,
+            LOWER(TRIM(COALESCE(js.registration_type, 'engineer'))) as registration_type,
+            COALESCE(
+              js.profile_photo,
+              doc.document_data -> 'resume' ->> 'photoUrl'
+            ) as profile_photo,
+            '[]' as skills,
+            0 as experience_years,
+            '' as desired_job_title,
+            '' as self_introduction
+          FROM job_seekers js
+          LEFT JOIN users u ON js.user_id = u.id
+          LEFT JOIN LATERAL (
             SELECT document_data
-            FROM user_documents
-            WHERE user_id = $1
-            ORDER BY created_at DESC
-            LIMIT 20
-          `, [row.user_id]);
-          for (const r of scan.rows) {
-            const d = r.document_data || {};
-            if (d?.resume?.photoUrl) { photoUrl = d.resume.photoUrl; break; }
-          }
-        }
-        
-        // 日本語レベル（従来ロジックをdocDataで）
-        if (docData?.japaneseInfo?.nextJapaneseTestLevel) {
-          japaneseLevel = docData.japaneseInfo.nextJapaneseTestLevel;
-        } else if (docData?.japaneseInfo?.certificateStatus?.name) {
-          japaneseLevel = docData.japaneseInfo.certificateStatus.name;
-        } else if (docData?.nextJapaneseTestLevel) {
-          japaneseLevel = docData.nextJapaneseTestLevel;
-        } else if (docData?.certificateStatus?.name) {
-          japaneseLevel = docData.certificateStatus.name;
-          }
+            FROM user_documents ud
+            WHERE ud.user_id = u.id
+              AND LOWER(TRIM(COALESCE(ud.registration_type, 'engineer'))) = LOWER(TRIM(COALESCE(js.registration_type, 'engineer')))
+            ORDER BY ud.updated_at DESC
+            LIMIT 1
+          ) doc ON TRUE
+          ${whereClause}
+          ORDER BY js.created_at DESC
+        `,
+        params
+      );
 
-          // 詳細情報を設定
-          detailedInfo = {
-            japaneseLevel: japaneseLevel,
-          nextJapaneseTest: docData?.nextJapaneseTestDate || docData?.nextJapaneseTestLevel || '未設定',
-          selfIntroduction: docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction || '',
-          hasSelfIntroduction: !!(docData?.resume?.selfPR || docData?.selfIntroduction || docData?.resume?.selfIntroduction),
-          documentData: docData
-          };
-      } catch (error) {
-        console.warn(`詳細情報取得エラー (ユーザーID: ${row.user_id}):`, error);
-      }
-      // デバッグ: japaneseLevelの値を出力
-      console.log('===DEBUG japaneseLevel:', japaneseLevel);
-      console.error('===DEBUG japaneseLevel (stderr):', japaneseLevel);
-      // 年齢計算
-      let calculatedAge = null;
-      if (birthDate) {
-        try {
-          const birthDateObj = new Date(birthDate);
-          const today = new Date();
-          let age = today.getFullYear() - birthDateObj.getFullYear();
-          const monthDiff = today.getMonth() - birthDateObj.getMonth();
-          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDateObj.getDate())) {
-            age--;
-          }
-          calculatedAge = age;
-        } catch (error) {
-          console.warn(`年齢計算エラー (ユーザーID: ${row.user_id}):`, error);
-        }
-      }
-
-      // 処理済みデータを返す
-      const processedRow = {
-        ...row,
-        // 写真情報をuser_documentsから取得
-        profile_photo: photoUrl,
-        // 日本語レベルを設定（両方のフィールド名に対応）
-        japaneseLevel: japaneseLevel,
-        japanese_level: japaneseLevel,
-        // 年齢情報を追加
-        age: calculatedAge,
-        // 基本情報を更新（user_documentsから取得した情報で上書き）
-        nationality: nationality,
-        phone: phone,
-        date_of_birth: birthDate,
-        gender: gender,
-        // 入力率を追加
-        completion_rate: row.completion_rate || 0,
-        // 詳細情報を設定
-        detailed_info: detailedInfo ? {
-          ...detailedInfo,
-          japaneseLevel: japaneseLevel
-        } : {
-          japaneseLevel: japaneseLevel,
-          nextJapaneseTest: '未設定',
-          selfIntroduction: '',
-          hasSelfIntroduction: false
-        },
-        // 配偶者情報はデータベースから取得
-        spouse: row.spouse || null,
-        spouse_support: row.spouse_support || null,
-        commuting_time: row.commuting_time || null,
-        family_number: row.family_number || null
-      };
-      
-      // 面接受験回数を取得
-      try {
-        const attemptsResult = await query(`
-          SELECT attempt_count, first_attempt_at, last_attempt_at
-          FROM interview_attempts
-          WHERE user_id = $1
-        `, [row.user_id]);
-        
-        if (attemptsResult.rows.length > 0) {
-          const attemptsData = attemptsResult.rows[0];
-          processedRow.interview_attempts = {
-            count: attemptsData.attempt_count,
-            firstAttemptAt: attemptsData.first_attempt_at,
-            lastAttemptAt: attemptsData.last_attempt_at
-          };
-        } else {
-          processedRow.interview_attempts = {
-            count: 0,
-            firstAttemptAt: null,
-            lastAttemptAt: null
-          };
-        }
-      } catch (error) {
-        console.warn(`面接受験回数取得エラー (ユーザーID: ${row.user_id}):`, error);
-        processedRow.interview_attempts = {
-          count: 0,
-          firstAttemptAt: null,
-          lastAttemptAt: null
-        };
-      }
-      
-        return processedRow;
-      }));
-    } catch (e) {
-      console.error('管理者求職者一覧 詳細情報付与に失敗。ベースデータで返却します:', e);
-      // 最低限のベースデータで返却（500にせずUIが表示できるように）
-      processedRows = result.rows.map((row) => ({
+      return result.rows.map((row) => ({
         id: row.id,
         js_id: row.js_id,
         user_id: row.user_id,
@@ -988,22 +761,24 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         updated_at: row.updated_at,
         email: row.email,
         user_status: row.user_status,
+        registeredAt: row.registeredAt,
         employment_status: row.employment_status,
         completion_rate: row.completion_rate,
         registration_type: row.registration_type,
+        profile_photo: row.profile_photo
       }));
+    };
+
+    let jobSeekers = await buildQuery(normalizedType ?? 'all');
+
+    if (jobSeekers.length === 0 && normalizedType) {
+      jobSeekers = await buildQuery('all');
     }
-    
-    console.log(`管理者求職者一覧取得: ${processedRows.length}件`);
-    
-    res.json({
-      success: true,
-      jobSeekers: processedRows
-    });
+
+    return res.json({ success: true, jobSeekers });
   } catch (error) {
-    console.error('管理者求職者一覧取得エラー:', error);
-    // 暫定復旧: 空配列で成功扱い
-    res.json({ success: true, jobSeekers: [] });
+    console.error('管理者求職者取得エラー:', error);
+    res.status(500).json({ success: false, message: '求職者一覧の取得に失敗しました' });
   }
 });
 
