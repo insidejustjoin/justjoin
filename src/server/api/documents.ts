@@ -388,7 +388,7 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
             UPDATE job_seekers 
             SET completion_rate = $1, updated_at = NOW() 
             WHERE user_id = $2 
-              AND COALESCE(registration_type, 'engineer') = $3
+              AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
           `,
           [completionRate, userIdStr, normalizedRegistrationType]
         );
@@ -451,7 +451,7 @@ router.get('/:userId', async (req: express.Request, res: express.Response): Prom
     `;
     if (registrationTypeFilter) {
       params.push(registrationTypeFilter);
-      sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length}`;
+      sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length})`;
     }
     sql += ' ORDER BY created_at ASC';
 
@@ -618,7 +618,7 @@ router.delete('/:userId', async (req: express.Request, res: express.Response): P
       const params: any[] = [userId];
       if (typeof registrationType === 'string') {
         const normalized = normalizeRegistrationType(registrationType);
-        deleteQuery += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+        deleteQuery += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
         params.push(normalized);
       }
       await query(deleteQuery, params);
@@ -770,7 +770,7 @@ router.post('/jobseekers/documents', async (req: express.Request, res: express.R
         FROM user_documents 
         WHERE user_id = $1 
           AND document_type = $2
-          AND COALESCE(registration_type, 'engineer') = $3
+          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
       `,
       [userIdStr, 'jobseeker_documents', normalizedRegistrationType]
     );
