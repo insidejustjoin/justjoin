@@ -773,26 +773,94 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       }));
     };
 
+    const buildMinimalQuery = async (type: 'engineer' | 'general' | 'all') => {
+      let whereClause = 'WHERE 1=1';
+      const params: any[] = [];
+
+      if (type === 'engineer') {
+        whereClause += ` AND (js.registration_type IS NULL OR LOWER(js.registration_type) = $${params.length + 1})`;
+        params.push('engineer');
+      } else if (type === 'general') {
+        whereClause += ` AND LOWER(js.registration_type) = $${params.length + 1}`;
+        params.push('general');
+      }
+
+      const result = await query(
+        `
+          SELECT
+            u.id as id,
+            js.id as js_id,
+            u.id as user_id,
+            js.first_name,
+            js.last_name,
+            js.date_of_birth,
+            js.gender,
+            js.nationality,
+            js.phone,
+            js.address,
+            js.created_at,
+            js.updated_at,
+            u.email,
+            u.status as user_status,
+            COALESCE(js.registration_type, 'engineer') as registration_type,
+            COALESCE(js.completion_rate, 0)::int as completion_rate
+          FROM job_seekers js
+          LEFT JOIN users u ON js.user_id = u.id
+          ${whereClause}
+          ORDER BY js.created_at DESC
+        `,
+        params
+      );
+
+      return result.rows.map((row) => ({
+        id: row.id,
+        js_id: row.js_id,
+        user_id: row.user_id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        full_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+        date_of_birth: row.date_of_birth,
+        gender: row.gender,
+        nationality: row.nationality,
+        phone: row.phone,
+        address: row.address,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        email: row.email,
+        user_status: row.user_status,
+        registeredAt: row.created_at,
+        employment_status: 'unemployed',
+        completion_rate: row.completion_rate,
+        registration_type: row.registration_type,
+        profile_photo: null
+      }));
+    };
+
     let jobSeekers: any[] = [];
     try {
       jobSeekers = await buildQuery(normalizedType ?? 'all');
     } catch (primaryError) {
-      console.warn('jobseekers query primary failed, retrying with all', primaryError);
-      if (normalizedType) {
-        try {
-          jobSeekers = await buildQuery('all');
-        } catch (fallbackError) {
-          console.error('jobseekers query fallback failed', fallbackError);
-          throw fallbackError;
+      console.warn('jobseekers query primary failed, retrying with minimal', primaryError);
+      try {
+        jobSeekers = await buildMinimalQuery(normalizedType ?? 'all');
+      } catch (minimalError) {
+        console.error('jobseekers minimal query failed', minimalError);
+        if (normalizedType) {
+          try {
+            jobSeekers = await buildMinimalQuery('all');
+          } catch (fallbackError) {
+            console.error('jobseekers query fallback failed', fallbackError);
+            throw fallbackError;
+          }
+        } else {
+          throw minimalError;
         }
-      } else {
-        throw primaryError;
       }
     }
 
     if (jobSeekers.length === 0 && normalizedType) {
       try {
-        jobSeekers = await buildQuery('all');
+        jobSeekers = await buildMinimalQuery('all');
       } catch (fallbackError) {
         console.error('jobseekers fallback on empty failed', fallbackError);
         return res.json({ success: true, jobSeekers: [] });
@@ -802,7 +870,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
     return res.json({ success: true, jobSeekers });
   } catch (error) {
     console.error('管理者求職者取得エラー:', error);
-    res.status(500).json({ success: false, message: '求職者一覧の取得に失敗しました' });
+    res.status(500).json({ success: false, message: '求職者一覧の取得に失敗しました', detail: (error as any)?.message || null });
   }
 });
 
