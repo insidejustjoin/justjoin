@@ -262,7 +262,7 @@ export function JobSeekerMyPageEngineer() {
     
     try {
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
-      const url = `${apiUrl}/api/jobseekers/completion-rate/${user.id}`;
+      const url = `${apiUrl}/api/jobseekers/completion-rate/${user.id}?registrationType=engineer`;
       
       const response = await fetch(url);
       

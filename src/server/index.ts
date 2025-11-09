@@ -720,6 +720,10 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         COALESCE(js.completion_rate, 0)::int as completion_rate,
         -- 登録タイプ（エンジニア/一般職）
         COALESCE(js.registration_type, 'engineer') as registration_type,
+        COALESCE(
+          js.profile_photo,
+          doc.document_data -> 'resume' ->> 'photoUrl'
+        ) as profile_photo,
         -- フロントエンドで必要なデフォルト値
         '[]' as skills,
         0 as experience_years,
@@ -727,6 +731,14 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         '' as self_introduction
       FROM job_seekers js
       LEFT JOIN users u ON js.user_id = u.id
+      LEFT JOIN LATERAL (
+        SELECT document_data
+        FROM user_documents ud
+        WHERE ud.user_id = u.id
+          AND COALESCE(ud.registration_type, 'engineer') = COALESCE(js.registration_type, 'engineer')
+        ORDER BY ud.updated_at DESC
+        LIMIT 1
+      ) doc ON TRUE
       ${whereClause}
       ORDER BY js.created_at DESC
     `, params);
@@ -750,7 +762,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       registeredAt: row.registeredAt,
       employment_status: row.employment_status,
       completion_rate: row.completion_rate,
-      registration_type: row.registration_type
+      registration_type: row.registration_type,
+      profile_photo: row.profile_photo
     }));
     
     return res.json({ success: true, jobSeekers: minimalRows });
