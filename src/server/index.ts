@@ -681,10 +681,12 @@ app.get('/api/admin/jobseekers', async (req, res) => {
     const params: any[] = [];
     
     // 登録タイプ（NULLはengineerとして扱う）
-    // エンジニアは最も多い想定のため、表示優先でフィルタを掛けず全件を返す
     if (registrationType === 'general') {
       whereClause += ` AND COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`;
       params.push('general');
+    } else if (registrationType === 'engineer') {
+      whereClause += ` AND COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`;
+      params.push('engineer');
     }
     
     // 基本的な求職者データを取得（ステータスフィルタリング対応）

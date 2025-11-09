@@ -594,10 +594,13 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         let whereClause = 'WHERE 1=1';
         const params = [];
         // 登録タイプ（NULLはengineerとして扱う）
-        // エンジニアは最も多い想定のため、表示優先でフィルタを掛けず全件を返す
         if (registrationType === 'general') {
             whereClause += ` AND COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`;
             params.push('general');
+        }
+        else if (registrationType === 'engineer') {
+            whereClause += ` AND COALESCE(js.registration_type, 'engineer') = $${params.length + 1}`;
+            params.push('engineer');
         }
         // 基本的な求職者データを取得（ステータスフィルタリング対応）
         // データの整合性を保つため、対応するusersレコードが存在するもののみ取得
