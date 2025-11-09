@@ -674,6 +674,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
   try {
     const { query } = await import('../integrations/postgres/client.js');
 
+    await ensureJobSeekerColumns(query);
+
     const { registrationType = 'all' } = req.query;
     const normalizeRegistrationType = (value: any) => {
       if (typeof value !== 'string') return null;
@@ -2278,3 +2280,34 @@ app.get('/api/jobseekers/by-email/:email', async (req, res) => {
   }
 });
 // ... existing code ...
+
+let jobSeekerColumnsEnsured = false;
+const ensureJobSeekerColumns = async (queryFn: (text: string, params?: any[]) => Promise<any>) => {
+  if (jobSeekerColumnsEnsured) return;
+  try {
+    await queryFn(`
+      ALTER TABLE job_seekers
+      ADD COLUMN IF NOT EXISTS registration_type VARCHAR(20)
+    `);
+    await queryFn(`
+      UPDATE job_seekers
+      SET registration_type = COALESCE(registration_type, 'engineer')
+    `);
+    await queryFn(`
+      ALTER TABLE job_seekers
+      ADD COLUMN IF NOT EXISTS completion_rate INTEGER DEFAULT 0
+    `);
+    await queryFn(`
+      UPDATE job_seekers
+      SET completion_rate = COALESCE(completion_rate, 0)
+    `);
+    await queryFn(`
+      ALTER TABLE job_seekers
+      ALTER COLUMN registration_type SET DEFAULT 'engineer'
+    `);
+  } catch (columnError) {
+    console.warn('job_seekers column ensure skipped:', columnError);
+  } finally {
+    jobSeekerColumnsEnsured = true;
+  }
+};
