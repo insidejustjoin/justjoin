@@ -4,6 +4,33 @@ import { query } from '../../integrations/postgres/client.js';
 
 const router = Router();
 
+const refreshCurrentStatusView = async () => {
+  try {
+    await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY current_job_seeker_status`);
+  } catch (err) {
+    try {
+      await query(`REFRESH MATERIALIZED VIEW current_job_seeker_status`);
+    } catch (err2) {
+      await query(`
+        CREATE OR REPLACE VIEW current_job_seeker_status AS
+        SELECT DISTINCT ON (user_id)
+          user_id,
+          status,
+          company_name,
+          company_url,
+          employment_date,
+          withdrawal_date,
+          reason,
+          notes,
+          created_at,
+          updated_at
+        FROM job_seeker_status_history
+        ORDER BY user_id, created_at DESC
+      `);
+    }
+  }
+};
+
 let jobSeekerStatusStructuresEnsured = false;
 const ensureJobSeekerStatusStructures = async () => {
   if (jobSeekerStatusStructuresEnsured) return;
@@ -28,7 +55,7 @@ const ensureJobSeekerStatusStructures = async () => {
         ON job_seeker_status_history (user_id, created_at DESC)
     `);
     await query(`
-      CREATE OR REPLACE VIEW current_job_seeker_status AS
+      CREATE MATERIALIZED VIEW IF NOT EXISTS current_job_seeker_status AS
       SELECT DISTINCT ON (user_id)
         user_id,
         status,
@@ -43,6 +70,7 @@ const ensureJobSeekerStatusStructures = async () => {
       FROM job_seeker_status_history
       ORDER BY user_id, created_at DESC
     `);
+    await refreshCurrentStatusView();
   } catch (error) {
     console.warn('job seeker status structure ensure failed:', error);
   } finally {
