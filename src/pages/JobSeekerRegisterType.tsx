@@ -4,13 +4,34 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Code, Briefcase, ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const JobSeekerRegisterType: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
   // 前のページから渡されたデータを取得
-  const { email, firstName, lastName } = (location.state as { email?: string; firstName?: string; lastName?: string }) || {};
+  const {
+    email,
+    firstName,
+    lastName,
+    availability
+  } =
+    (location.state as {
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+      availability?: {
+        canRegisterEngineer?: boolean;
+        canRegisterGeneral?: boolean;
+        existingRegistrationTypes?: string[];
+        userExists?: boolean;
+      };
+    }) || {};
+
+  const canRegisterEngineer = availability?.canRegisterEngineer !== false;
+  const canRegisterGeneral = availability?.canRegisterGeneral !== false;
+  const existingRegistrationTypes = availability?.existingRegistrationTypes || [];
 
   // データがない場合は最初のページに戻す
   if (!email || !firstName || !lastName) {
@@ -18,14 +39,34 @@ const JobSeekerRegisterType: React.FC = () => {
     return null;
   }
 
+  if (!canRegisterEngineer && !canRegisterGeneral) {
+    navigate('/jobseeker/register');
+    return null;
+  }
+
   const handleTypeSelect = (type: 'engineer' | 'general') => {
+    if ((type === 'engineer' && !canRegisterEngineer) || (type === 'general' && !canRegisterGeneral)) {
+      return;
+    }
+
+    const nextState = {
+      email,
+      firstName,
+      lastName,
+      availability: {
+        canRegisterEngineer,
+        canRegisterGeneral,
+        existingRegistrationTypes
+      }
+    };
+
     if (type === 'engineer') {
       navigate('/jobseeker/register/engineer', {
-        state: { email, firstName, lastName }
+        state: nextState
       });
     } else {
       navigate('/jobseeker/register/general', {
-        state: { email, firstName, lastName }
+        state: nextState
       });
     }
   };
@@ -50,7 +91,14 @@ const JobSeekerRegisterType: React.FC = () => {
 
           <div className="grid md:grid-cols-2 gap-6">
             {/* エンジニア向け */}
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleTypeSelect('engineer')}>
+            <Card
+              className={cn(
+                'transition-shadow',
+                canRegisterEngineer ? 'hover:shadow-lg cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              )}
+              onClick={() => handleTypeSelect('engineer')}
+              aria-disabled={!canRegisterEngineer}
+            >
               <CardHeader>
                 <div className="flex items-center justify-center mb-4">
                   <div className="p-4 bg-blue-100 rounded-full">
@@ -79,15 +127,25 @@ const JobSeekerRegisterType: React.FC = () => {
                     <span>プロジェクト経験記録</span>
                   </li>
                 </ul>
-                <Button className="w-full" onClick={() => handleTypeSelect('engineer')}>
+                <Button className="w-full" onClick={() => handleTypeSelect('engineer')} disabled={!canRegisterEngineer}>
                   エンジニア向けで登録
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
+                {!canRegisterEngineer && (
+                  <p className="text-xs text-center text-gray-500">エンジニア向けは既に登録済みです</p>
+                )}
               </CardContent>
             </Card>
 
             {/* 一般職向け */}
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleTypeSelect('general')}>
+            <Card
+              className={cn(
+                'transition-shadow',
+                canRegisterGeneral ? 'hover:shadow-lg cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              )}
+              onClick={() => handleTypeSelect('general')}
+              aria-disabled={!canRegisterGeneral}
+            >
               <CardHeader>
                 <div className="flex items-center justify-center mb-4">
                   <div className="p-4 bg-green-100 rounded-full">
@@ -116,13 +174,27 @@ const JobSeekerRegisterType: React.FC = () => {
                     <span>シンプルな登録プロセス</span>
                   </li>
                 </ul>
-                <Button className="w-full" variant="outline" onClick={() => handleTypeSelect('general')}>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => handleTypeSelect('general')}
+                  disabled={!canRegisterGeneral}
+                >
                   一般職向けで登録
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
+                {!canRegisterGeneral && (
+                  <p className="text-xs text-center text-gray-500">一般職向けは既に登録済みです</p>
+                )}
               </CardContent>
             </Card>
           </div>
+
+          {existingRegistrationTypes.length > 0 && (
+            <div className="mt-6 text-center text-sm text-gray-600">
+              <p>現在登録済みのタイプ: {existingRegistrationTypes.map((type) => (type === 'general' ? '一般職' : 'エンジニア')).join(' / ')}</p>
+            </div>
+          )}
 
           <div className="mt-8 text-center">
             <Button variant="ghost" onClick={() => navigate('/jobseeker/register')}>

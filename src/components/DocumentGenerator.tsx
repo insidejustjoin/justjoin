@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -124,6 +124,8 @@ interface DocumentData {
   whyInterestJapan: string;
 }
 
+type DocumentRegistrationType = 'engineer' | 'general';
+
 interface DocumentGeneratorProps {
   // 管理者画面用のプロパティ
   isAdminMode?: boolean;
@@ -131,6 +133,7 @@ interface DocumentGeneratorProps {
   isRegistrationMode?: boolean;
   // スキルシートを非表示にする（一般職向け）
   hideSkillSheet?: boolean;
+  registrationType?: DocumentRegistrationType;
   onDocumentsComplete?: (documentsData: any) => void;
   prefillData?: any;
   registrationToken?: string;
@@ -202,12 +205,21 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   isAdminMode = false, 
   isRegistrationMode = false,
   hideSkillSheet = false,
+  registrationType,
   onDocumentsComplete,
   prefillData,
   registrationToken,
   jobSeekerData, 
   onClose 
 }) => {
+  const effectiveRegistrationType: DocumentRegistrationType = useMemo(() => {
+    if (registrationType) return registrationType;
+    if (jobSeekerData?.registration_type === 'general') return 'general';
+    return 'engineer';
+  }, [registrationType, jobSeekerData?.registration_type]);
+
+  const shouldHideSkillSheet = hideSkillSheet || effectiveRegistrationType === 'general';
+
   const [activeTab, setActiveTab] = useState('resume');
   const [nationalityOpen, setNationalityOpen] = useState(false);
   const [documentData, setDocumentData] = useState<DocumentData>({
@@ -350,12 +362,29 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [completionRate, setCompletionRate] = useState(0);
   const { toast } = useToast();
   const { user } = useAuth();
   const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  const formatLastSavedAt = (date: Date) => {
+    try {
+      return date.toLocaleString('ja-JP', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+    } catch {
+      return date.toISOString();
+    }
+  };
 
   // スキル名を翻訳キーから取得する関数
   const getSkillDisplayName = (skillKey: string): string => {
@@ -467,8 +496,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     // 登録モードでは顔写真は任意
     if (!isRegistrationMode && !documentData.resume?.photoUrl) missingFields.push('顔写真');
     
-    // スキルシートの必須項目（登録モードでは任意、hideSkillSheetの場合は除外）
-    if (!isRegistrationMode && !hideSkillSheet && (!documentData.skillSheet?.skills || Object.keys(documentData.skillSheet.skills).length === 0)) {
+    // スキルシートの必須項目（登録モードでは任意、shouldHideSkillSheetの場合は除外）
+    if (!isRegistrationMode && !shouldHideSkillSheet && (!documentData.skillSheet?.skills || Object.keys(documentData.skillSheet.skills).length === 0)) {
       missingFields.push('スキルシート');
     }
     
@@ -557,7 +586,11 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       const loadSavedDocumentData = async () => {
         try {
           const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-          const savedDocumentResponse = await fetch(`${apiUrl}/api/documents/${jobSeekerData.user_id}`);
+          const savedDocumentResponse = await fetch(
+            `${apiUrl}/api/documents/${jobSeekerData.user_id}?registrationType=${
+              jobSeekerData.registration_type === 'general' ? 'general' : 'engineer'
+            }`
+          );
           let savedDocumentData = null;
           
           if (savedDocumentResponse.ok) {
@@ -1334,7 +1367,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       const requestBody = {
         userId: targetUserId,
         documentType: 'resume',
-        documentData: finalSaveData
+        documentData: finalSaveData,
+        registrationType: effectiveRegistrationType
       };
 
       const documentsResponse = await fetch(`${apiUrl}/api/documents`, {
@@ -1354,6 +1388,12 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       
       if (!documentsResult.success) {
         throw new Error(documentsResult.message || '書類保存に失敗しました');
+      }
+
+      if (documentsResult.data?.updated_at) {
+        setLastSavedAt(new Date(documentsResult.data.updated_at));
+      } else {
+        setLastSavedAt(new Date());
       }
 
       // 求職者情報も更新
@@ -1462,20 +1502,26 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   // 保存されたデータを読み込み
   const loadFromDatabase = async () => {
     if (!user) return;
-    await loadFromDatabaseByUserId(String(user.id));
+    await loadFromDatabaseByUserId(String(user.id), effectiveRegistrationType);
   };
 
-  const loadFromDatabaseByUserId = async (userId: string) => {
+  const loadFromDatabaseByUserId = async (userId: string, registrationTypeOverride?: DocumentRegistrationType) => {
     try {
       setIsLoadingData(true);
       
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
 
-      const response = await fetch(`${apiUrl}/api/documents/${userId}`);
+      const typeForLoad = registrationTypeOverride ?? effectiveRegistrationType;
+      const queryParams = new URLSearchParams({
+        registrationType: typeForLoad,
+      });
+
+      const response = await fetch(`${apiUrl}/api/documents/${userId}?${queryParams.toString()}`);
 
       if (!response.ok) {
         if (response.status === 404) {
           // 保存されたデータが見つからない場合は基本データのみで設定
+          setLastSavedAt(null);
           return;
         }
         
@@ -1485,9 +1531,17 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
 
       const result = await response.json();
       
+      const updatedTimestamp = result.updatedAt ?? result.lastUpdatedAt ?? null;
+      if (updatedTimestamp) {
+        setLastSavedAt(new Date(updatedTimestamp));
+      } else {
+        setLastSavedAt(null);
+      }
+
       if (!result.success) {
         // データが見つからない場合は正常な状態として扱う（初回利用の可能性）
         if (result.message === '書類が見つかりません') {
+          setLastSavedAt(null);
           return;
         }
         throw new Error(result.message || 'データの読み込みに失敗しました');
@@ -1658,9 +1712,11 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       loadFromDatabase();
     } else if (jobSeekerData) {
       // 管理者モード：選択された求職者のデータを読み込み
-      loadFromDatabaseByUserId(jobSeekerData.user_id);
+      const adminRegistrationType: DocumentRegistrationType =
+        jobSeekerData.registration_type === 'general' ? 'general' : 'engineer';
+      loadFromDatabaseByUserId(jobSeekerData.user_id, adminRegistrationType);
     }
-  }, [user, isAdminMode, jobSeekerData]);
+  }, [user, isAdminMode, jobSeekerData, effectiveRegistrationType]);
 
   // フロントエンドだけでExcelファイルを生成する関数
   const generateExcelFile = async () => {
@@ -2711,10 +2767,10 @@ whiteCells.forEach(cell => {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className={`grid w-full ${hideSkillSheet ? 'grid-cols-2' : 'grid-cols-3'}`}>
+        <TabsList className={`grid w-full ${shouldHideSkillSheet ? 'grid-cols-2' : 'grid-cols-3'}`}>
           <TabsTrigger value="resume">{t('documents.resume')}</TabsTrigger>
           <TabsTrigger value="workHistory">{t('documents.jobHistory')}</TabsTrigger>
-          {!hideSkillSheet && <TabsTrigger value="skills">{t('documents.skillSheet')}</TabsTrigger>}
+          {!shouldHideSkillSheet && <TabsTrigger value="skills">{t('documents.skillSheet')}</TabsTrigger>}
         </TabsList>
 
         {/* 履歴書タブ */}
@@ -4030,6 +4086,17 @@ whiteCells.forEach(cell => {
       <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {lastSavedAt && (
+              <div className="md:col-span-2 flex items-center gap-3 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+                <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                <div className="flex flex-col">
+                  <span className="font-semibold">データベースに保存済み</span>
+                  <span className="text-xs text-green-800">
+                    最終保存日時: {formatLastSavedAt(lastSavedAt)}
+                  </span>
+                </div>
+              </div>
+            )}
             {/* データベース保存ボタン */}
             <Button
               onClick={saveToDatabase}
@@ -4140,8 +4207,8 @@ whiteCells.forEach(cell => {
                     spouseSupport: documentData.spouseSupport,
                   };
                   
-                  // スキルシート（hideSkillSheet=falseの場合のみ追加）
-                  if (!hideSkillSheet) {
+                  // スキルシート（shouldHideSkillSheet=falseの場合のみ追加）
+                  if (!shouldHideSkillSheet) {
                     convertedData.skillSheet = {
                       skills: documentData.skillSheet?.skills || {}
                     };

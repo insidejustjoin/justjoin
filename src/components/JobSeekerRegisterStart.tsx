@@ -11,12 +11,11 @@ import { useNavigate } from 'react-router-dom';
 declare global {
   interface Window {
     grecaptcha: {
-      // v3
       ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
-      // v2
-      getResponse: () => string;
+      execute?: (siteKey: string, options: { action: string }) => Promise<string>;
+      getResponse?: (widgetId?: number) => string;
       render?: (container: any, parameters: any) => any;
+      reset?: (widgetId?: number) => void;
     };
   }
 }
@@ -110,25 +109,30 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
       const data = await response.json();
 
       if (data.success) {
-        if (data.exists) {
-          // 既存ユーザーの場合
-          setMessage({ 
-            type: 'error', 
-            text: 'このメールアドレスは既に登録されています。ログインページに移動しますか？' 
+        const availability = {
+          canRegisterEngineer: data.canRegisterEngineer !== false,
+          canRegisterGeneral: data.canRegisterGeneral !== false,
+          existingRegistrationTypes: Array.isArray(data.existingRegistrationTypes) ? data.existingRegistrationTypes : [],
+          userExists: !!data.userExists
+        };
+
+        if (!availability.canRegisterEngineer && !availability.canRegisterGeneral) {
+          setMessage({
+            type: 'error',
+            text: 'このメールアドレスではエンジニア・一般職の両方が登録済みです。ログインページへ移動してください。'
           });
           if (onExistingUser) {
             onExistingUser();
           }
-          // 3秒後にログインページにリダイレクト
           setTimeout(() => {
             navigate('/jobseeker/login');
-          }, 3000);
-        } else {
-          // 新規ユーザーの場合、登録タイプ選択ページへ
-          navigate('/jobseeker/register/type', {
-            state: { email, firstName, lastName }
-          });
+          }, 2500);
+          return;
         }
+
+        navigate('/jobseeker/register/type', {
+          state: { email, firstName, lastName, availability }
+        });
       } else {
         setMessage({ type: 'error', text: data.message || 'エラーが発生しました' });
       }

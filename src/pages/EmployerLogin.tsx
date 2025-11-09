@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,7 +19,10 @@ declare global {
   interface Window {
     grecaptcha: {
       ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+      execute?: (siteKey: string, options: { action: string }) => Promise<string>;
+      render?: (container: any, parameters: any) => any;
+      getResponse?: (widgetId?: number) => string;
+      reset?: (widgetId?: number) => void;
     };
   }
 }
@@ -44,6 +47,8 @@ export function EmployerLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<number | null>(null);
 
   // 動的バリデーションメッセージ
   const loginSchemaWithTranslation = z.object({
@@ -65,30 +70,64 @@ export function EmployerLogin() {
     resolver: zodResolver(registerSchemaWithTranslation)
   });
 
+  useEffect(() => {
+    if (!siteKey || widgetIdRef.current !== null) return;
+    const tryRender = () => {
+      try {
+        if (
+          typeof window !== 'undefined' &&
+          window.grecaptcha &&
+          typeof window.grecaptcha.render === 'function' &&
+          recaptchaContainerRef.current &&
+          widgetIdRef.current === null
+        ) {
+          const id = window.grecaptcha.render(recaptchaContainerRef.current, { sitekey: siteKey });
+          // @ts-ignore
+          widgetIdRef.current = id as number;
+        }
+      } catch (error) {
+        console.warn('reCAPTCHA v2レンダリングに失敗しました', error);
+      }
+    };
+    const t1 = setTimeout(tryRender, 300);
+    const t2 = setTimeout(tryRender, 1200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [siteKey]);
+
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      // reCAPTCHA v3トークン取得
-      let recaptchaToken: string | undefined;
-      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
+      let recaptchaV2Response = '';
+      if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
         try {
-          recaptchaToken = await new Promise<string>((resolve, reject) => {
-            window.grecaptcha.ready(() => {
-              window.grecaptcha
-                .execute(siteKey, { action: 'employer_login' })
-                .then(resolve)
-                .catch(reject);
-            });
-          });
-        } catch (e) {
-          console.warn('reCAPTCHA v3実行に失敗しました。', e);
+          recaptchaV2Response =
+            widgetIdRef.current !== null
+              ? window.grecaptcha.getResponse?.(widgetIdRef.current) || ''
+              : window.grecaptcha.getResponse();
+        } catch (error) {
+          console.warn('reCAPTCHA v2レスポンス取得に失敗しました', error);
+        }
+        if (!recaptchaV2Response) {
+          toast.error('reCAPTCHAを完了してください');
+          return;
         }
       }
-      const success = await login(data.email, data.password, 'company', recaptchaToken);
+
+      const success = await login(data.email, data.password, 'company', undefined, recaptchaV2Response);
       if (success) {
         navigate('/employer/my-page');
       }
     } finally {
+      if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.reset === 'function' && widgetIdRef.current !== null) {
+        try {
+          window.grecaptcha.reset(widgetIdRef.current);
+        } catch (error) {
+          console.warn('reCAPTCHAリセットに失敗しました', error);
+        }
+      }
       setIsLoading(false);
     }
   };
@@ -200,6 +239,16 @@ export function EmployerLogin() {
                       <p className="text-sm text-red-500">{loginForm.formState.errors.password.message}</p>
                     )}
                   </div>
+
+                  {siteKey && (
+                    <div className="flex justify-center">
+                      <div
+                        ref={recaptchaContainerRef}
+                        className="g-recaptcha"
+                        data-sitekey={siteKey}
+                      />
+                    </div>
+                  )}
 
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? t('auth.loggingIn') : t('auth.loginButton')}

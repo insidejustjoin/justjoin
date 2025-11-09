@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 const RedirectToJobSeekerMyPage: React.FC = () => {
@@ -20,19 +20,37 @@ const RedirectToJobSeekerMyPage: React.FC = () => {
         if (resp.ok) {
           const json = await resp.json();
           const types: string[] = json?.types || [];
+          const preference = (typeof window !== 'undefined'
+            ? localStorage.getItem('job_seeker_registration_preference')
+            : null) as 'engineer' | 'general' | null;
+
+          if (preference && types.includes(preference)) {
+            navigate(preference === 'general' ? '/jobseeker/my-page-general' : '/jobseeker/my-page-engineer', {
+              replace: true
+            });
+            return;
+          }
+
           if (types.includes('engineer') && !types.includes('general')) {
+            localStorage.setItem('job_seeker_registration_preference', 'engineer');
             navigate('/jobseeker/my-page-engineer', { replace: true });
           } else if (!types.includes('engineer') && types.includes('general')) {
+            localStorage.setItem('job_seeker_registration_preference', 'general');
+            navigate('/jobseeker/my-page-general', { replace: true });
+          } else if (types.includes('engineer')) {
+            localStorage.setItem('job_seeker_registration_preference', 'engineer');
+            navigate('/jobseeker/my-page-engineer', { replace: true });
+          } else if (types.includes('general')) {
+            localStorage.setItem('job_seeker_registration_preference', 'general');
             navigate('/jobseeker/my-page-general', { replace: true });
           } else {
-            // 両方ある、または未設定 → 既存ページへ（選択UIは今後検討）
-            navigate('/jobseeker/my-page', { replace: true });
+            navigate('/jobseeker/login', { replace: true });
           }
         } else {
-          navigate('/jobseeker/my-page', { replace: true });
+          navigate('/jobseeker/login', { replace: true });
         }
       } catch {
-        navigate('/jobseeker/my-page', { replace: true });
+        navigate('/jobseeker/login', { replace: true });
       } finally {
         setResolved(true);
       }

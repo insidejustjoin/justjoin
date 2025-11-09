@@ -4,7 +4,7 @@ import DocumentGenerator from '@/components/DocumentGenerator';
 const AccurateSkillSheetPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
-      <DocumentGenerator />
+      <DocumentGenerator registrationType="engineer" />
     </div>
   );
 };

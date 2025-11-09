@@ -587,26 +587,13 @@ app.post('/api/admin/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // IPアドレス制限（124.144.153.50のみ許可）
-    const allowedIP = '124.144.153.50';
-    // Cloud RunではX-Forwarded-ForヘッダーからIPを取得
-    const clientIP = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.ip || req.socket.remoteAddress;
-    
-    if (clientIP !== allowedIP) {
-      console.warn(`管理者ログイン試行が許可されていないIPアドレスから: ${clientIP}`);
-      return res.status(403).json({
-        success: false,
-        message: 'アクセスが拒否されました。許可されたIPアドレスからのみ管理者ログインが可能です。'
-      });
-    }
-    
     if (!email || !password) {
       return res.status(400).json({
         success: false,
         message: 'メールアドレスとパスワードは必須です'
       });
     }
-    
+    console.log(`[admin-login] email=${email}`);
     const { query } = await import('../integrations/postgres/client.js');
     
     // 管理者ユーザーを検索
@@ -616,6 +603,7 @@ app.post('/api/admin/login', async (req, res) => {
       WHERE email = $1 AND user_type = 'admin'
     `, [email]);
     
+    console.log('[admin-login] query rows:', result.rows.length);
     if (result.rows.length === 0) {
       return res.status(401).json({
         success: false,
@@ -627,7 +615,8 @@ app.post('/api/admin/login', async (req, res) => {
     
     // パスワード検証
     const bcrypt = await import('bcrypt');
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    const isValidPassword = await bcrypt.compare(password, user.password_hash || '');
+    console.log('[admin-login] password valid:', isValidPassword);
     
     if (!isValidPassword) {
       return res.status(401).json({
@@ -638,6 +627,7 @@ app.post('/api/admin/login', async (req, res) => {
     
     // ステータスチェック
     if (user.status !== 'active') {
+      console.warn('[admin-login] inactive status:', user.status);
       return res.status(401).json({
         success: false,
         message: 'アカウントが無効です'
@@ -725,7 +715,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         -- 就職状況（デフォルトは未就職）※カラムが存在しない環境に配慮
         'unemployed'::text as employment_status,
         -- 完了率（入力率）※カラムが存在しない環境に配慮
-        0::int as completion_rate,
+        COALESCE(js.completion_rate, 0)::int as completion_rate,
         -- 登録タイプ（エンジニア/一般職）
         COALESCE(js.registration_type, 'engineer') as registration_type,
         -- フロントエンドで必要なデフォルト値
@@ -1874,16 +1864,17 @@ app.delete('/api/user/account/:userId', async (req, res) => {
 // 統一ログインAPI（求職者・企業・管理者対応）
 app.post('/api/login', async (req, res) => {
   try {
-    const { email, password, userType, recaptchaToken } = req.body;
+    const { email, password, userType, recaptchaToken, registrationType } = req.body;
+    const recaptchaV2Response = req.body?.['g-recaptcha-response'];
     // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
     if (process.env.RECAPTCHA_SECRET_KEY) {
-      if (!recaptchaToken) {
+      if (!recaptchaV2Response && !recaptchaToken) {
         return res.status(400).json({ success: false, message: 'reCAPTCHA 検証が必要です' });
       }
       try {
         const params = new URLSearchParams();
         params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-        params.append('response', recaptchaToken);
+        params.append('response', recaptchaV2Response || recaptchaToken);
         if (req.ip) params.append('remoteip', req.ip);
         const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
           method: 'POST',
@@ -1894,8 +1885,8 @@ app.post('/api/login', async (req, res) => {
         if (!verifyJson.success) {
           return res.status(403).json({ success: false, message: 'reCAPTCHA 検証に失敗しました' });
         }
-        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
-        if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
+        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）※v2の場合はスコアなし
+        if (!recaptchaV2Response && verifyJson.score !== undefined && verifyJson.score < 0.5) {
           console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
           return res.status(403).json({ 
             success: false, 
@@ -2018,6 +2009,44 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
+    let registrationTypes: string[] = [];
+    if (user.role === 'job_seeker') {
+      try {
+        const typesResult = await query(
+          `
+            SELECT COALESCE(registration_type, 'engineer') AS registration_type
+            FROM job_seekers
+            WHERE user_id = $1
+          `,
+          [user.id]
+        );
+        registrationTypes = Array.from(
+          new Set(
+            typesResult.rows.map((row: any) => (row.registration_type === 'general' ? 'general' : 'engineer'))
+          )
+        );
+      } catch (typeError) {
+        console.warn('登録タイプ取得に失敗しました:', typeError);
+      }
+
+      if (registrationType) {
+        const normalized =
+          registrationType === 'general' || registrationType === 'engineer' ? registrationType : 'engineer';
+        if (registrationTypes.length === 0 && normalized) {
+          return res.status(403).json({
+            success: false,
+            message: 'このアカウントでは指定された登録タイプが利用できません'
+          });
+        }
+        if (registrationTypes.length > 0 && !registrationTypes.includes(normalized)) {
+          return res.status(403).json({
+            success: false,
+            message: `このメールアドレスでは${normalized === 'general' ? '一般職' : 'エンジニア'}としての登録は完了していません`
+          });
+        }
+      }
+    }
+
     // JWTトークン生成（有効期限を8時間に短縮）
     console.log('JWTをインポート中...');
     const jwt = await import('jsonwebtoken');
@@ -2044,8 +2073,10 @@ app.post('/api/login', async (req, res) => {
         user_type: user.role,
         status: user.status,
         created_at: user.created_at,
-        updated_at: user.updated_at
-      }
+        updated_at: user.updated_at,
+        registration_types: registrationTypes
+      },
+      registrationTypes
     });
   } catch (error) {
     console.error('=== ログインエラー ===');

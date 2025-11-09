@@ -516,7 +516,7 @@ export function JobSeekerMyPageGeneral() {
 
               {/* 書類作成ボタン */}
               <Button
-                onClick={() => navigate('/jobseeker/documents')}
+                onClick={() => navigate('/jobseeker/documents-general')}
                 className="w-full h-12 text-lg"
               >
                 <FileText className="h-5 w-5 mr-2" />
@@ -860,7 +860,7 @@ export function JobSeekerMyPageGeneral() {
                 <Button
                   onClick={() => {
                     setShowCompletionModal(false);
-                    navigate('/jobseeker/documents');
+                    navigate('/jobseeker/documents-general');
                   }}
                   className="flex-1"
                 >

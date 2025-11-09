@@ -516,7 +516,7 @@ export function JobSeekerMyPageEngineer() {
 
               {/* 書類作成ボタン */}
               <Button
-                onClick={() => navigate('/jobseeker/documents')}
+                onClick={() => navigate('/jobseeker/documents-engineer')}
                 className="w-full h-12 text-lg"
               >
                 <FileText className="h-5 w-5 mr-2" />
@@ -860,7 +860,7 @@ export function JobSeekerMyPageEngineer() {
                 <Button
                   onClick={() => {
                     setShowCompletionModal(false);
-                    navigate('/jobseeker/documents');
+                    navigate('/jobseeker/documents-engineer');
                   }}
                   className="flex-1"
                 >

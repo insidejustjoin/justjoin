@@ -1,14 +1,77 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface AuthGuardProps {
   children: React.ReactNode;
   requiredUserType?: 'job_seeker' | 'company' | 'admin';
+  allowedRegistrationTypes?: Array<'engineer' | 'general'>;
+  fallbackPath?: string;
 }
 
-export function AuthGuard({ children, requiredUserType }: AuthGuardProps) {
+export function AuthGuard({
+  children,
+  requiredUserType,
+  allowedRegistrationTypes,
+  fallbackPath,
+}: AuthGuardProps) {
   const { user, isLoading } = useAuth();
+  const [registrationTypes, setRegistrationTypes] = useState<string[] | null>(null);
+  const [isCheckingRegistration, setIsCheckingRegistration] = useState(false);
+
+  const needsRegistrationTypeCheck =
+    requiredUserType === 'job_seeker' &&
+    Array.isArray(allowedRegistrationTypes) &&
+    allowedRegistrationTypes.length > 0;
+
+  useEffect(() => {
+    let ignore = false;
+
+    const fetchRegistrationTypes = async () => {
+      if (!needsRegistrationTypeCheck || !user || user.user_type !== 'job_seeker') {
+        setRegistrationTypes(null);
+        return;
+      }
+
+      setIsCheckingRegistration(true);
+      try {
+        const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
+        const response = await fetch(`${apiUrl}/api/jobseekers/registration-types/${user.id}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
+          },
+        });
+
+        if (!ignore) {
+          if (response.ok) {
+            const json = await response.json();
+            setRegistrationTypes(Array.isArray(json?.types) ? json.types : []);
+          } else {
+            setRegistrationTypes([]);
+          }
+        }
+      } catch {
+        if (!ignore) {
+          setRegistrationTypes([]);
+        }
+      } finally {
+        if (!ignore) {
+          setIsCheckingRegistration(false);
+        }
+      }
+    };
+
+    fetchRegistrationTypes();
+    return () => {
+      ignore = true;
+    };
+  }, [needsRegistrationTypeCheck, user]);
+
+  const registrationTypeAllowed = useMemo(() => {
+    if (!needsRegistrationTypeCheck) return true;
+    if (!registrationTypes) return false;
+    return allowedRegistrationTypes!.some((type) => registrationTypes.includes(type));
+  }, [allowedRegistrationTypes, needsRegistrationTypeCheck, registrationTypes]);
 
   if (isLoading) {
     return (
@@ -54,6 +117,23 @@ export function AuthGuard({ children, requiredUserType }: AuthGuardProps) {
         </div>
       </div>
     );
+  }
+
+  if (needsRegistrationTypeCheck) {
+    if (isCheckingRegistration || registrationTypes === null) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-lg">読み込み中...</div>
+        </div>
+      );
+    }
+
+    if (!registrationTypeAllowed) {
+      if (fallbackPath) {
+        return <Navigate to={fallbackPath} replace />;
+      }
+      return <Navigate to="/jobseeker/login" replace />;
+    }
   }
 
   return <>{children}</>;

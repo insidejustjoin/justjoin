@@ -47,7 +47,8 @@ router.post('/check', async (req, res) => {
           u.id, 
           u.email, 
           u.status,
-          js.id as jobseeker_id
+          js.id as jobseeker_id,
+          js.registration_type
          FROM users u
          LEFT JOIN job_seekers js ON js.user_id = u.id
          WHERE u.email = $1`,
@@ -59,28 +60,42 @@ router.post('/check', async (req, res) => {
       existingUser = { rows: [] };
     }
 
-    if (existingUser.rows.length > 0) {
-      const user = existingUser.rows[0];
-      // job_seekersテーブルに対応するレコードがある場合のみ「既に登録されています」と表示
-      if (user.jobseeker_id) {
-        return res.json({
-          success: true,
-          exists: true,
-          message: 'このメールアドレスは既に登録されています。',
-          user: {
-            id: user.id,
-            email: user.email,
-            status: user.status
-          }
-        });
-      } else {
-        // usersテーブルには存在するが、job_seekersテーブルに対応するレコードがない場合
-        // （不完全な登録データなど）は新規登録として扱う
-        console.warn(`ユーザー${user.id}（${email}）はusersテーブルに存在しますが、job_seekersテーブルに対応するレコードがありません。新規登録として処理します。`);
-      }
-    }
+    const rows = existingUser.rows || [];
+    const registrationTypes = Array.from(
+      new Set(
+        rows
+          .filter((row: any) => row.jobseeker_id)
+          .map((row: any) => (row.registration_type === 'general' ? 'general' : 'engineer'))
+      )
+    );
 
-    return res.json({ success: true, exists: false, message: '新規ユーザーです。' });
+    const hasEngineer = registrationTypes.includes('engineer');
+    const hasGeneral = registrationTypes.includes('general');
+    const canRegisterEngineer = !hasEngineer;
+    const canRegisterGeneral = !hasGeneral;
+    const userInfo = rows[0]
+      ? {
+          id: rows[0].id,
+          email: rows[0].email,
+          status: rows[0].status
+        }
+      : null;
+
+    const message =
+      registrationTypes.length > 0 && !canRegisterEngineer && !canRegisterGeneral
+        ? 'このメールアドレスではエンジニア・一般職の両方が既に登録済みです。'
+        : '登録可能なタイプを選択してください。';
+
+    return res.json({
+      success: true,
+      exists: registrationTypes.length > 0,
+      userExists: rows.length > 0,
+      existingRegistrationTypes: registrationTypes,
+      canRegisterEngineer,
+      canRegisterGeneral,
+      user: userInfo,
+      message
+    });
   } catch (error) {
     console.error('ユーザーチェックエラー:', error);
     // 500にせず新規扱いで返す（登録フローを妨げないため）
@@ -366,45 +381,35 @@ router.post('/general', async (req, res) => {
   try {
     const { email, firstName, lastName, password, documentsData, recaptchaToken } = req.body;
 
-    // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
+    // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化／未入力でも継続）
     if (process.env.RECAPTCHA_SECRET_KEY) {
-      if (!recaptchaToken) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'reCAPTCHA 検証が必要です' 
-        });
-      }
-      try {
-        const params = new URLSearchParams();
-        params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-        params.append('response', recaptchaToken);
-        if (req.ip) params.append('remoteip', req.ip);
-        const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString(),
-        });
-        const verifyJson = await verifyResp.json();
-        if (!verifyJson.success) {
-          return res.status(403).json({ 
-            success: false, 
-            message: 'reCAPTCHA 検証に失敗しました' 
+      const v2 = (req.body && (req.body['g-recaptcha-response'] as string)) || '';
+      const v3 = recaptchaToken || '';
+      const responseToken = v2 || v3;
+      if (!responseToken) {
+        console.warn('reCAPTCHA トークンが提供されていません（/general）。検証をスキップして継続します。');
+      } else {
+        try {
+          const params = new URLSearchParams();
+          params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+          params.append('response', responseToken);
+          if (req.ip) params.append('remoteip', req.ip);
+          const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
           });
+          const verifyJson = await verifyResp.json();
+          if (!verifyJson.success) {
+            console.warn('reCAPTCHA 検証失敗（/general）。検証をスキップして継続します。');
+          }
+          // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
+          if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
+            console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
+          }
+        } catch (e) {
+          console.warn('reCAPTCHA 検証エラー（/general・継続）:', e);
         }
-        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
-        if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
-          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
-          return res.status(403).json({ 
-            success: false, 
-            message: 'reCAPTCHA 検証に失敗しました（スコア不足）' 
-          });
-        }
-      } catch (e) {
-        console.error('reCAPTCHA 検証エラー:', e);
-        return res.status(500).json({ 
-          success: false, 
-          message: 'reCAPTCHA 検証エラー' 
-        });
       }
     }
 

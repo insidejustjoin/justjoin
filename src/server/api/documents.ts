@@ -10,6 +10,31 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+type RegistrationType = 'engineer' | 'general';
+
+const normalizeRegistrationType = (value?: string | null): RegistrationType =>
+  value === 'general' ? 'general' : 'engineer';
+
+let userDocumentsRegistrationTypeEnsured = false;
+const ensureUserDocumentsRegistrationTypeColumn = async () => {
+  if (userDocumentsRegistrationTypeEnsured) return;
+  try {
+    await query(`
+      ALTER TABLE user_documents
+      ADD COLUMN IF NOT EXISTS registration_type VARCHAR(20) DEFAULT 'engineer'
+    `);
+    await query(`
+      UPDATE user_documents
+      SET registration_type = 'engineer'
+      WHERE registration_type IS NULL
+    `);
+  } catch (error) {
+    console.warn('registration_type column ensure skipped:', (error as any)?.message || error);
+  } finally {
+    userDocumentsRegistrationTypeEnsured = true;
+  }
+};
+
 // テストエンドポイント
 router.get('/test', (req: express.Request, res: express.Response): any => {
   res.json({ message: 'Documents API is working!' });
@@ -293,7 +318,9 @@ router.post('/generate-documents', async (req: express.Request, res: express.Res
 // 書類データ保存APIエンドポイント
 router.post('/', async (req: express.Request, res: express.Response): Promise<any> => {
   try {
-    const { userId, documentType = 'resume', documentData, timestamp } = req.body;
+    await ensureUserDocumentsRegistrationTypeColumn();
+
+    const { userId, documentType = 'resume', documentData, timestamp, registrationType } = req.body;
 
     if (!userId || !documentData) {
       logger.warn('書類保存API: 必須パラメータ不足', { userId, documentType }, undefined, 'api_validation');
@@ -306,27 +333,49 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
     const userIdStr = String(userId);
     const normalizedData = typeof documentData === 'string' ? JSON.parse(documentData) : documentData;
 
+    const normalizedRegistrationType = normalizeRegistrationType(registrationType);
+
     // データベースに保存（メインストレージ）
     try {
-      const checkQuery = 'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2 ORDER BY created_at DESC LIMIT 1';
-      const checkResult = await query(checkQuery, [userIdStr, documentType]);
+      const checkQuery = `
+        SELECT id 
+        FROM user_documents 
+        WHERE user_id = $1 
+          AND document_type = $2 
+          AND COALESCE(registration_type, 'engineer') = $3
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `;
+      const checkResult = await query(checkQuery, [userIdStr, documentType, normalizedRegistrationType]);
 
       if (checkResult.rows.length > 0) {
         // 既存データを更新
         const updateQuery = `
           UPDATE user_documents 
-          SET document_data = $1, updated_at = $2 
+          SET document_data = $1, updated_at = $2, registration_type = $4
           WHERE id = $3
         `;
-        await query(updateQuery, [JSON.stringify(normalizedData), timestamp || new Date().toISOString(), checkResult.rows[0].id]);
+        await query(updateQuery, [
+          JSON.stringify(normalizedData),
+          timestamp || new Date().toISOString(),
+          checkResult.rows[0].id,
+          normalizedRegistrationType,
+        ]);
       } else {
         // 新規データを挿入
         const insertQuery = `
-          INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at) 
-          VALUES ($1, $2, $3, $4, $5)
+          INSERT INTO user_documents (user_id, document_type, registration_type, document_data, created_at, updated_at) 
+          VALUES ($1, $2, $3, $4, $5, $6)
         `;
         const now = timestamp || new Date().toISOString();
-        await query(insertQuery, [userIdStr, documentType, JSON.stringify(normalizedData), now, now]);
+        await query(insertQuery, [
+          userIdStr,
+          documentType,
+          normalizedRegistrationType,
+          JSON.stringify(normalizedData),
+          now,
+          now,
+        ]);
       }
 
       // 完成度を計算して更新
@@ -335,14 +384,29 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
         completionRate = calculateCompletionRate(normalizedData);
         // job_seekersテーブルのcompletion_rateを更新
         await query(
-          'UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2',
-          [completionRate, Number(userId)]
+          `
+            UPDATE job_seekers 
+            SET completion_rate = $1, updated_at = NOW() 
+            WHERE user_id = $2 
+              AND COALESCE(registration_type, 'engineer') = $3
+          `,
+          [completionRate, userIdStr, normalizedRegistrationType]
         );
       }
 
-      logger.info('書類保存成功（データベース）', { userId: userIdStr, documentType, completionRate }, undefined, 'api_success');
+      logger.info(
+        '書類保存成功（データベース）',
+        { userId: userIdStr, documentType, completionRate, registrationType: normalizedRegistrationType },
+        undefined,
+        'api_success'
+      );
     } catch (dbError: any) {
-      logger.error('データベース保存エラー', { userId: userIdStr, documentType, error: dbError.message }, undefined, 'db_error');
+      logger.error(
+        'データベース保存エラー',
+        { userId: userIdStr, documentType, registrationType: normalizedRegistrationType, error: dbError.message },
+        undefined,
+        'db_error'
+      );
       throw new Error(`データベース保存に失敗しました: ${dbError.message}`);
     }
 
@@ -363,8 +427,9 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
 // 書類データ読み込みAPIエンドポイント（パスパラメータ版）
 router.get('/:userId', async (req: express.Request, res: express.Response): Promise<any> => {
   try {
+    await ensureUserDocumentsRegistrationTypeColumn();
     const { userId } = req.params;
-    const { documentType = 'all' } = req.query;
+    const { documentType = 'all', registrationType } = req.query;
 
     if (!userId) {
       logger.warn('書類取得API: 必須パラメータ不足', { userId, documentType }, undefined, 'api_validation');
@@ -374,14 +439,23 @@ router.get('/:userId', async (req: express.Request, res: express.Response): Prom
       });
     }
 
+    const registrationTypeFilter =
+      typeof registrationType === 'string' ? normalizeRegistrationType(registrationType) : null;
+
     // すべてのドキュメントタイプを取得して統合
-    const result = await query(
-      `SELECT document_type, document_data, created_at, updated_at
-       FROM user_documents
-       WHERE user_id = $1
-       ORDER BY created_at ASC`,
-      [userId]
-    );
+    const params: any[] = [userId];
+    let sql = `
+      SELECT document_type, document_data, created_at, updated_at
+      FROM user_documents
+      WHERE user_id = $1
+    `;
+    if (registrationTypeFilter) {
+      params.push(registrationTypeFilter);
+      sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length}`;
+    }
+    sql += ' ORDER BY created_at ASC';
+
+    const result = await query(sql, params);
 
     if (result.rows.length === 0) {
       logger.warn('書類取得API: 書類が見つかりません', { userId, documentType }, undefined, 'api_failure');
@@ -463,7 +537,8 @@ router.get('/:userId', async (req: express.Request, res: express.Response): Prom
 // 書類データ読み込みAPIエンドポイント（クエリパラメータ版）
 router.get('/', async (req: express.Request, res: express.Response): Promise<any> => {
   try {
-    const { userId, documentType = 'all' } = req.query;
+    await ensureUserDocumentsRegistrationTypeColumn();
+    const { userId, documentType = 'all', registrationType } = req.query;
 
     if (!userId) {
       logger.warn('書類取得API: 必須パラメータ不足', { userId, documentType }, undefined, 'api_validation');
@@ -473,10 +548,24 @@ router.get('/', async (req: express.Request, res: express.Response): Promise<any
       });
     }
 
+    const registrationTypeFilter =
+      typeof registrationType === 'string' ? normalizeRegistrationType(registrationType) : null;
+
     // データベースから取得
     try {
-      const queryText = 'SELECT document_data, created_at, updated_at FROM user_documents WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1';
-      const result = await query(queryText, [userId]);
+      let queryText = `
+        SELECT document_data, created_at, updated_at 
+        FROM user_documents 
+        WHERE user_id = $1
+      `;
+      const params: any[] = [userId];
+      if (registrationTypeFilter) {
+        params.push(registrationTypeFilter);
+        queryText += ` AND COALESCE(registration_type, 'engineer') = $${params.length}`;
+      }
+      queryText += ' ORDER BY updated_at DESC LIMIT 1';
+
+      const result = await query(queryText, params);
 
       if (result.rows.length > 0) {
         const documentData = result.rows[0].document_data;
@@ -512,7 +601,9 @@ router.get('/', async (req: express.Request, res: express.Response): Promise<any
 // 書類データ削除APIエンドポイント
 router.delete('/:userId', async (req: express.Request, res: express.Response): Promise<any> => {
   try {
+    await ensureUserDocumentsRegistrationTypeColumn();
     const { userId } = req.params;
+    const { registrationType } = req.query;
 
     if (!userId) {
       return res.status(400).json({
@@ -523,8 +614,14 @@ router.delete('/:userId', async (req: express.Request, res: express.Response): P
 
     // データベースから削除
     try {
-      const deleteQuery = 'DELETE FROM user_documents WHERE user_id = $1';
-      await query(deleteQuery, [userId]);
+      let deleteQuery = 'DELETE FROM user_documents WHERE user_id = $1';
+      const params: any[] = [userId];
+      if (typeof registrationType === 'string') {
+        const normalized = normalizeRegistrationType(registrationType);
+        deleteQuery += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+        params.push(normalized);
+      }
+      await query(deleteQuery, params);
       logger.info('書類削除成功（データベース）', { userId }, undefined, 'api_success');
     } catch (dbError) {
       logger.warn('データベース削除に失敗', { userId, error: dbError.message }, undefined, 'db_error');
@@ -653,41 +750,62 @@ const calculateCompletionRate = (data: any): number => {
 // 書類データ保存APIエンドポイント
 router.post('/jobseekers/documents', async (req: express.Request, res: express.Response): Promise<any> => {
   try {
-    const { userId, documentData } = req.body;
+    await ensureUserDocumentsRegistrationTypeColumn();
+
+    const { userId, documentData, registrationType } = req.body;
     
     if (!userId || !documentData) {
       return res.status(400).json({ error: 'userIdとdocumentDataが必要です' });
     }
     
     const userIdStr = String(userId);
+    const normalizedRegistrationType = normalizeRegistrationType(registrationType);
     // 入力率を計算
     const completionRate = calculateCompletionRate(documentData);
     
     // 既存のデータを確認
     const existingData = await query(
-      'SELECT * FROM user_documents WHERE user_id = $1 AND document_type = $2',
-      [userIdStr, 'jobseeker_documents']
+      `
+        SELECT * 
+        FROM user_documents 
+        WHERE user_id = $1 
+          AND document_type = $2
+          AND COALESCE(registration_type, 'engineer') = $3
+      `,
+      [userIdStr, 'jobseeker_documents', normalizedRegistrationType]
     );
     
     if (existingData.rows.length > 0) {
       // 既存データを更新
       await query(
-        'UPDATE user_documents SET document_data = $1, updated_at = NOW() WHERE user_id = $2 AND document_type = $3',
-        [JSON.stringify(documentData), userIdStr, 'jobseeker_documents']
+        `
+          UPDATE user_documents 
+          SET document_data = $1, updated_at = NOW(), registration_type = $4
+          WHERE user_id = $2 AND document_type = $3
+            AND COALESCE(registration_type, 'engineer') = $4
+        `,
+        [JSON.stringify(documentData), userIdStr, 'jobseeker_documents', normalizedRegistrationType]
       );
     } else {
       // 新規データを挿入
       await query(
-        'INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())',
-        [userIdStr, 'jobseeker_documents', JSON.stringify(documentData)]
+        `
+          INSERT INTO user_documents (user_id, document_type, registration_type, document_data, created_at, updated_at) 
+          VALUES ($1, $2, $3, $4, NOW(), NOW())
+        `,
+        [userIdStr, 'jobseeker_documents', normalizedRegistrationType, JSON.stringify(documentData)]
       );
     }
     
     // job_seekersテーブルのcompletion_rateを更新（数値IDを使用）
-    const userIdNum = Number(userId);
     await query(
-      'UPDATE job_seekers SET completion_rate = $1, updated_at = NOW() WHERE user_id = $2',
-      [completionRate, userIdNum]
+      `
+        UPDATE job_seekers 
+        SET completion_rate = $1, updated_at = NOW() 
+        WHERE user_id = $2 
+          AND COALESCE(registration_type, 'engineer') = $3
+      `,
+      [completionRate, userIdStr, normalizedRegistrationType]
     );
     
     res.json({ success: true, message: '書類データを保存しました', completionRate });
@@ -700,15 +818,27 @@ router.post('/jobseekers/documents', async (req: express.Request, res: express.R
 // 入力率取得APIエンドポイント
 router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, res: express.Response): Promise<any> => {
   try {
+    await ensureUserDocumentsRegistrationTypeColumn();
     const { userId } = req.params;
+    const { registrationType } = req.query;
     
     if (!userId) {
       return res.status(400).json({ error: 'userIdが必要です' });
     }
-    
+
+    const registrationTypeFilter =
+      typeof registrationType === 'string' ? normalizeRegistrationType(registrationType) : null;
+
+    let sql = 'SELECT completion_rate FROM job_seekers WHERE user_id = $1';
+    const params: any[] = [userId];
+    if (registrationTypeFilter) {
+      sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+      params.push(registrationTypeFilter);
+    }
+
     const result = await query(
-      'SELECT completion_rate FROM job_seekers WHERE user_id = $1',
-      [userId]
+      sql,
+      params
     );
     
     if (result.rows.length > 0) {
@@ -1300,7 +1430,9 @@ router.get('/interview-verify/:token', async (req: express.Request, res: express
 // 書類データを保存
 router.post('/', async (req: express.Request, res: express.Response) => {
   try {
-    const { userId, documentType = 'resume', documentData } = req.body || {};
+    await ensureUserDocumentsRegistrationTypeColumn();
+
+    const { userId, documentType = 'resume', documentData, registrationType } = req.body || {};
 
     if (!userId || !documentData) {
       return res.status(400).json({ success: false, message: 'userIdとdocumentDataは必須です' });
@@ -1308,24 +1440,42 @@ router.post('/', async (req: express.Request, res: express.Response) => {
 
     const userIdStr = String(userId);
     const normalizedData = typeof documentData === 'string' ? JSON.parse(documentData) : documentData;
+    const normalizedRegistrationType = normalizeRegistrationType(registrationType);
     console.log('[DOCS][POST] save start', { userId: userIdStr, documentType, keys: Object.keys(normalizedData || {}) });
 
     const existing = await query(
-      'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2 ORDER BY created_at DESC LIMIT 1',
-      [userIdStr, documentType]
+      `
+        SELECT id 
+        FROM user_documents 
+        WHERE user_id = $1 
+          AND document_type = $2 
+          AND COALESCE(registration_type, 'engineer') = $3
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `,
+      [userIdStr, documentType, normalizedRegistrationType]
     );
 
     let saved;
     if (existing.rows.length > 0) {
       const id = existing.rows[0].id;
       saved = await query(
-        'UPDATE user_documents SET document_data = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-        [JSON.stringify(normalizedData), id]
+        `
+          UPDATE user_documents 
+          SET document_data = $1, updated_at = NOW(), registration_type = $3 
+          WHERE id = $2 
+          RETURNING *
+        `,
+        [JSON.stringify(normalizedData), id, normalizedRegistrationType]
       );
     } else {
       saved = await query(
-        'INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW()) RETURNING *',
-        [userIdStr, documentType, JSON.stringify(normalizedData)]
+        `
+          INSERT INTO user_documents (user_id, document_type, registration_type, document_data, created_at, updated_at) 
+          VALUES ($1, $2, $3, $4, NOW(), NOW()) 
+          RETURNING *
+        `,
+        [userIdStr, documentType, normalizedRegistrationType, JSON.stringify(normalizedData)]
       );
     }
 
@@ -1340,15 +1490,20 @@ router.post('/', async (req: express.Request, res: express.Response) => {
 // 書類データを取得
 router.get('/documents/:userId', async (req: express.Request, res: express.Response) => {
   try {
+    await ensureUserDocumentsRegistrationTypeColumn();
     const { userId } = req.params;
-    const { documentType } = req.query;
+    const { documentType, registrationType } = req.query;
 
     let sql = 'SELECT * FROM user_documents WHERE user_id = $1';
     const params = [userId];
 
     if (documentType) {
-      sql += ' AND document_type = $2';
+      sql += ` AND document_type = $${params.length + 1}`;
       params.push(documentType as string);
+    }
+    if (registrationType && typeof registrationType === 'string') {
+      sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+      params.push(normalizeRegistrationType(registrationType));
     }
 
     sql += ' ORDER BY created_at DESC';
@@ -1365,15 +1520,20 @@ router.get('/documents/:userId', async (req: express.Request, res: express.Respo
 // 書類データを削除
 router.delete('/documents/:userId', async (req: express.Request, res: express.Response) => {
   try {
+    await ensureUserDocumentsRegistrationTypeColumn();
     const { userId } = req.params;
-    const { documentType } = req.query;
+    const { documentType, registrationType } = req.query;
 
     let sql = 'DELETE FROM user_documents WHERE user_id = $1';
     const params = [userId];
 
     if (documentType) {
-      sql += ' AND document_type = $2';
+      sql += ` AND document_type = $${params.length + 1}`;
       params.push(documentType as string);
+    }
+    if (registrationType && typeof registrationType === 'string') {
+      sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+      params.push(normalizeRegistrationType(registrationType));
     }
 
     await query(sql, params);

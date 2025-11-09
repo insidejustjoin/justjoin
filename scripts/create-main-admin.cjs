@@ -13,7 +13,7 @@ async function createMainAdmin() {
     console.log('🔧 メイン管理者アカウントを作成中...');
     
     // 動的インポートを使用
-    const { authRepository } = await import('../dist-server/src/integrations/postgres/auth.js');
+    const { authRepository } = await import('../dist-server/integrations/postgres/auth.js');
     
     const adminEmail = 'inside.justjoin@gmail.com';
     const adminPassword = 'Admin2024!'; // 初期パスワード

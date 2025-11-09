@@ -21,7 +21,6 @@ import JobSeekerRegisterEngineer from "./pages/JobSeekerRegisterEngineer";
 import JobSeekerRegisterGeneral from "./pages/JobSeekerRegisterGeneral";
 import { RegistrationVerification } from "./components/RegistrationVerification";
 import { JobSeekerDashboard } from "./pages/JobSeekerDashboard";
-import { JobSeekerMyPage } from "./pages/JobSeekerMyPage";
 import { JobSeekerMyPageEngineer } from "./pages/JobSeekerMyPageEngineer";
 import { JobSeekerMyPageGeneral } from "./pages/JobSeekerMyPageGeneral";
 import JobSeekerAuth from "./pages/JobSeekerAuth";
@@ -52,6 +51,8 @@ import JobSeekerForgotPassword from "./pages/JobSeekerForgotPassword";
 import CompanyForgotPassword from "./pages/CompanyForgotPassword";
 
 import Documents from "./pages/Documents";
+import DocumentsEngineer from "./pages/DocumentsEngineer";
+import DocumentsGeneral from "./pages/DocumentsGeneral";
 import AccurateSkillSheetPage from "./pages/AccurateSkillSheetPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 
@@ -67,6 +68,7 @@ import { Footer } from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthGuard } from "./components/AuthGuard";
 import RedirectToJobSeekerMyPage from "./components/RedirectToJobSeekerMyPage";
+import RedirectToJobSeekerDocuments from "./components/RedirectToJobSeekerDocuments";
 
 function App() {
   return (
@@ -95,22 +97,48 @@ function App() {
               <Route path="/jobseeker/dashboard" element={<JobSeekerDashboard />} />
               <Route path="/jobseeker/my-page" element={
                 <AuthGuard requiredUserType="job_seeker">
-                  <JobSeekerMyPage />
+                  <RedirectToJobSeekerMyPage />
                 </AuthGuard>
               } />
               <Route path="/jobseeker/my-page-engineer" element={
-                <AuthGuard requiredUserType="job_seeker">
+                <AuthGuard
+                  requiredUserType="job_seeker"
+                  allowedRegistrationTypes={['engineer']}
+                  fallbackPath="/jobseeker/my-page-general"
+                >
                   <JobSeekerMyPageEngineer />
                 </AuthGuard>
               } />
               <Route path="/jobseeker/my-page-general" element={
-                <AuthGuard requiredUserType="job_seeker">
+                <AuthGuard
+                  requiredUserType="job_seeker"
+                  allowedRegistrationTypes={['general']}
+                  fallbackPath="/jobseeker/my-page-engineer"
+                >
                   <JobSeekerMyPageGeneral />
                 </AuthGuard>
               } />
               <Route path="/jobseeker/documents" element={
                 <AuthGuard requiredUserType="job_seeker">
-                  <Documents />
+                  <RedirectToJobSeekerDocuments />
+                </AuthGuard>
+              } />
+              <Route path="/jobseeker/documents-engineer" element={
+                <AuthGuard
+                  requiredUserType="job_seeker"
+                  allowedRegistrationTypes={['engineer']}
+                  fallbackPath="/jobseeker/documents-general"
+                >
+                  <DocumentsEngineer />
+                </AuthGuard>
+              } />
+              <Route path="/jobseeker/documents-general" element={
+                <AuthGuard
+                  requiredUserType="job_seeker"
+                  allowedRegistrationTypes={['general']}
+                  fallbackPath="/jobseeker/documents-engineer"
+                >
+                  <DocumentsGeneral />
                 </AuthGuard>
               } />
               <Route path="/jobseeker/forgot-password" element={<JobSeekerForgotPassword />} />

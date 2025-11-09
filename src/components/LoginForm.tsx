@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,12 +11,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 declare global {
   interface Window {
     grecaptcha: {
       ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+      execute?: (siteKey: string, options: { action: string }) => Promise<string>;
+      render?: (container: any, parameters: any) => any;
+      getResponse?: (widgetId?: number) => string;
+      reset?: (widgetId?: number) => void;
     };
   }
 }
@@ -48,6 +52,8 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<number | null>(null);
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -64,32 +70,65 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
     resolver: zodResolver(companyRegisterSchema)
   });
 
+  useEffect(() => {
+    if (!siteKey || widgetIdRef.current !== null) return;
+    const tryRender = () => {
+      try {
+        if (
+          typeof window !== 'undefined' &&
+          window.grecaptcha &&
+          typeof window.grecaptcha.render === 'function' &&
+          recaptchaContainerRef.current &&
+          widgetIdRef.current === null
+        ) {
+          const id = window.grecaptcha.render(recaptchaContainerRef.current, { sitekey: siteKey });
+          // @ts-ignore
+          widgetIdRef.current = id as number;
+        }
+      } catch (error) {
+        console.warn('reCAPTCHA v2レンダリングに失敗しました', error);
+      }
+    };
+    const t1 = setTimeout(tryRender, 300);
+    const t2 = setTimeout(tryRender, 1200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [siteKey]);
+
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
       console.log('ログイン処理開始:', { email: data.email, userType: data.userType });
-      // reCAPTCHA v3トークン取得
-      let recaptchaToken: string | undefined;
-      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
+
+      let recaptchaV2Response = '';
+      if (data.userType !== 'admin' && typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
         try {
-          recaptchaToken = await new Promise<string>((resolve, reject) => {
-            window.grecaptcha.ready(() => {
-              window.grecaptcha
-                .execute(siteKey, { action: 'login' })
-                .then(resolve)
-                .catch(reject);
-            });
-          });
-        } catch (e) {
-          console.warn('reCAPTCHA v3実行に失敗しました。', e);
+          recaptchaV2Response =
+            widgetIdRef.current !== null
+              ? window.grecaptcha.getResponse?.(widgetIdRef.current) || ''
+              : window.grecaptcha.getResponse();
+        } catch (error) {
+          console.warn('reCAPTCHA v2レスポンス取得に失敗しました', error);
+        }
+        if (!recaptchaV2Response) {
+          toast.error('reCAPTCHAを完了してください');
+          return;
         }
       }
-      const success = await login(data.email, data.password, data.userType, recaptchaToken);
+
+      const success = await login(
+        data.email,
+        data.password,
+        data.userType,
+        undefined,
+        data.userType !== 'admin' ? recaptchaV2Response : undefined
+      );
       console.log('ログイン結果:', success);
       
       if (success) {
         console.log('ログイン成功、リダイレクト開始');
-        // ログイン成功時は適切なダッシュボードに遷移
         if (data.userType === 'company') {
           console.log('企業ダッシュボードにリダイレクト');
           navigate('/employer/dashboard');
@@ -106,6 +145,13 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
     } catch (error) {
       console.error('ログイン処理エラー:', error);
     } finally {
+      if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.reset === 'function' && widgetIdRef.current !== null) {
+        try {
+          window.grecaptcha.reset(widgetIdRef.current);
+        } catch (error) {
+          console.warn('reCAPTCHAリセットに失敗しました', error);
+        }
+      }
       setIsLoading(false);
     }
   };
@@ -207,6 +253,16 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
                       <p className="text-sm text-red-500">{loginForm.formState.errors.userType.message}</p>
                     )}
                   </div>
+
+                  {siteKey && (
+                    <div className="flex justify-center">
+                      <div
+                        ref={recaptchaContainerRef}
+                        className="g-recaptcha"
+                        data-sitekey={siteKey}
+                      />
+                    </div>
+                  )}
 
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'ログイン中...' : 'ログイン'}

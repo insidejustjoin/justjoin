@@ -9,6 +9,7 @@ export interface User {
   email: string;
   user_type: 'job_seeker' | 'company' | 'admin';
   status: 'pending' | 'approved' | 'rejected' | 'active';
+  registration_types?: Array<'engineer' | 'general'>;
   profile?: {
     id: string | number;
     full_name?: string;
@@ -28,7 +29,14 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isInitialized: boolean;
-  login: (email: string, password: string, userType: 'job_seeker' | 'company' | 'admin', recaptchaToken?: string) => Promise<boolean>;
+  login: (
+    email: string,
+    password: string,
+    userType: 'job_seeker' | 'company' | 'admin',
+    recaptchaToken?: string,
+    recaptchaV2Response?: string,
+    registrationType?: 'engineer' | 'general'
+  ) => Promise<boolean>;
   logout: () => void;
   registerJobSeeker: (email: string, firstName: string, lastName: string, language?: 'ja' | 'en') => Promise<boolean>;
   registerCompany: (email: string, companyName: string, description: string) => Promise<boolean>;
@@ -221,7 +229,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [isInitialized]); // userを依存配列から削除
 
-  const login = async (email: string, password: string, userType: 'job_seeker' | 'company' | 'admin', recaptchaToken?: string): Promise<boolean> => {
+  const login = async (
+    email: string,
+    password: string,
+    userType: 'job_seeker' | 'company' | 'admin',
+    recaptchaToken?: string,
+    recaptchaV2Response?: string,
+    registrationType?: 'engineer' | 'general'
+  ): Promise<boolean> => {
     try {
       console.log('Login requested for:', email, userType);
       
@@ -237,9 +252,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // 管理者の場合は専用APIを使用（reCAPTCHAなし）
       const apiEndpoint = userType === 'admin' ? '/api/admin/login' : '/api/login';
-      const requestBody = userType === 'admin' 
+      const requestBody: Record<string, any> = userType === 'admin'
         ? { email, password }
-        : { email, password, userType, recaptchaToken };
+        : { email, password, userType };
+
+      if (recaptchaToken) {
+        requestBody.recaptchaToken = recaptchaToken;
+      }
+      if (recaptchaV2Response) {
+        requestBody['g-recaptcha-response'] = recaptchaV2Response;
+      }
+      if (registrationType) {
+        requestBody.registrationType = registrationType;
+      }
       
       const response = await fetch(`${apiUrl}${apiEndpoint}`, {
         method: 'POST',
@@ -253,6 +278,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       if (result.success && result.user) {
         const user = result.user;
+        if (Array.isArray(result.registrationTypes)) {
+          user.registration_types = result.registrationTypes;
+        }
         console.log('ログイン成功、ユーザー情報:', user);
         
         // ユーザー情報の検証
@@ -265,7 +293,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // idを文字列として保存
         const userForStorage = {
           ...user,
-          id: String(user.id)
+          id: String(user.id),
+          registration_types: user.registration_types
         };
         
         console.log('localStorageに保存するユーザー情報:', userForStorage);
@@ -285,6 +314,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         localStorage.setItem('auth_user', JSON.stringify(userForStorage));
         localStorage.setItem('auth_login_time', new Date().toISOString()); // ログイン時刻を保存
         
+        if (Array.isArray(result.registrationTypes)) {
+          localStorage.setItem('job_seeker_registration_types', JSON.stringify(result.registrationTypes));
+        }
+        if (registrationType) {
+          localStorage.setItem('job_seeker_registration_preference', registrationType);
+        } else if (Array.isArray(result.registrationTypes) && result.registrationTypes.length === 1) {
+          localStorage.setItem('job_seeker_registration_preference', result.registrationTypes[0]);
+        }
+
         console.log('認証状態更新完了');
         console.log('保存されたJWTトークン:', localStorage.getItem('auth_token'));
         toast.success(`${userType === 'job_seeker' ? '求職者' : userType === 'company' ? '企業' : '管理者'}としてログインしました`);

@@ -97,10 +97,27 @@ CREATE TABLE IF NOT EXISTS user_documents (
   id SERIAL PRIMARY KEY,
   user_id VARCHAR(255) NOT NULL,
   document_type VARCHAR(50) DEFAULT 'all',
+  registration_type VARCHAR(20) DEFAULT 'engineer',
   document_data JSONB NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'user_documents'
+          AND column_name = 'registration_type'
+    ) THEN
+        ALTER TABLE user_documents
+        ADD COLUMN registration_type VARCHAR(20) DEFAULT 'engineer';
+    END IF;
+    UPDATE user_documents
+    SET registration_type = 'engineer'
+    WHERE registration_type IS NULL;
+END $$;
 
 -- ブログ記事テーブルを作成
 CREATE TABLE IF NOT EXISTS blog_posts (

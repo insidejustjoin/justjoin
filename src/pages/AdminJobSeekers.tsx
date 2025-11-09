@@ -137,7 +137,7 @@ export function AdminJobSeekers() {
       // 各求職者の書類データを並行して取得
       const promises = jobSeekers.map(async (jobSeeker) => {
         try {
-          const response = await fetch(`${apiUrl}/api/documents/${jobSeeker.user_id}`, {
+          const response = await fetch(`${apiUrl}/api/documents/${jobSeeker.user_id}?registrationType=${jobSeeker.registration_type === 'general' ? 'general' : 'engineer'}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
@@ -2052,6 +2052,7 @@ export function AdminJobSeekers() {
               
               <DocumentGenerator
                 isAdminMode={true}
+                registrationType={selectedJobSeeker.registration_type === 'general' ? 'general' : 'engineer'}
                 jobSeekerData={selectedJobSeeker}
                 onClose={closeDocumentGenerator}
               />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -22,7 +22,10 @@ declare global {
   interface Window {
     grecaptcha: {
       ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+      execute?: (siteKey: string, options: { action: string }) => Promise<string>;
+      render?: (container: any, parameters: any) => any;
+      getResponse?: (widgetId?: number) => string;
+      reset?: (widgetId?: number) => void;
     };
   }
 }
@@ -40,7 +43,11 @@ export function JobSeekerLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [showGuidance, setShowGuidance] = useState(false);
   const [currentTab, setCurrentTab] = useState<'login' | 'register'>('login');
+  const [registrationType, setRegistrationType] = useState<'engineer' | 'general'>('engineer');
   const navigate = useNavigate();
+  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<number | null>(null);
 
   // 初回訪問時にガイダンスを表示（少し遅延させて表示）
   useEffect(() => {
@@ -54,6 +61,34 @@ export function JobSeekerLogin() {
       return () => clearTimeout(timer);
     }
   }, []);
+
+  // reCAPTCHA v2ウィジェットを手動レンダリング
+  useEffect(() => {
+    if (!siteKey || widgetIdRef.current !== null) return;
+    const tryRender = () => {
+      try {
+        if (
+          typeof window !== 'undefined' &&
+          window.grecaptcha &&
+          typeof window.grecaptcha.render === 'function' &&
+          recaptchaContainerRef.current &&
+          widgetIdRef.current === null
+        ) {
+          const id = window.grecaptcha.render(recaptchaContainerRef.current, { sitekey: siteKey });
+          // @ts-ignore
+          widgetIdRef.current = id as number;
+        }
+      } catch (error) {
+        console.warn('reCAPTCHA v2レンダリングに失敗しました', error);
+      }
+    };
+    const t1 = setTimeout(tryRender, 300);
+    const t2 = setTimeout(tryRender, 1200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [siteKey]);
 
   const handleTabChange = (tab: 'login' | 'register') => {
     setCurrentTab(tab);
@@ -76,29 +111,47 @@ export function JobSeekerLogin() {
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      // reCAPTCHA v3トークン取得
-      const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
-      let recaptchaToken: string | undefined;
-      if (siteKey && typeof window !== 'undefined' && window.grecaptcha) {
+      // reCAPTCHA v2（チェックボックス）レスポンス取得
+      let recaptchaV2Response = '';
+      if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
         try {
-          recaptchaToken = await new Promise<string>((resolve, reject) => {
-            window.grecaptcha.ready(() => {
-              window.grecaptcha
-                .execute(siteKey, { action: 'jobseeker_login' })
-                .then(resolve)
-                .catch(reject);
-            });
-          });
-        } catch (e) {
-          console.warn('reCAPTCHA v3実行に失敗しました。', e);
+          recaptchaV2Response =
+            widgetIdRef.current !== null
+              ? window.grecaptcha.getResponse?.(widgetIdRef.current) || ''
+              : window.grecaptcha.getResponse();
+        } catch (error) {
+          console.warn('reCAPTCHA v2レスポンス取得に失敗しました', error);
         }
       }
-      
-      const success = await login(data.email, data.password, 'job_seeker', recaptchaToken);
+
+      if (!recaptchaV2Response) {
+        toast.error('reCAPTCHAを完了してください');
+        return;
+      }
+
+      const success = await login(
+        data.email,
+        data.password,
+        'job_seeker',
+        undefined,
+        recaptchaV2Response,
+        registrationType
+      );
       if (success) {
-        navigate('/jobseeker/my-page');
+        if (registrationType === 'general') {
+          navigate('/jobseeker/my-page-general');
+        } else {
+          navigate('/jobseeker/my-page-engineer');
+        }
       }
     } finally {
+      if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.reset === 'function' && widgetIdRef.current !== null) {
+        try {
+          window.grecaptcha.reset(widgetIdRef.current);
+        } catch (error) {
+          console.warn('reCAPTCHAリセットに失敗しました', error);
+        }
+      }
       setIsLoading(false);
     }
   };
@@ -174,6 +227,32 @@ export function JobSeekerLogin() {
                   <CardContent>
                     <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
                       <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          ログイン対象
+                        </Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant={registrationType === 'engineer' ? 'default' : 'outline'}
+                            onClick={() => setRegistrationType('engineer')}
+                          >
+                            エンジニア
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={registrationType === 'general' ? 'default' : 'outline'}
+                            onClick={() => setRegistrationType('general')}
+                          >
+                            一般職
+                          </Button>
+                        </div>
+                        <p className="text-xs text-gray-500 text-center">
+                          同じメールアドレスで複数タイプが登録されている場合は、選択したマイページが開きます。
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
                         <Label htmlFor="login-email" className="flex items-center gap-2">
                           <Mail className="h-4 w-4" />
                           {t('auth.email')}
@@ -215,6 +294,14 @@ export function JobSeekerLogin() {
                         >
                           {t('auth.forgotPassword')}
                         </Link>
+                      </div>
+
+                      <div className="flex justify-center">
+                        <div
+                          ref={recaptchaContainerRef}
+                          className="g-recaptcha"
+                          data-sitekey={siteKey}
+                        />
                       </div>
 
                       <Button type="submit" className="w-full" disabled={isLoading}>
@@ -262,4 +349,4 @@ export function JobSeekerLogin() {
       </div>
     </>
   );
-} 
+}

@@ -14,7 +14,10 @@ declare global {
   interface Window {
     grecaptcha: {
       ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+      execute?: (siteKey: string, options: { action: string }) => Promise<string>;
+      getResponse?: (widgetId?: number) => string;
+      render?: (container: any, parameters: any) => any;
+      reset?: (widgetId?: number) => void;
     };
   }
 }
@@ -31,7 +34,23 @@ const JobSeekerRegisterGeneral: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   
-  const { email, firstName, lastName } = (location.state as { email?: string; firstName?: string; lastName?: string }) || {};
+  const {
+    email,
+    firstName,
+    lastName,
+    availability
+  } =
+    (location.state as {
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+      availability?: {
+        canRegisterEngineer?: boolean;
+        canRegisterGeneral?: boolean;
+        existingRegistrationTypes?: string[];
+        userExists?: boolean;
+      };
+    }) || {};
 
   if (!email || !firstName || !lastName) {
     navigate('/jobseeker/register');
@@ -262,7 +281,14 @@ const JobSeekerRegisterGeneral: React.FC = () => {
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-6xl mx-auto px-4">
           <div className="mb-6">
-            <Button variant="ghost" onClick={() => navigate('/jobseeker/register/type', { state: { email, firstName, lastName } })}>
+            <Button
+              variant="ghost"
+              onClick={() =>
+                navigate('/jobseeker/register/type', {
+                  state: { email, firstName, lastName, availability }
+                })
+              }
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
               戻る
             </Button>
@@ -280,6 +306,7 @@ const JobSeekerRegisterGeneral: React.FC = () => {
           <DocumentGenerator
             isRegistrationMode={true}
             hideSkillSheet={true}
+            registrationType="general"
             onDocumentsComplete={handleDocumentsComplete}
             prefillData={{
               firstName,
