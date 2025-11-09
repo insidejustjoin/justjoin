@@ -690,9 +690,12 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       let whereClause = 'WHERE 1=1';
       const params: any[] = [];
 
-      if (type !== 'all') {
-        whereClause += ` AND LOWER(TRIM(COALESCE(js.registration_type, 'engineer'))) = $${params.length + 1}`;
-        params.push(type);
+      if (type === 'engineer') {
+        whereClause += ` AND (js.registration_type IS NULL OR LOWER(js.registration_type) = $${params.length + 1})`;
+        params.push('engineer');
+      } else if (type === 'general') {
+        whereClause += ` AND LOWER(js.registration_type) = $${params.length + 1}`;
+        params.push('general');
       }
 
       const result = await query(
@@ -720,7 +723,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             u.updated_at as user_updated_at,
             'unemployed'::text as employment_status,
             COALESCE(js.completion_rate, 0)::int as completion_rate,
-            LOWER(TRIM(COALESCE(js.registration_type, 'engineer'))) as registration_type,
+            COALESCE(js.registration_type, 'engineer') as registration_type,
             COALESCE(
               js.profile_photo,
               doc.document_data -> 'resume' ->> 'photoUrl'
@@ -735,7 +738,6 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             SELECT document_data
             FROM user_documents ud
             WHERE ud.user_id = u.id
-              AND LOWER(TRIM(COALESCE(ud.registration_type, 'engineer'))) = LOWER(TRIM(COALESCE(js.registration_type, 'engineer')))
             ORDER BY ud.updated_at DESC
             LIMIT 1
           ) doc ON TRUE
@@ -769,10 +771,30 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       }));
     };
 
-    let jobSeekers = await buildQuery(normalizedType ?? 'all');
+    let jobSeekers: any[] = [];
+    try {
+      jobSeekers = await buildQuery(normalizedType ?? 'all');
+    } catch (primaryError) {
+      console.warn('jobseekers query primary failed, retrying with all', primaryError);
+      if (normalizedType) {
+        try {
+          jobSeekers = await buildQuery('all');
+        } catch (fallbackError) {
+          console.error('jobseekers query fallback failed', fallbackError);
+          throw fallbackError;
+        }
+      } else {
+        throw primaryError;
+      }
+    }
 
     if (jobSeekers.length === 0 && normalizedType) {
-      jobSeekers = await buildQuery('all');
+      try {
+        jobSeekers = await buildQuery('all');
+      } catch (fallbackError) {
+        console.error('jobseekers fallback on empty failed', fallbackError);
+        return res.json({ success: true, jobSeekers: [] });
+      }
     }
 
     return res.json({ success: true, jobSeekers });
