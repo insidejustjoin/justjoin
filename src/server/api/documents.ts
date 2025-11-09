@@ -840,18 +840,54 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
       sql,
       params
     );
-    
-    if (result.rows.length > 0) {
-      res.json({ 
-        success: true, 
-        completionRate: result.rows[0].completion_rate || 0 
-      });
-    } else {
-      res.json({ 
-        success: true, 
-        completionRate: 0 
-      });
+
+    let completionRate: number | null = result.rows.length > 0 ? result.rows[0].completion_rate : null;
+    let recalculated = false;
+
+    if (completionRate === null || typeof completionRate !== 'number' || Number.isNaN(completionRate)) {
+      completionRate = 0;
     }
+
+    try {
+      const docParams: any[] = [userId];
+      let docSql = `
+        SELECT document_data, COALESCE(registration_type, 'engineer') AS registration_type
+        FROM user_documents
+        WHERE user_id = $1
+      `;
+      if (registrationTypeFilter) {
+        docSql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${docParams.length + 1})`;
+        docParams.push(registrationTypeFilter);
+      }
+      docSql += ' ORDER BY updated_at DESC LIMIT 1';
+
+      const docResult = await query(docSql, docParams);
+      if (docResult.rows.length > 0 && docResult.rows[0].document_data) {
+        const docRegistrationType = docResult.rows[0].registration_type || registrationTypeFilter || 'engineer';
+        const calculated = calculateCompletionRate(docResult.rows[0].document_data);
+        if (calculated !== completionRate) {
+          completionRate = calculated;
+          recalculated = true;
+          await query(
+            `
+              UPDATE job_seekers
+              SET completion_rate = $1, updated_at = NOW()
+              WHERE user_id = $2
+                AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
+            `,
+            [completionRate, userId, docRegistrationType]
+          );
+        }
+      }
+    } catch (recalcError) {
+      console.warn('completion rate recalculation skipped:', recalcError);
+    }
+    
+    res.json({ 
+      success: true, 
+      completionRate: completionRate || 0,
+      recalculated
+    });
   } catch (error) {
     console.error('入力率取得エラー:', error);
     res.status(500).json({ error: '入力率の取得に失敗しました' });

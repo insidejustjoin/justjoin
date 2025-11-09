@@ -4,9 +4,56 @@ import { query } from '../../integrations/postgres/client.js';
 
 const router = Router();
 
+let jobSeekerStatusStructuresEnsured = false;
+const ensureJobSeekerStatusStructures = async () => {
+  if (jobSeekerStatusStructuresEnsured) return;
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS job_seeker_status_history (
+        id SERIAL PRIMARY KEY,
+        user_id UUID NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'active',
+        company_name TEXT,
+        company_url TEXT,
+        employment_date DATE,
+        withdrawal_date DATE,
+        reason TEXT,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_job_seeker_status_history_user_id_created_at
+        ON job_seeker_status_history (user_id, created_at DESC)
+    `);
+    await query(`
+      CREATE OR REPLACE VIEW current_job_seeker_status AS
+      SELECT DISTINCT ON (user_id)
+        user_id,
+        status,
+        company_name,
+        company_url,
+        employment_date,
+        withdrawal_date,
+        reason,
+        notes,
+        created_at,
+        updated_at
+      FROM job_seeker_status_history
+      ORDER BY user_id, created_at DESC
+    `);
+  } catch (error) {
+    console.warn('job seeker status structure ensure failed:', error);
+  } finally {
+    jobSeekerStatusStructuresEnsured = true;
+  }
+};
+
 // 求職者ステータス一覧取得（管理者用）
 router.get('/admin/status', authenticate, async (req, res) => {
   try {
+    await ensureJobSeekerStatusStructures();
     const { status } = req.query;
 
     const allowedStatuses = new Set(['active', 'employed', 'withdrawn']);
@@ -82,6 +129,7 @@ router.get('/admin/status', authenticate, async (req, res) => {
 // 求職者を就職済みに変更
 router.post('/admin/employ/:userId', authenticate, async (req, res) => {
   try {
+    await ensureJobSeekerStatusStructures();
     const { userId } = req.params;
     const { company_name, company_url, employment_date } = req.body;
     
@@ -127,6 +175,7 @@ router.post('/admin/employ/:userId', authenticate, async (req, res) => {
 // 求職者を退会済みに変更
 router.post('/admin/withdraw/:userId', authenticate, async (req, res) => {
   try {
+    await ensureJobSeekerStatusStructures();
     const { userId } = req.params;
     const { reason, withdrawal_date } = req.body;
     
@@ -172,6 +221,7 @@ router.post('/admin/withdraw/:userId', authenticate, async (req, res) => {
 // 求職者を復帰（アクティブ）に変更
 router.post('/admin/reactivate/:userId', authenticate, async (req, res) => {
   try {
+    await ensureJobSeekerStatusStructures();
     const { userId } = req.params;
     const { notes } = req.body;
 
@@ -213,6 +263,7 @@ router.post('/admin/reactivate/:userId', authenticate, async (req, res) => {
 // 求職者ステータス履歴取得
 router.get('/admin/history/:userId', authenticate, async (req, res) => {
   try {
+    await ensureJobSeekerStatusStructures();
     const { userId } = req.params;
     
     const result = await query(`
@@ -245,6 +296,7 @@ router.get('/admin/history/:userId', authenticate, async (req, res) => {
 // 求職者ステータス統計取得
 router.get('/admin/statistics', authenticate, async (req, res) => {
   try {
+    await ensureJobSeekerStatusStructures();
     const result = await query(`
       SELECT 
         status,
