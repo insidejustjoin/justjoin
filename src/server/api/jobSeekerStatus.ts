@@ -8,118 +8,73 @@ const router = Router();
 router.get('/admin/status', authenticate, async (req, res) => {
   try {
     const { status } = req.query;
-    
-    // current_job_seeker_statusビューが存在しない場合のフォールバック
-    let sqlQuery = `
-      SELECT 
-        js.user_id as id,
-        js.user_id,
-        js.first_name,
-        js.last_name,
-        u.email,
-        js.phone,
-        js.profile_photo,
-        js.created_at,
-        COALESCE(
-          (SELECT status FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          'active'
-        ) as status,
-        COALESCE(
-          (SELECT company_name FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as company_name,
-        COALESCE(
-          (SELECT company_url FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as company_url,
-        COALESCE(
-          (SELECT employment_date FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as employment_date,
-        COALESCE(
-          (SELECT withdrawal_date FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as withdrawal_date,
-        COALESCE(
-          (SELECT reason FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as reason,
-        COALESCE(
-          (SELECT notes FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as notes,
-        COALESCE(
-          (SELECT updated_at FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          js.created_at
-        ) as status_updated_at
-      FROM job_seekers js
-      INNER JOIN users u ON js.user_id = u.id
-      WHERE 1=1
-    `;
-    
+
+    const allowedStatuses = new Set(['active', 'employed', 'withdrawn']);
+    const statusFilter = typeof status === 'string' && allowedStatuses.has(status) ? status : 'all';
+
     const params: any[] = [];
-    
-    if (status && status !== 'all') {
-      sqlQuery = `
-        SELECT 
+    let whereClause = '';
+
+    if (statusFilter !== 'all') {
+      params.push(statusFilter);
+      whereClause = `WHERE COALESCE(latest.status, 'active') = $${params.length}`;
+    }
+
+    const result = await query(
+      `
+        WITH latest AS (
+          SELECT DISTINCT ON (user_id)
+            user_id,
+            status,
+            company_name,
+            company_url,
+            employment_date,
+            withdrawal_date,
+            reason,
+            notes,
+            updated_at
+          FROM job_seeker_status_history
+          ORDER BY user_id, created_at DESC
+        )
+        SELECT
           js.user_id as id,
           js.user_id,
           js.first_name,
           js.last_name,
           u.email,
           js.phone,
-          js.profile_photo,
+          COALESCE(js.profile_photo, doc.document_data -> 'resume' ->> 'photoUrl') AS profile_photo,
           js.created_at,
-          jsh.status,
-          jsh.company_name,
-          jsh.company_url,
-          jsh.employment_date,
-          jsh.withdrawal_date,
-          jsh.reason,
-          jsh.notes,
-          jsh.updated_at as status_updated_at
+          COALESCE(latest.status, 'active') as status,
+          latest.company_name,
+          latest.company_url,
+          latest.employment_date,
+          latest.withdrawal_date,
+          latest.reason,
+          latest.notes,
+          COALESCE(latest.updated_at, js.created_at) as status_updated_at
         FROM job_seekers js
         INNER JOIN users u ON js.user_id = u.id
-        INNER JOIN (
-          SELECT DISTINCT ON (user_id) 
-            user_id, status, company_name, company_url, 
-            employment_date, withdrawal_date, reason, notes, updated_at
-          FROM job_seeker_status_history
-          WHERE status = $${params.length + 1}
-          ORDER BY user_id, created_at DESC
-        ) jsh ON js.user_id = jsh.user_id
-        WHERE 1=1
-      `;
-      params.push(status);
-    }
-    
-    sqlQuery += ` ORDER BY status_updated_at DESC, js.created_at DESC`;
-    
-    const result = await query(sqlQuery, params);
-    
+        LEFT JOIN latest ON latest.user_id = js.user_id
+        LEFT JOIN LATERAL (
+          SELECT document_data
+          FROM user_documents ud
+          WHERE ud.user_id = js.user_id
+          ORDER BY ud.updated_at DESC
+          LIMIT 1
+        ) doc ON TRUE
+        ${whereClause}
+        ORDER BY status_updated_at DESC, js.created_at DESC
+      `,
+      params
+    );
+
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
   } catch (error) {
     console.error('求職者ステータス取得エラー:', error);
-    // 暫定復旧: 空配列で成功扱い
     res.json({ success: true, data: [] });
   }
 });

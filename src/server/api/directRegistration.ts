@@ -69,15 +69,26 @@ router.post('/check', async (req, res) => {
       )
     );
 
+    const userStatus = rows[0]?.status || null;
+    let latestStatus: string | null = null;
+    if (rows.length > 0) {
+      const latestStatusResult = await query(
+        `SELECT status FROM job_seeker_status_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [rows[0].id]
+      );
+      latestStatus = latestStatusResult.rows[0]?.status || null;
+    }
+    const isWithdrawn = latestStatus === 'withdrawn' || userStatus === 'deleted';
+
     const hasEngineer = registrationTypes.includes('engineer');
     const hasGeneral = registrationTypes.includes('general');
-    const canRegisterEngineer = !hasEngineer;
-    const canRegisterGeneral = !hasGeneral;
+    const canRegisterEngineer = !hasEngineer || isWithdrawn;
+    const canRegisterGeneral = !hasGeneral || isWithdrawn;
     const userInfo = rows[0]
       ? {
           id: rows[0].id,
           email: rows[0].email,
-          status: rows[0].status
+          status: rows[0].status,
         }
       : null;
 
@@ -94,7 +105,8 @@ router.post('/check', async (req, res) => {
       canRegisterEngineer,
       canRegisterGeneral,
       user: userInfo,
-      message
+      reactivationAvailable: isWithdrawn,
+      message,
     });
   } catch (error) {
     console.error('ユーザーチェックエラー:', error);
@@ -149,23 +161,38 @@ router.post('/engineer', async (req, res) => {
       `SELECT 
         u.id, 
         js.id as jobseeker_id,
-        js.registration_type
+        js.registration_type,
+        u.status
        FROM users u
        LEFT JOIN job_seekers js ON js.user_id = u.id
        WHERE u.email = $1`,
       [email]
     );
 
+    let reactivating = false;
+    let existingEngineerRow: any = null;
+    let latestStatus: string | null = null;
+    let existingUserStatus: string | null = null;
+
     if (existingUser.rows.length > 0) {
-      // 同じregistration_type（エンジニア）が既に存在する場合はエラー
-      const existingRegistrations = existingUser.rows.filter((row: any) => row.jobseeker_id && row.registration_type === 'engineer');
-      if (existingRegistrations.length > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'このメールアドレスでエンジニア登録は既に完了しています。' 
-        });
+      existingEngineerRow = existingUser.rows.find((row: any) => row.jobseeker_id && row.registration_type === 'engineer');
+      existingUserStatus = existingUser.rows[0]?.status || null;
+      const latestStatusResult = await query(
+        `SELECT status FROM job_seeker_status_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [existingUser.rows[0].id]
+      );
+      latestStatus = latestStatusResult.rows[0]?.status || null;
+      const isWithdrawn = latestStatus === 'withdrawn' || existingUserStatus === 'deleted';
+
+      if (existingEngineerRow) {
+        if (!isWithdrawn) {
+          return res.status(400).json({ 
+            success: false, 
+            message: 'このメールアドレスでエンジニア登録は既に完了しています。' 
+          });
+        }
+        reactivating = true;
       }
-      // usersテーブルにのみ存在する場合、または一般職登録のみの場合は、既存のuser_idを再利用
     }
 
     // パスワードハッシュ化
@@ -228,15 +255,22 @@ router.post('/engineer', async (req, res) => {
       } catch {}
 
       // 求職者情報作成（エンジニア向け）
-      try {
+      if (reactivating && existingEngineerRow?.jobseeker_id) {
         await query(
-          `INSERT INTO job_seekers (
-            user_id, first_name, last_name, phone, 
-            date_of_birth, gender, nationality, address,
-            profile_photo, registration_type, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+          `UPDATE job_seekers
+           SET first_name = $2,
+               last_name = $3,
+               phone = $4,
+               date_of_birth = $5,
+               gender = $6,
+               nationality = $7,
+               address = $8,
+               profile_photo = $9,
+               registration_type = 'engineer',
+               updated_at = NOW()
+           WHERE id = $1`,
           [
-            userId,
+            existingEngineerRow.jobseeker_id,
             firstName,
             lastName,
             documentsData?.livePhoneNumber || null,
@@ -245,36 +279,63 @@ router.post('/engineer', async (req, res) => {
             documentsData?.nationality || null,
             documentsData?.liveAddress || null,
             documentsData?.resume?.photoUrl || null,
-            'engineer'
           ]
         );
-      } catch (fkErr) {
-        // FK違反時はメールからusers.idを再取得してリトライ
+      } else {
         try {
-          const u = await query('SELECT id FROM users WHERE email = $1 ORDER BY created_at DESC LIMIT 1', [email]);
-          if (u.rows.length > 0) {
-            userId = u.rows[0].id;
-          } else {
-            const make = await query(
-              `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
-               VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
-              [email, passwordHash]
+          await query(
+            `INSERT INTO job_seekers (
+              user_id, first_name, last_name, phone, 
+              date_of_birth, gender, nationality, address,
+              profile_photo, registration_type, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+            [
+              userId,
+              firstName,
+              lastName,
+              documentsData?.livePhoneNumber || null,
+              documentsData?.birthDate || null,
+              documentsData?.gender || null,
+              documentsData?.nationality || null,
+              documentsData?.liveAddress || null,
+              documentsData?.resume?.photoUrl || null,
+              'engineer'
+            ]
+          );
+        } catch (fkErr) {
+          try {
+            const u = await query('SELECT id FROM users WHERE email = $1 ORDER BY created_at DESC LIMIT 1', [email]);
+            if (u.rows.length > 0) {
+              userId = u.rows[0].id;
+            } else {
+              const make = await query(
+                `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
+                 VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
+                [email, passwordHash]
+              );
+              userId = make.rows[0].id;
+            }
+            await query(
+              `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+               VALUES ($1, $2, $3, 'engineer', NOW(), NOW())`,
+              [userId, firstName, lastName]
             );
-            userId = make.rows[0].id;
+          } catch {
+            await query(
+              `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+              [userId, firstName, lastName, 'engineer']
+            );
           }
-          await query(
-            `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
-             VALUES ($1, $2, $3, 'engineer', NOW(), NOW())`,
-            [userId, firstName, lastName]
-          );
-        } catch {
-        // 最小カラムでフォールバック
-          await query(
-            `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, NOW(), NOW())`,
-            [userId, firstName, lastName, 'engineer']
-          );
         }
+      }
+
+      if (reactivating) {
+        await query(
+          `INSERT INTO job_seeker_status_history (user_id, status, notes)
+           VALUES ($1, 'active', '再登録によりアクティブ化')`,
+          [userId]
+        );
       }
 
       // 書類データ保存（失敗しても続行）
@@ -428,30 +489,42 @@ router.post('/general', async (req, res) => {
       });
     }
 
-    // 既存ユーザーチェック（同じメールアドレスで最大2つまで登録可能：エンジニアと一般職）
     const existingUser = await query(
       `SELECT 
         u.id, 
         js.id as jobseeker_id,
-        js.registration_type
+        js.registration_type,
+        u.status
        FROM users u
        LEFT JOIN job_seekers js ON js.user_id = u.id
        WHERE u.email = $1`,
       [email]
     );
 
+    let reactivating = false;
+    let existingGeneralRow: any = null;
+    let latestStatus: string | null = null;
+    let existingUserStatus: string | null = null;
+
     if (existingUser.rows.length > 0) {
-      const user = existingUser.rows[0];
-      // 同じregistration_typeが既に存在する場合はエラー
-      const existingRegistrations = existingUser.rows.filter((row: any) => row.jobseeker_id && row.registration_type === 'general');
-      if (existingRegistrations.length > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'このメールアドレスで一般職登録は既に完了しています。' 
-        });
+      existingGeneralRow = existingUser.rows.find((row: any) => row.jobseeker_id && row.registration_type === 'general');
+      existingUserStatus = existingUser.rows[0]?.status || null;
+      const latestStatusResult = await query(
+        `SELECT status FROM job_seeker_status_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [existingUser.rows[0].id]
+      );
+      latestStatus = latestStatusResult.rows[0]?.status || null;
+      const isWithdrawn = latestStatus === 'withdrawn' || existingUserStatus === 'deleted';
+
+      if (existingGeneralRow) {
+        if (!isWithdrawn) {
+          return res.status(400).json({ 
+            success: false, 
+            message: 'このメールアドレスで一般職登録は既に完了しています。' 
+          });
+        }
+        reactivating = true;
       }
-      // usersテーブルにのみ存在する場合は、既存のuser_idを再利用
-      // （後続の処理でINSERT INTO usersではなく、既存のuser_idを使用）
     }
 
     // パスワードハッシュ化
@@ -507,15 +580,22 @@ router.post('/general', async (req, res) => {
       } catch {}
 
       // 求職者情報作成（一般職向けはスキルシートなし）
-      try {
+      if (reactivating && existingGeneralRow?.jobseeker_id) {
         await query(
-          `INSERT INTO job_seekers (
-            user_id, first_name, last_name, phone, 
-            date_of_birth, gender, nationality, address,
-            profile_photo, registration_type, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+          `UPDATE job_seekers
+           SET first_name = $2,
+               last_name = $3,
+               phone = $4,
+               date_of_birth = $5,
+               gender = $6,
+               nationality = $7,
+               address = $8,
+               profile_photo = $9,
+               registration_type = 'general',
+               updated_at = NOW()
+           WHERE id = $1`,
           [
-            userId,
+            existingGeneralRow.jobseeker_id,
             firstName,
             lastName,
             documentsData?.livePhoneNumber || null,
@@ -524,34 +604,63 @@ router.post('/general', async (req, res) => {
             documentsData?.nationality || null,
             documentsData?.liveAddress || null,
             documentsData?.resume?.photoUrl || null,
-            'general'
           ]
         );
-      } catch (fkErr) {
+      } else {
         try {
-          const u = await query('SELECT id FROM users WHERE email = $1 ORDER BY created_at DESC LIMIT 1', [email]);
-          if (u.rows.length > 0) {
-            userId = u.rows[0].id;
-          } else {
-            const make = await query(
-              `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
-               VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
-              [email, passwordHash]
-            );
-            userId = make.rows[0].id;
-          }
           await query(
-            `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
-             VALUES ($1, $2, $3, 'general', NOW(), NOW())`,
-            [userId, firstName, lastName]
+            `INSERT INTO job_seekers (
+              user_id, first_name, last_name, phone, 
+              date_of_birth, gender, nationality, address,
+              profile_photo, registration_type, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+            [
+              userId,
+              firstName,
+              lastName,
+              documentsData?.livePhoneNumber || null,
+              documentsData?.birthDate || null,
+              documentsData?.gender || null,
+              documentsData?.nationality || null,
+              documentsData?.liveAddress || null,
+              documentsData?.resume?.photoUrl || null,
+              'general'
+            ]
           );
-        } catch {
-        await query(
-          `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, NOW(), NOW())`,
-          [userId, firstName, lastName, 'general']
-        );
+        } catch (fkErr) {
+          try {
+            const u = await query('SELECT id FROM users WHERE email = $1 ORDER BY created_at DESC LIMIT 1', [email]);
+            if (u.rows.length > 0) {
+              userId = u.rows[0].id;
+            } else {
+              const make = await query(
+                `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
+                 VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
+                [email, passwordHash]
+              );
+              userId = make.rows[0].id;
+            }
+            await query(
+              `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+               VALUES ($1, $2, $3, 'general', NOW(), NOW())`,
+              [userId, firstName, lastName]
+            );
+          } catch {
+            await query(
+              `INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+              [userId, firstName, lastName, 'general']
+            );
+          }
         }
+      }
+
+      if (reactivating) {
+        await query(
+          `INSERT INTO job_seeker_status_history (user_id, status, notes)
+           VALUES ($1, 'active', '再登録によりアクティブ化')`,
+          [userId]
+        );
       }
 
       // スキルシートを除外して書類データ保存（失敗しても続行）

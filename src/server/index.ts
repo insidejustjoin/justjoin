@@ -522,10 +522,10 @@ app.put('/api/jobseekers/profile', async (req, res) => {
     
     console.log('プロフィール更新結果:', updateResult);
     
-    res.json({
-      success: true,
+      res.json({
+        success: true,
       message: 'プロフィールを更新しました'
-    });
+      });
     
   } catch (error) {
     console.error('プロフィール更新エラー:', error);
@@ -1799,64 +1799,51 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 app.delete('/api/user/account/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     const { query } = await import('../integrations/postgres/client.js');
-    const { deleteUserDocumentsFromGCS } = await import('../integrations/gcp/storage.js');
-    
-    // まずユーザーが存在することを確認
-    const userResult = await query(`
-      SELECT id, user_type, email
-      FROM users
-      WHERE id = $1
-    `, [userId]);
-    
+
+    const userResult = await query(
+      `
+        SELECT id, user_type, email, status
+        FROM users
+        WHERE id = $1
+      `,
+      [userId]
+    );
+
     if (userResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'ユーザーが見つかりません'
       });
     }
-    
+
     const user = userResult.rows[0];
-    
+
     try {
-      // Cloud Storageからユーザーのドキュメントを削除
-      await deleteUserDocumentsFromGCS(userId);
-      
-      // データベースから関連データを削除
-      // 1. user_documentsから削除
-      await query(`DELETE FROM user_documents WHERE user_id = $1`, [userId]);
-      
-      // 2. 求職者の場合はjob_seekersから削除
       if (user.user_type === 'job_seeker') {
-        await query(`DELETE FROM job_seekers WHERE user_id = $1`, [userId]);
+        await query(
+          `
+            INSERT INTO job_seeker_status_history (user_id, status, withdrawal_date, reason, notes)
+            VALUES ($1, 'withdrawn', NOW(), 'user_self_deleted', 'マイページからの自己削除')
+          `,
+          [userId]
+        );
       }
-      
-      // 3. 企業の場合はcompaniesから削除
-      if (user.user_type === 'company') {
-        await query(`DELETE FROM companies WHERE user_id = $1`, [userId]);
-      }
-      
-      // 4. 最後にusersテーブルから削除
-      const deleteResult = await query(`
-        DELETE FROM users 
-        WHERE id = $1
-      `, [userId]);
-      
-      if (deleteResult.rowCount === 0) {
-        return res.status(500).json({
-          success: false,
-          message: 'ユーザーの削除に失敗しました'
-        });
-      }
-      
-      console.log(`ユーザーアカウント削除成功: ID ${userId}, Email: ${user.email}`);
-      
+
+      await query(
+        `
+          UPDATE users
+          SET status = 'deleted', updated_at = NOW()
+          WHERE id = $1
+        `,
+        [userId]
+      );
+
       res.json({
         success: true,
         message: 'アカウントが正常に削除されました'
       });
-      
     } catch (deletionError) {
       console.error('アカウント削除処理エラー:', deletionError);
       res.status(500).json({
@@ -1864,7 +1851,6 @@ app.delete('/api/user/account/:userId', async (req, res) => {
         message: 'アカウント削除処理中にエラーが発生しました'
       });
     }
-    
   } catch (error) {
     console.error('ユーザーアカウント削除エラー:', error);
     res.status(500).json({
