@@ -1886,14 +1886,58 @@ export function AdminJobSeekers() {
                 <AlertDescription>退会済みの求職者はいません。</AlertDescription>
               </Alert>
             ) : (
-              jobSeekerStatuses.withdrawn.map((jobSeeker) => (
-                <JobSeekerStatusCard
-                  key={jobSeeker.user_id}
-                  jobSeeker={jobSeeker}
-                  onReactivate={() => reactivateJobSeeker(jobSeeker)}
-                  status="withdrawn"
-                />
-              ))
+              <div className="space-y-4">
+                {jobSeekerStatuses.withdrawn.map((jobSeeker) => (
+                  <Card key={jobSeeker.user_id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+                            <UserMinus className="h-6 w-6 text-gray-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-lg">
+                              {jobSeeker.full_name || `${jobSeeker.first_name} ${jobSeeker.last_name}`}
+                            </h3>
+                            <p className="text-gray-600">{jobSeeker.email}</p>
+                            <div className="flex items-center gap-4 mt-2">
+                              <Badge variant="secondary" className="bg-gray-100 text-gray-800">
+                                退会済み
+                              </Badge>
+                              {jobSeeker.withdrawal_date && (
+                                <span className="text-sm text-gray-600">
+                                  退会日: {new Date(jobSeeker.withdrawal_date).toLocaleDateString('ja-JP')}
+                                </span>
+                              )}
+                              {jobSeeker.reason && (
+                                <span className="text-sm text-gray-600">理由: {jobSeeker.reason}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => openStatusModal(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            詳細
+                          </Button>
+                          <Button
+                            onClick={() => reactivateJobSeeker(jobSeeker)}
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700"
+                          >
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            求職者に復帰
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </TabsContent>
         </Tabs>

@@ -35,27 +35,70 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<number | null>(null);
+  const recaptchaRenderRef = useRef<() => void>(() => {});
+  const [isRecaptchaReady, setIsRecaptchaReady] = useState(false);
 
   // v2 明示レンダリング（SPAで自動レンダリングが効かない場合に対応）
   useEffect(() => {
     if (!siteKey) return;
-    const tryRender = () => {
-      try {
-        if (window.grecaptcha && typeof window.grecaptcha.render === 'function' && recaptchaContainerRef.current && widgetIdRef.current === null) {
-          const id = window.grecaptcha.render(recaptchaContainerRef.current, { sitekey: siteKey });
+
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let scriptEl: HTMLScriptElement | null = null;
+    let loadListener: (() => void) | null = null;
+
+    const renderRecaptcha = () => {
+      if (cancelled || widgetIdRef.current !== null || !recaptchaContainerRef.current) return;
+      const grecaptcha = typeof window !== 'undefined' ? window.grecaptcha : undefined;
+      if (!grecaptcha || typeof grecaptcha.render !== 'function' || typeof grecaptcha.ready !== 'function') return;
+
+      grecaptcha.ready(() => {
+        if (cancelled || widgetIdRef.current !== null || !recaptchaContainerRef.current) return;
+        try {
+          const id = grecaptcha.render(recaptchaContainerRef.current as Element, { sitekey: siteKey });
           // @ts-ignore
-          widgetIdRef.current = id as number;
+          widgetIdRef.current = typeof id === 'number' ? id : Number(id);
+          setIsRecaptchaReady(true);
+        } catch (error) {
+          console.warn('reCAPTCHA render error', error);
         }
-      } catch {}
+      });
     };
 
-    // 少し遅延してレンダリングを試みる
-    const t1 = setTimeout(tryRender, 300);
-    // 再試行
-    const t2 = setTimeout(tryRender, 1200);
+    const ensureScript = () => {
+      if (typeof document === 'undefined') return;
+      const existing = document.querySelector<HTMLScriptElement>('script[src^="https://www.google.com/recaptcha/api.js"]');
+      if (existing) {
+        scriptEl = existing;
+        if ((window as any).grecaptcha) {
+          renderRecaptcha();
+        } else {
+          loadListener = () => renderRecaptcha();
+          existing.addEventListener('load', loadListener);
+        }
+      } else {
+        scriptEl = document.createElement('script');
+        scriptEl.src = 'https://www.google.com/recaptcha/api.js?render=explicit&hl=ja';
+        scriptEl.async = true;
+        scriptEl.defer = true;
+        loadListener = () => renderRecaptcha();
+        scriptEl.addEventListener('load', loadListener);
+        document.head.appendChild(scriptEl);
+      }
+    };
+
+    recaptchaRenderRef.current = renderRecaptcha;
+    setIsRecaptchaReady(false);
+    ensureScript();
+    interval = setInterval(renderRecaptcha, 1000);
+
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      if (loadListener && scriptEl) {
+        scriptEl.removeEventListener('load', loadListener);
+      }
+      recaptchaRenderRef.current = () => {};
     };
   }, [siteKey]);
 
@@ -70,10 +113,21 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
       let recaptchaV2Response = '';
       if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
         try {
+          if (!isRecaptchaReady) {
+            throw new Error('reCAPTCHA is not ready yet');
+          }
           // 特定ウィジェットIDがある場合は指定して取得
           // @ts-ignore
-          recaptchaV2Response = widgetIdRef.current !== null ? window.grecaptcha.getResponse(widgetIdRef.current) : window.grecaptcha.getResponse();
-        } catch {}
+          recaptchaV2Response =
+            widgetIdRef.current !== null ? window.grecaptcha.getResponse(widgetIdRef.current) : window.grecaptcha.getResponse();
+        } catch (error) {
+          console.warn('reCAPTCHA v2レスポンス取得に失敗しました', error);
+          setMessage({
+            type: 'error',
+            text: 'reCAPTCHAの初期化中です。数秒後に再度お試しください。'
+          });
+          return;
+        }
       }
       // v3はフォールバックとして取得（将来のスコア評価用）
       let recaptchaToken: string | undefined;
@@ -84,7 +138,10 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
               window.grecaptcha
                 .execute(siteKey, { action: 'register_check' })
                 .then(resolve)
-                .catch(reject);
+                .catch((err) => {
+                  console.error('reCAPTCHA v3実行エラー:', err);
+                  reject(err);
+                });
             });
           });
         } catch (error) {
@@ -213,12 +270,24 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
 
           {/* reCAPTCHA v2 チェックボックス */}
           <div className="my-2 flex justify-center">
-            {siteKey && (
+          {siteKey && (
+            <div className="flex flex-col items-center space-y-2">
               <div ref={recaptchaContainerRef} className="g-recaptcha" data-sitekey={siteKey}></div>
-            )}
+              {!isRecaptchaReady && (
+                <p className="text-xs text-muted-foreground">reCAPTCHAを読み込み中です…</p>
+              )}
+            </div>
+          )}
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isLoading || !isRecaptchaReady}
+          onMouseEnter={() => recaptchaRenderRef.current()}
+          onFocus={() => recaptchaRenderRef.current()}
+          onClick={() => recaptchaRenderRef.current()}
+        >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

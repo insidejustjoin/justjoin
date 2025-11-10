@@ -2,123 +2,155 @@ import { Router } from 'express';
 import { authenticate } from '../authenticate.js';
 import { query } from '../../integrations/postgres/client.js';
 const router = Router();
+const refreshCurrentStatusView = async () => {
+    try {
+        await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY current_job_seeker_status`);
+    }
+    catch (err) {
+        try {
+            await query(`REFRESH MATERIALIZED VIEW current_job_seeker_status`);
+        }
+        catch (err2) {
+            await query(`
+        CREATE OR REPLACE VIEW current_job_seeker_status AS
+        SELECT DISTINCT ON (user_id)
+          user_id,
+          status,
+          company_name,
+          company_url,
+          employment_date,
+          withdrawal_date,
+          reason,
+          notes,
+          created_at,
+          updated_at
+        FROM job_seeker_status_history
+        ORDER BY user_id, created_at DESC
+      `);
+        }
+    }
+};
+let jobSeekerStatusStructuresEnsured = false;
+const ensureJobSeekerStatusStructures = async () => {
+    if (jobSeekerStatusStructuresEnsured)
+        return;
+    try {
+        await query(`
+      CREATE TABLE IF NOT EXISTS job_seeker_status_history (
+        id SERIAL PRIMARY KEY,
+        user_id UUID NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'active',
+        company_name TEXT,
+        company_url TEXT,
+        employment_date DATE,
+        withdrawal_date DATE,
+        reason TEXT,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+        await query(`
+      CREATE INDEX IF NOT EXISTS idx_job_seeker_status_history_user_id_created_at
+        ON job_seeker_status_history (user_id, created_at DESC)
+    `);
+        await query(`
+      CREATE MATERIALIZED VIEW IF NOT EXISTS current_job_seeker_status AS
+      SELECT DISTINCT ON (user_id)
+        user_id,
+        status,
+        company_name,
+        company_url,
+        employment_date,
+        withdrawal_date,
+        reason,
+        notes,
+        created_at,
+        updated_at
+      FROM job_seeker_status_history
+      ORDER BY user_id, created_at DESC
+    `);
+        await refreshCurrentStatusView();
+    }
+    catch (error) {
+        console.warn('job seeker status structure ensure failed:', error);
+    }
+    finally {
+        jobSeekerStatusStructuresEnsured = true;
+    }
+};
 // 求職者ステータス一覧取得（管理者用）
 router.get('/admin/status', authenticate, async (req, res) => {
     try {
+        await ensureJobSeekerStatusStructures();
         const { status } = req.query;
-        // current_job_seeker_statusビューが存在しない場合のフォールバック
-        let sqlQuery = `
-      SELECT 
-        js.user_id as id,
-        js.user_id,
-        js.first_name,
-        js.last_name,
-        u.email,
-        js.phone,
-        js.profile_photo,
-        js.created_at,
-        COALESCE(
-          (SELECT status FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          'active'
-        ) as status,
-        COALESCE(
-          (SELECT company_name FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as company_name,
-        COALESCE(
-          (SELECT company_url FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as company_url,
-        COALESCE(
-          (SELECT employment_date FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as employment_date,
-        COALESCE(
-          (SELECT withdrawal_date FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as withdrawal_date,
-        COALESCE(
-          (SELECT reason FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as reason,
-        COALESCE(
-          (SELECT notes FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as notes,
-        COALESCE(
-          (SELECT updated_at FROM job_seeker_status_history 
-           WHERE user_id = js.user_id 
-           ORDER BY created_at DESC LIMIT 1),
-          js.created_at
-        ) as status_updated_at
-      FROM job_seekers js
-      INNER JOIN users u ON js.user_id = u.id
-      WHERE 1=1
-    `;
+        const allowedStatuses = new Set(['active', 'employed', 'withdrawn']);
+        const statusFilter = typeof status === 'string' && allowedStatuses.has(status) ? status : 'all';
         const params = [];
-        if (status && status !== 'all') {
-            sqlQuery = `
-        SELECT 
+        let whereClause = '';
+        if (statusFilter !== 'all') {
+            params.push(statusFilter);
+            whereClause = `WHERE COALESCE(latest.status, 'active') = $${params.length}`;
+        }
+        const result = await query(`
+        WITH latest AS (
+          SELECT DISTINCT ON (user_id)
+            user_id,
+            status,
+            company_name,
+            company_url,
+            employment_date,
+            withdrawal_date,
+            reason,
+            notes,
+            updated_at
+          FROM job_seeker_status_history
+          ORDER BY user_id, created_at DESC
+        )
+        SELECT
           js.user_id as id,
           js.user_id,
           js.first_name,
           js.last_name,
           u.email,
           js.phone,
-          js.profile_photo,
+          COALESCE(js.profile_photo, doc.document_data -> 'resume' ->> 'photoUrl') AS profile_photo,
           js.created_at,
-          jsh.status,
-          jsh.company_name,
-          jsh.company_url,
-          jsh.employment_date,
-          jsh.withdrawal_date,
-          jsh.reason,
-          jsh.notes,
-          jsh.updated_at as status_updated_at
+          COALESCE(latest.status, 'active') as status,
+          latest.company_name,
+          latest.company_url,
+          latest.employment_date,
+          latest.withdrawal_date,
+          latest.reason,
+          latest.notes,
+          COALESCE(latest.updated_at, js.created_at) as status_updated_at
         FROM job_seekers js
         INNER JOIN users u ON js.user_id = u.id
-        INNER JOIN (
-          SELECT DISTINCT ON (user_id) 
-            user_id, status, company_name, company_url, 
-            employment_date, withdrawal_date, reason, notes, updated_at
-          FROM job_seeker_status_history
-          WHERE status = $${params.length + 1}
-          ORDER BY user_id, created_at DESC
-        ) jsh ON js.user_id = jsh.user_id
-        WHERE 1=1
-      `;
-            params.push(status);
-        }
-        sqlQuery += ` ORDER BY status_updated_at DESC, js.created_at DESC`;
-        const result = await query(sqlQuery, params);
+        LEFT JOIN latest ON latest.user_id = js.user_id
+        LEFT JOIN LATERAL (
+          SELECT document_data
+          FROM user_documents ud
+          WHERE ud.user_id = js.user_id
+          ORDER BY ud.updated_at DESC
+          LIMIT 1
+        ) doc ON TRUE
+        ${whereClause}
+        ORDER BY status_updated_at DESC, js.created_at DESC
+      `, params);
         res.json({
             success: true,
-            data: result.rows
+            data: result.rows,
         });
     }
     catch (error) {
         console.error('求職者ステータス取得エラー:', error);
-        // 暫定復旧: 空配列で成功扱い
         res.json({ success: true, data: [] });
     }
 });
 // 求職者を就職済みに変更
 router.post('/admin/employ/:userId', authenticate, async (req, res) => {
     try {
+        await ensureJobSeekerStatusStructures();
         const { userId } = req.params;
         const { company_name, company_url, employment_date } = req.body;
         console.log('就職済み変更リクエスト:', { userId, company_name, employment_date });
@@ -158,6 +190,7 @@ router.post('/admin/employ/:userId', authenticate, async (req, res) => {
 // 求職者を退会済みに変更
 router.post('/admin/withdraw/:userId', authenticate, async (req, res) => {
     try {
+        await ensureJobSeekerStatusStructures();
         const { userId } = req.params;
         const { reason, withdrawal_date } = req.body;
         console.log('退会済み変更リクエスト:', { userId, reason, withdrawal_date });
@@ -197,6 +230,7 @@ router.post('/admin/withdraw/:userId', authenticate, async (req, res) => {
 // 求職者を復帰（アクティブ）に変更
 router.post('/admin/reactivate/:userId', authenticate, async (req, res) => {
     try {
+        await ensureJobSeekerStatusStructures();
         const { userId } = req.params;
         const { notes } = req.body;
         console.log('復帰変更リクエスト:', { userId, notes });
@@ -233,6 +267,7 @@ router.post('/admin/reactivate/:userId', authenticate, async (req, res) => {
 // 求職者ステータス履歴取得
 router.get('/admin/history/:userId', authenticate, async (req, res) => {
     try {
+        await ensureJobSeekerStatusStructures();
         const { userId } = req.params;
         const result = await query(`
       SELECT 
@@ -263,6 +298,7 @@ router.get('/admin/history/:userId', authenticate, async (req, res) => {
 // 求職者ステータス統計取得
 router.get('/admin/statistics', authenticate, async (req, res) => {
     try {
+        await ensureJobSeekerStatusStructures();
         const result = await query(`
       SELECT 
         status,

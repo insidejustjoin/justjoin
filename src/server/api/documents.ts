@@ -15,6 +15,124 @@ type RegistrationType = 'engineer' | 'general';
 const normalizeRegistrationType = (value?: string | null): RegistrationType =>
   value === 'general' ? 'general' : 'engineer';
 
+const sanitizeString = (value: any): string | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  return String(value);
+};
+
+const extractJobSeekerProfile = (data: any = {}) => {
+  const resumeBasic = data?.resume?.basicInfo || {};
+
+  const firstName = data.firstName ?? resumeBasic.firstName;
+  const lastName = data.lastName ?? resumeBasic.lastName;
+  const phone = data.livePhoneNumber ?? resumeBasic.phone;
+  const dateOfBirth = data.birthDate ?? resumeBasic.dateOfBirth;
+  const gender = data.gender ?? resumeBasic.gender;
+  const nationality = data.nationality ?? resumeBasic.nationality;
+  const address = data.liveAddress ?? resumeBasic.address;
+  const photo = data?.resume?.photoUrl;
+
+  return {
+    firstName: sanitizeString(firstName),
+    lastName: sanitizeString(lastName),
+    phone: sanitizeString(phone),
+    dateOfBirth: sanitizeString(dateOfBirth),
+    gender: sanitizeString(gender),
+    nationality: sanitizeString(nationality),
+    address: sanitizeString(address),
+    profilePhoto: typeof photo === 'string' && photo.trim().length > 0 ? photo.trim() : null,
+  };
+};
+
+const upsertJobSeekerProfile = async (
+  userId: string,
+  registrationType: RegistrationType,
+  completionRate: number | null,
+  documentData?: any
+) => {
+  try {
+    const normalizedCompletion =
+      typeof completionRate === 'number' && !Number.isNaN(completionRate) ? completionRate : 0;
+    const profile = extractJobSeekerProfile(documentData);
+    const targetRegistration = normalizeRegistrationType(registrationType);
+
+    const updateResult = await query(
+      `
+        UPDATE job_seekers
+        SET completion_rate = $1,
+            first_name = COALESCE($2, first_name),
+            last_name = COALESCE($3, last_name),
+            phone = COALESCE($4, phone),
+            date_of_birth = COALESCE($5, date_of_birth),
+            gender = COALESCE($6, gender),
+            nationality = COALESCE($7, nationality),
+            address = COALESCE($8, address),
+            profile_photo = COALESCE($9, profile_photo),
+            registration_type = LOWER($11),
+            updated_at = NOW()
+        WHERE user_id = $10
+          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($11)
+        RETURNING id
+      `,
+      [
+        normalizedCompletion,
+        profile.firstName,
+        profile.lastName,
+        profile.phone,
+        profile.dateOfBirth,
+        profile.gender,
+        profile.nationality,
+        profile.address,
+        profile.profilePhoto,
+        userId,
+        targetRegistration,
+      ]
+    );
+
+    if (updateResult.rowCount === 0) {
+      await query(
+        `
+          INSERT INTO job_seekers (
+            user_id,
+            first_name,
+            last_name,
+            phone,
+            date_of_birth,
+            gender,
+            nationality,
+            address,
+            profile_photo,
+            registration_type,
+            completion_rate,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, LOWER($10), $11, NOW(), NOW())
+        `,
+        [
+          userId,
+          profile.firstName,
+          profile.lastName,
+          profile.phone,
+          profile.dateOfBirth,
+          profile.gender,
+          profile.nationality,
+          profile.address,
+          profile.profilePhoto,
+          targetRegistration,
+          normalizedCompletion,
+        ]
+      );
+    }
+  } catch (error) {
+    console.warn('job_seeker upsert skipped:', (error as any)?.message || error);
+  }
+};
+
 let userDocumentsRegistrationTypeEnsured = false;
 const ensureUserDocumentsRegistrationTypeColumn = async () => {
   if (userDocumentsRegistrationTypeEnsured) return;
@@ -378,21 +496,12 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
         ]);
       }
 
-      // 完成度を計算して更新
-      let completionRate = 0;
+      // 完成度を計算し、job_seekersテーブルに反映
+      let completionRate: number | null = null;
       if (documentType === 'resume' || documentType === 'jobseeker_documents' || documentType === 'all') {
         completionRate = calculateCompletionRate(normalizedData);
-        // job_seekersテーブルのcompletion_rateを更新
-        await query(
-          `
-            UPDATE job_seekers 
-            SET completion_rate = $1, updated_at = NOW() 
-            WHERE user_id = $2 
-              AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
-          `,
-          [completionRate, userIdStr, normalizedRegistrationType]
-        );
       }
+      await upsertJobSeekerProfile(userIdStr, normalizedRegistrationType, completionRate, normalizedData);
 
       logger.info(
         '書類保存成功（データベース）',
@@ -863,21 +972,18 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
 
       const docResult = await query(docSql, docParams);
       if (docResult.rows.length > 0 && docResult.rows[0].document_data) {
-        const docRegistrationType = docResult.rows[0].registration_type || registrationTypeFilter || 'engineer';
+        const docRegistrationType = normalizeRegistrationType(
+          docResult.rows[0].registration_type || registrationTypeFilter || 'engineer'
+        );
         const calculated = calculateCompletionRate(docResult.rows[0].document_data);
         if (calculated !== completionRate) {
           completionRate = calculated;
           recalculated = true;
-          await query(
-            `
-              UPDATE job_seekers
-              SET completion_rate = $1, updated_at = NOW()
-              WHERE user_id = $2
-                AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
-            `,
-            [completionRate, userId, docRegistrationType]
-          );
         }
+        await upsertJobSeekerProfile(String(userId), docRegistrationType, completionRate, docResult.rows[0].document_data);
+      } else if (registrationTypeFilter) {
+        // ドキュメントが存在しない場合でも、レコードがなければ作成しておく
+        await upsertJobSeekerProfile(String(userId), registrationTypeFilter, completionRate, null);
       }
     } catch (recalcError) {
       console.warn('completion rate recalculation skipped:', recalcError);

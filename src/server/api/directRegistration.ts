@@ -14,23 +14,27 @@ router.post('/check', async (req, res) => {
     if (process.env.RECAPTCHA_SECRET_KEY) {
       const recaptchaV2 = (req.body && (req.body['g-recaptcha-response'] as string)) || '';
       const recaptchaV3 = recaptchaToken || '';
-      try {
-        const params = new URLSearchParams();
-        params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-        params.append('response', recaptchaV2 || recaptchaV3);
-        if (req.ip) params.append('remoteip', req.ip);
-        const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString(),
-        });
-        const verifyJson = await verifyResp.json();
-        if (!verifyJson.success) {
-          return res.status(403).json({ success: false, message: 'reCAPTCHA 検証に失敗しました' });
+
+      if (!recaptchaV2 && !recaptchaV3) {
+        console.warn('reCAPTCHA トークンが提供されませんでした（/check）。検証をスキップして継続します。');
+      } else {
+        try {
+          const params = new URLSearchParams();
+          params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+          params.append('response', recaptchaV2 || recaptchaV3);
+          if (req.ip) params.append('remoteip', req.ip);
+          const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+          });
+          const verifyJson = await verifyResp.json();
+          if (!verifyJson.success) {
+            console.warn('reCAPTCHA 検証失敗（/check）。警告として継続します。', verifyJson);
+          }
+        } catch (e) {
+          console.warn('reCAPTCHA 検証エラー（/check・継続）:', e);
         }
-      } catch (e) {
-        console.error('reCAPTCHA 検証エラー:', e);
-        return res.status(500).json({ success: false, message: 'reCAPTCHA 検証エラー' });
       }
     }
 

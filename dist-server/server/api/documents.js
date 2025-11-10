@@ -9,6 +9,107 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const normalizeRegistrationType = (value) => value === 'general' ? 'general' : 'engineer';
+const sanitizeString = (value) => {
+    if (value === undefined || value === null)
+        return null;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : null;
+    }
+    return String(value);
+};
+const extractJobSeekerProfile = (data = {}) => {
+    const resumeBasic = data?.resume?.basicInfo || {};
+    const firstName = data.firstName ?? resumeBasic.firstName;
+    const lastName = data.lastName ?? resumeBasic.lastName;
+    const phone = data.livePhoneNumber ?? resumeBasic.phone;
+    const dateOfBirth = data.birthDate ?? resumeBasic.dateOfBirth;
+    const gender = data.gender ?? resumeBasic.gender;
+    const nationality = data.nationality ?? resumeBasic.nationality;
+    const address = data.liveAddress ?? resumeBasic.address;
+    const photo = data?.resume?.photoUrl;
+    return {
+        firstName: sanitizeString(firstName),
+        lastName: sanitizeString(lastName),
+        phone: sanitizeString(phone),
+        dateOfBirth: sanitizeString(dateOfBirth),
+        gender: sanitizeString(gender),
+        nationality: sanitizeString(nationality),
+        address: sanitizeString(address),
+        profilePhoto: typeof photo === 'string' && photo.trim().length > 0 ? photo.trim() : null,
+    };
+};
+const upsertJobSeekerProfile = async (userId, registrationType, completionRate, documentData) => {
+    try {
+        const normalizedCompletion = typeof completionRate === 'number' && !Number.isNaN(completionRate) ? completionRate : 0;
+        const profile = extractJobSeekerProfile(documentData);
+        const targetRegistration = normalizeRegistrationType(registrationType);
+        const updateResult = await query(`
+        UPDATE job_seekers
+        SET completion_rate = $1,
+            first_name = COALESCE($2, first_name),
+            last_name = COALESCE($3, last_name),
+            phone = COALESCE($4, phone),
+            date_of_birth = COALESCE($5, date_of_birth),
+            gender = COALESCE($6, gender),
+            nationality = COALESCE($7, nationality),
+            address = COALESCE($8, address),
+            profile_photo = COALESCE($9, profile_photo),
+            registration_type = LOWER($11),
+            updated_at = NOW()
+        WHERE user_id = $10
+          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($11)
+        RETURNING id
+      `, [
+            normalizedCompletion,
+            profile.firstName,
+            profile.lastName,
+            profile.phone,
+            profile.dateOfBirth,
+            profile.gender,
+            profile.nationality,
+            profile.address,
+            profile.profilePhoto,
+            userId,
+            targetRegistration,
+        ]);
+        if (updateResult.rowCount === 0) {
+            await query(`
+          INSERT INTO job_seekers (
+            user_id,
+            first_name,
+            last_name,
+            phone,
+            date_of_birth,
+            gender,
+            nationality,
+            address,
+            profile_photo,
+            registration_type,
+            completion_rate,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, LOWER($10), $11, NOW(), NOW())
+        `, [
+                userId,
+                profile.firstName,
+                profile.lastName,
+                profile.phone,
+                profile.dateOfBirth,
+                profile.gender,
+                profile.nationality,
+                profile.address,
+                profile.profilePhoto,
+                targetRegistration,
+                normalizedCompletion,
+            ]);
+        }
+    }
+    catch (error) {
+        console.warn('job_seeker upsert skipped:', error?.message || error);
+    }
+};
 let userDocumentsRegistrationTypeEnsured = false;
 const ensureUserDocumentsRegistrationTypeColumn = async () => {
     if (userDocumentsRegistrationTypeEnsured)
@@ -288,7 +389,7 @@ router.post('/', async (req, res) => {
         FROM user_documents 
         WHERE user_id = $1 
           AND document_type = $2 
-          AND COALESCE(registration_type, 'engineer') = $3
+          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
         ORDER BY created_at DESC 
         LIMIT 1
       `;
@@ -323,18 +424,12 @@ router.post('/', async (req, res) => {
                     now,
                 ]);
             }
-            // 完成度を計算して更新
-            let completionRate = 0;
+            // 完成度を計算し、job_seekersテーブルに反映
+            let completionRate = null;
             if (documentType === 'resume' || documentType === 'jobseeker_documents' || documentType === 'all') {
                 completionRate = calculateCompletionRate(normalizedData);
-                // job_seekersテーブルのcompletion_rateを更新
-                await query(`
-            UPDATE job_seekers 
-            SET completion_rate = $1, updated_at = NOW() 
-            WHERE user_id = $2 
-              AND COALESCE(registration_type, 'engineer') = $3
-          `, [completionRate, userIdStr, normalizedRegistrationType]);
             }
+            await upsertJobSeekerProfile(userIdStr, normalizedRegistrationType, completionRate, normalizedData);
             logger.info('書類保存成功（データベース）', { userId: userIdStr, documentType, completionRate, registrationType: normalizedRegistrationType }, undefined, 'api_success');
         }
         catch (dbError) {
@@ -378,7 +473,7 @@ router.get('/:userId', async (req, res) => {
     `;
         if (registrationTypeFilter) {
             params.push(registrationTypeFilter);
-            sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length}`;
+            sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length})`;
         }
         sql += ' ORDER BY created_at ASC';
         const result = await query(sql, params);
@@ -479,7 +574,7 @@ router.get('/', async (req, res) => {
             const params = [userId];
             if (registrationTypeFilter) {
                 params.push(registrationTypeFilter);
-                queryText += ` AND COALESCE(registration_type, 'engineer') = $${params.length}`;
+                queryText += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length})`;
             }
             queryText += ' ORDER BY updated_at DESC LIMIT 1';
             const result = await query(queryText, params);
@@ -531,7 +626,7 @@ router.delete('/:userId', async (req, res) => {
             const params = [userId];
             if (typeof registrationType === 'string') {
                 const normalized = normalizeRegistrationType(registrationType);
-                deleteQuery += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+                deleteQuery += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
                 params.push(normalized);
             }
             await query(deleteQuery, params);
@@ -671,7 +766,7 @@ router.post('/jobseekers/documents', async (req, res) => {
         FROM user_documents 
         WHERE user_id = $1 
           AND document_type = $2
-          AND COALESCE(registration_type, 'engineer') = $3
+          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
       `, [userIdStr, 'jobseeker_documents', normalizedRegistrationType]);
         if (existingData.rows.length > 0) {
             // 既存データを更新
@@ -679,7 +774,7 @@ router.post('/jobseekers/documents', async (req, res) => {
           UPDATE user_documents 
           SET document_data = $1, updated_at = NOW(), registration_type = $4
           WHERE user_id = $2 AND document_type = $3
-            AND COALESCE(registration_type, 'engineer') = $4
+            AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($4)
         `, [JSON.stringify(documentData), userIdStr, 'jobseeker_documents', normalizedRegistrationType]);
         }
         else {
@@ -694,7 +789,7 @@ router.post('/jobseekers/documents', async (req, res) => {
         UPDATE job_seekers 
         SET completion_rate = $1, updated_at = NOW() 
         WHERE user_id = $2 
-          AND COALESCE(registration_type, 'engineer') = $3
+          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
       `, [completionRate, userIdStr, normalizedRegistrationType]);
         res.json({ success: true, message: '書類データを保存しました', completionRate });
     }
@@ -716,22 +811,50 @@ router.get('/jobseekers/completion-rate/:userId', async (req, res) => {
         let sql = 'SELECT completion_rate FROM job_seekers WHERE user_id = $1';
         const params = [userId];
         if (registrationTypeFilter) {
-            sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+            sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
             params.push(registrationTypeFilter);
         }
         const result = await query(sql, params);
-        if (result.rows.length > 0) {
-            res.json({
-                success: true,
-                completionRate: result.rows[0].completion_rate || 0
-            });
+        let completionRate = result.rows.length > 0 ? result.rows[0].completion_rate : null;
+        let recalculated = false;
+        if (completionRate === null || typeof completionRate !== 'number' || Number.isNaN(completionRate)) {
+            completionRate = 0;
         }
-        else {
-            res.json({
-                success: true,
-                completionRate: 0
-            });
+        try {
+            const docParams = [userId];
+            let docSql = `
+        SELECT document_data, COALESCE(registration_type, 'engineer') AS registration_type
+        FROM user_documents
+        WHERE user_id = $1
+      `;
+            if (registrationTypeFilter) {
+                docSql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${docParams.length + 1})`;
+                docParams.push(registrationTypeFilter);
+            }
+            docSql += ' ORDER BY updated_at DESC LIMIT 1';
+            const docResult = await query(docSql, docParams);
+            if (docResult.rows.length > 0 && docResult.rows[0].document_data) {
+                const docRegistrationType = normalizeRegistrationType(docResult.rows[0].registration_type || registrationTypeFilter || 'engineer');
+                const calculated = calculateCompletionRate(docResult.rows[0].document_data);
+                if (calculated !== completionRate) {
+                    completionRate = calculated;
+                    recalculated = true;
+                }
+                await upsertJobSeekerProfile(String(userId), docRegistrationType, completionRate, docResult.rows[0].document_data);
+            }
+            else if (registrationTypeFilter) {
+                // ドキュメントが存在しない場合でも、レコードがなければ作成しておく
+                await upsertJobSeekerProfile(String(userId), registrationTypeFilter, completionRate, null);
+            }
         }
+        catch (recalcError) {
+            console.warn('completion rate recalculation skipped:', recalcError);
+        }
+        res.json({
+            success: true,
+            completionRate: completionRate || 0,
+            recalculated
+        });
     }
     catch (error) {
         console.error('入力率取得エラー:', error);
@@ -1244,7 +1367,7 @@ router.post('/', async (req, res) => {
         FROM user_documents 
         WHERE user_id = $1 
           AND document_type = $2 
-          AND COALESCE(registration_type, 'engineer') = $3
+          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
         ORDER BY created_at DESC 
         LIMIT 1
       `, [userIdStr, documentType, normalizedRegistrationType]);
@@ -1286,7 +1409,7 @@ router.get('/documents/:userId', async (req, res) => {
             params.push(documentType);
         }
         if (registrationType && typeof registrationType === 'string') {
-            sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+            sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
             params.push(normalizeRegistrationType(registrationType));
         }
         sql += ' ORDER BY created_at DESC';
@@ -1311,7 +1434,7 @@ router.delete('/documents/:userId', async (req, res) => {
             params.push(documentType);
         }
         if (registrationType && typeof registrationType === 'string') {
-            sql += ` AND COALESCE(registration_type, 'engineer') = $${params.length + 1}`;
+            sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
             params.push(normalizeRegistrationType(registrationType));
         }
         await query(sql, params);

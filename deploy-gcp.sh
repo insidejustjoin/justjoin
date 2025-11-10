@@ -61,14 +61,14 @@ if docker ps >/dev/null 2>&1; then
     docker buildx build --platform linux/amd64 -f Dockerfile.gcp \
         -t $IMAGE_TAG . --push
     rm -f Dockerfile .env.production
-    if [ $? -ne 0 ]; then
+if [ $? -ne 0 ]; then
         echo "⚠️  ローカルDockerビルドに失敗、Cloud Buildにフォールバック..."
         # Cloud Buildにフォールバック
         cp Dockerfile.gcp Dockerfile
         gcloud builds submit --tag $IMAGE_TAG --timeout=1800 . || {
             echo "❌ Cloud Buildにも失敗しました"
             rm -f Dockerfile .env.production
-            exit 1
+    exit 1
         }
         rm -f Dockerfile .env.production
     fi
@@ -78,7 +78,7 @@ else
     gcloud builds submit --tag $IMAGE_TAG --timeout=1800 . || {
         echo "❌ Cloud Buildに失敗しました"
         rm -f Dockerfile .env.production
-        exit 1
+    exit 1
     }
     rm -f Dockerfile .env.production
 fi

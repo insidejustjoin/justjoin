@@ -49,6 +49,8 @@ export function EmployerLogin() {
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<number | null>(null);
+  const recaptchaRenderRef = useRef<() => void>(() => {});
+  const [isRecaptchaReady, setIsRecaptchaReady] = useState(false);
 
   // 動的バリデーションメッセージ
   const loginSchemaWithTranslation = z.object({
@@ -71,35 +73,75 @@ export function EmployerLogin() {
   });
 
   useEffect(() => {
-    if (!siteKey || widgetIdRef.current !== null) return;
-    const tryRender = () => {
-      try {
-        if (
-          typeof window !== 'undefined' &&
-          window.grecaptcha &&
-          typeof window.grecaptcha.render === 'function' &&
-          recaptchaContainerRef.current &&
-          widgetIdRef.current === null
-        ) {
-          const id = window.grecaptcha.render(recaptchaContainerRef.current, { sitekey: siteKey });
-          // @ts-ignore
-          widgetIdRef.current = id as number;
+    if (!siteKey) return;
+
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let scriptEl: HTMLScriptElement | null = null;
+    let loadListener: (() => void) | null = null;
+
+    const renderRecaptcha = () => {
+      if (cancelled || widgetIdRef.current !== null || !recaptchaContainerRef.current) return;
+      const grecaptcha = typeof window !== 'undefined' ? window.grecaptcha : undefined;
+      if (!grecaptcha || typeof grecaptcha.render !== 'function' || typeof grecaptcha.ready !== 'function') return;
+
+      grecaptcha.ready(() => {
+        if (cancelled || widgetIdRef.current !== null || !recaptchaContainerRef.current) return;
+        try {
+          const id = grecaptcha.render(recaptchaContainerRef.current as Element, { sitekey: siteKey });
+          widgetIdRef.current = typeof id === 'number' ? id : Number(id);
+          setIsRecaptchaReady(true);
+        } catch (error) {
+          console.warn('reCAPTCHA v2レンダリングに失敗しました', error);
         }
-      } catch (error) {
-        console.warn('reCAPTCHA v2レンダリングに失敗しました', error);
+      });
+    };
+
+    const ensureScript = () => {
+      if (typeof document === 'undefined') return;
+      const existing = document.querySelector<HTMLScriptElement>('script[src^="https://www.google.com/recaptcha/api.js"]');
+      if (existing) {
+        scriptEl = existing;
+        if ((window as any).grecaptcha) {
+          renderRecaptcha();
+        } else {
+          loadListener = () => renderRecaptcha();
+          existing.addEventListener('load', loadListener);
+        }
+      } else {
+        scriptEl = document.createElement('script');
+        scriptEl.src = 'https://www.google.com/recaptcha/api.js?render=explicit&hl=ja';
+        scriptEl.async = true;
+        scriptEl.defer = true;
+        loadListener = () => renderRecaptcha();
+        scriptEl.addEventListener('load', loadListener);
+        document.head.appendChild(scriptEl);
       }
     };
-    const t1 = setTimeout(tryRender, 300);
-    const t2 = setTimeout(tryRender, 1200);
+
+    recaptchaRenderRef.current = renderRecaptcha;
+    setIsRecaptchaReady(false);
+    ensureScript();
+    interval = setInterval(renderRecaptcha, 1000);
+
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      if (loadListener && scriptEl) {
+        scriptEl.removeEventListener('load', loadListener);
+      }
+      recaptchaRenderRef.current = () => {};
     };
   }, [siteKey]);
 
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
+      if (!isRecaptchaReady) {
+        toast.error('reCAPTCHAが初期化中です。数秒後に再度お試しください。');
+        return;
+      }
+
       let recaptchaV2Response = '';
       if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
         try {
@@ -109,6 +151,8 @@ export function EmployerLogin() {
               : window.grecaptcha.getResponse();
         } catch (error) {
           console.warn('reCAPTCHA v2レスポンス取得に失敗しました', error);
+          toast.error('reCAPTCHAの取得に失敗しました。ページを再読み込みしてお試しください。');
+          return;
         }
         if (!recaptchaV2Response) {
           toast.error('reCAPTCHAを完了してください');
@@ -126,6 +170,8 @@ export function EmployerLogin() {
           window.grecaptcha.reset(widgetIdRef.current);
         } catch (error) {
           console.warn('reCAPTCHAリセットに失敗しました', error);
+        } finally {
+          setIsRecaptchaReady(true);
         }
       }
       setIsLoading(false);
@@ -241,16 +287,30 @@ export function EmployerLogin() {
                   </div>
 
                   {siteKey && (
-                    <div className="flex justify-center">
+                    <div
+                      className="flex flex-col items-center space-y-2"
+                      onMouseEnter={() => recaptchaRenderRef.current()}
+                      onFocus={() => recaptchaRenderRef.current()}
+                    >
                       <div
                         ref={recaptchaContainerRef}
                         className="g-recaptcha"
                         data-sitekey={siteKey}
                       />
+                      {!isRecaptchaReady && (
+                        <p className="text-xs text-muted-foreground">reCAPTCHAを読み込み中です…</p>
+                      )}
                     </div>
                   )}
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isLoading || !isRecaptchaReady}
+                    onMouseEnter={() => recaptchaRenderRef.current()}
+                    onFocus={() => recaptchaRenderRef.current()}
+                    onClick={() => recaptchaRenderRef.current()}
+                  >
                     {isLoading ? t('auth.loggingIn') : t('auth.loginButton')}
                   </Button>
 

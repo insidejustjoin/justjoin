@@ -522,8 +522,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     
     // 登録モードでは日本語資格関連は任意
     if (!isRegistrationMode) {
-      if (!japaneseLevel && !isNone) missingFields.push('日本語資格');
-      if (!qualificationDate && !isNone) missingFields.push('資格取得日');
+    if (!japaneseLevel && !isNone) missingFields.push('日本語資格');
+    if (!qualificationDate && !isNone) missingFields.push('資格取得日');
     }
     
     console.log('チェック後の値:', { japaneseLevel, qualificationDate, certName, isNone });
@@ -1537,7 +1537,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       } else {
         setLastSavedAt(null);
       }
-
+      
       if (!result.success) {
         // データが見つからない場合は正常な状態として扱う（初回利用の可能性）
         if (result.message === '書類が見つかりません') {
@@ -4215,7 +4215,7 @@ whiteCells.forEach(cell => {
                   }
 
                   // 旧仮登録システム用の保存（registrationTokenがある場合のみ）
-                  if (registrationToken) {
+                    if (registrationToken) {
                     try {
                       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
                       const saveResponse = await fetch(`${apiUrl}/api/register/update-documents/${registrationToken}`, {
@@ -4230,9 +4230,9 @@ whiteCells.forEach(cell => {
                         console.log('書類データがデータベースに保存されました');
                       } else {
                         console.error('書類データ保存エラー:', saveResponse.status);
-                      }
-                    } catch (error) {
-                      console.error('書類データ保存エラー:', error);
+                    }
+                  } catch (error) {
+                    console.error('書類データ保存エラー:', error);
                     }
                   }
                   

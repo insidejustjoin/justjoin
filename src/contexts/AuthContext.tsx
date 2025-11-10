@@ -322,7 +322,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         } else if (Array.isArray(result.registrationTypes) && result.registrationTypes.length === 1) {
           localStorage.setItem('job_seeker_registration_preference', result.registrationTypes[0]);
         }
-
+        
         console.log('認証状態更新完了');
         console.log('保存されたJWTトークン:', localStorage.getItem('auth_token'));
         toast.success(`${userType === 'job_seeker' ? '求職者' : userType === 'company' ? '企業' : '管理者'}としてログインしました`);
