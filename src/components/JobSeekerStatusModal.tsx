@@ -12,7 +12,7 @@ interface JobSeekerStatusModalProps {
   isOpen: boolean;
   onClose: () => void;
   jobSeeker: any;
-  onStatusChange: () => void;
+  onStatusChange: (nextTab?: 'active' | 'employed' | 'withdrawn') => void;
 }
 
 type StatusAction = 'employ' | 'withdraw' | 'reactivate';
@@ -23,7 +23,8 @@ export function JobSeekerStatusModal({
   jobSeeker, 
   onStatusChange 
 }: JobSeekerStatusModalProps) {
-  const [action, setAction] = useState<StatusAction>('employ');
+  // 既定で何も選択しない（「就職済み」がデフォルトにならないようにする）
+  const [action, setAction] = useState<StatusAction | ''>('');
   const [loading, setLoading] = useState(false);
   
   // 就職済み用の状態
@@ -103,6 +104,13 @@ export function JobSeekerStatusModal({
             notes: reactivateNotes
           };
           break;
+        default:
+          toast({
+            title: "エラー",
+            description: "実行するアクションを選択してください",
+            variant: "destructive",
+          });
+          return;
       }
 
       const response = await fetch(`${apiUrl}${endpoint}`, {
@@ -132,8 +140,11 @@ export function JobSeekerStatusModal({
       // モーダルを閉じる
       onClose();
       
-      // 親コンポーネントに変更を通知
-      onStatusChange();
+      // 親コンポーネントに変更を通知（次に開くべきタブを示す）
+      if (action === 'employ') onStatusChange('employed');
+      else if (action === 'withdraw') onStatusChange('withdrawn');
+      else if (action === 'reactivate') onStatusChange('active');
+      else onStatusChange();
 
     } catch (error) {
       console.error('ステータス変更エラー:', error);
@@ -208,9 +219,9 @@ export function JobSeekerStatusModal({
           {/* アクション選択 */}
           <div className="space-y-2">
             <Label>アクション</Label>
-            <Select value={action} onValueChange={(value: StatusAction) => setAction(value)}>
+            <Select value={action || undefined} onValueChange={(value: StatusAction) => setAction(value)}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="アクションを選択" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="employ">就職済みに変更</SelectItem>
@@ -341,7 +352,7 @@ export function JobSeekerStatusModal({
         <div className="flex gap-2 pt-4">
           <Button
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || !action || (action === 'employ' && (!companyName || !employmentDate)) || (action === 'withdraw' && !withdrawalDate)}
             className="flex-1"
           >
             {loading ? '処理中...' : '確定'}

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type Language = 'ja' | 'en';
+export type Language = 'ja' | 'en' | 'ru' | 'uz';
 
 interface LanguageContextType {
   language: Language;
@@ -197,8 +197,7 @@ const translations: Translations = {
     // プロフィール完成度関連
     'profileCompletion.title': 'プロフィール完成度',
     'profileCompletion.description': '現在のプロフィール完成度は{rate}%です。プロフィールを完成させることで、より良い求人とのマッチングが可能になります。',
-    'profileCompletion.later': '後で',
-    'profileCompletion.completeNow': '今すぐ完了',
+    
     
     // スキルシート関連
     'skills.os.windows': 'Windows',
@@ -763,6 +762,11 @@ const translations: Translations = {
     'profileCompletion.basicComplete': '基本的な情報が入力されています',
     'profileCompletion.almostDone': 'あと少しで完成です',
     'profileCompletion.perfect': '完璧です！',
+    // Completion modal
+    'profileCompletion.modalTitle': 'プロフィール完成度',
+    'profileCompletion.modalMessagePrefix': '現在のプロフィール完成度は',
+    'profileCompletion.modalMessageSuffix': '%です。プロフィールを完成させることで、より良い求人とのマッチングが可能になります。',
+    'profileCompletion.completeNow': '今すぐ完了',
     
     // エラー・メッセージ
     'error.loginFailed': 'ログインに失敗しました',
@@ -951,6 +955,13 @@ const translations: Translations = {
     'commercial.section4.content': 'サービスに関するお問い合わせは、以下の連絡先までお願いいたします。',
     'commercial.section4.content2': 'メール: inside.justjoin@gmail.com',
     'commercial.footer': 'この特定商取引法に基づく表記は2025年7月7日に制定されました。',
+    // Login target
+    'auth.loginTarget': 'ログイン対象',
+    'auth.engineer': 'エンジニア',
+    'auth.general': '一般職',
+    'auth.loginTargetNote': '同じメールアドレスで複数タイプが登録されている場合は、選択したマイページが開きます。',
+    'auth.goToRegisterPage': '新規登録ページへ移動します',
+    'auth.goToRegister': '新規登録へ',
   },
   en: {
     // Common
@@ -1120,8 +1131,7 @@ const translations: Translations = {
     // Profile Completion
     'profileCompletion.title': 'Profile Completion',
     'profileCompletion.description': 'Your current profile completion rate is {rate}%. Completing your profile will enable better job matching.',
-    'profileCompletion.later': 'Later',
-    'profileCompletion.completeNow': 'Complete Now',
+    
     
     // Skills Sheet
     'skills.os.windows': 'Windows',
@@ -1683,6 +1693,11 @@ const translations: Translations = {
     'profileCompletion.basicComplete': 'Basic information has been entered',
     'profileCompletion.almostDone': 'Almost done',
     'profileCompletion.perfect': 'Perfect!',
+    // Completion modal
+    'profileCompletion.modalTitle': 'Profile Completion',
+    'profileCompletion.modalMessagePrefix': 'Your current profile completion rate is ',
+    'profileCompletion.modalMessageSuffix': '%. Completing your profile will enable better job matching.',
+    'profileCompletion.completeNow': 'Complete Now',
     
     // Error & Messages
     'error.loginFailed': 'Login failed',
@@ -1871,7 +1886,179 @@ const translations: Translations = {
     'commercial.section4.content': 'For inquiries about our services, please contact us at the following address.',
     'commercial.section4.content2': 'Email: inside.justjoin@gmail.com',
     'commercial.footer': 'This Commercial Transaction Law Notice was established on July 7, 2025.',
+    // Login target
+    'auth.loginTarget': 'Login as',
+    'auth.engineer': 'Engineer',
+    'auth.general': 'General',
+    'auth.loginTargetNote': 'If multiple types exist for this email, the selected My Page will open.',
+    'auth.goToRegisterPage': 'You will be redirected to the registration page.',
+    'auth.goToRegister': 'Go to Registration',
+  },
+  ru: {
+    // Common (subset used on login)
+    'common.loading': 'Загрузка...',
+    'common.login': 'Войти',
+    'common.register': 'Регистрация',
+    'common.error': 'Ошибка',
+    // Auth (login/register/forgot)
+    'auth.title': 'Вход и регистрация соискателя',
+    'auth.subtitle': 'Войдите в аккаунт или создайте новый',
+    'auth.backToHome': 'На главную',
+    'auth.loginTab': 'Вход',
+    'auth.jobSeekerTab': 'Регистрация соискателя',
+    'auth.jobSeekerLoginTitle': 'Вход для соискателей',
+    'auth.jobSeekerLoginDescription': 'Войдите, используя существующую учетную запись',
+    'auth.jobSeekerRegisterTitle': 'Регистрация соискателя',
+    'auth.jobSeekerRegisterDescription': 'Создайте новую учетную запись соискателя',
+    'auth.email': 'Электронная почта',
+    'auth.emailPlaceholder': 'example@email.com',
+    'auth.password': 'Пароль',
+    'auth.passwordPlaceholder': 'Введите пароль',
+    'auth.loginButton': 'Войти',
+    'auth.registerButton': 'Зарегистрироваться',
+    'auth.loggingIn': 'Вход...',
+    'auth.registering': 'Регистрация...',
+    'auth.forgotPassword': 'Забыли пароль',
+    'auth.resetPassword': 'Сбросить пароль',
+    'auth.sending': 'Отправка...',
+    'auth.backToLogin': 'Назад ко входу',
+    'auth.passwordResetSuccess': 'Сброс пароля',
+    'auth.passwordResetEmailSent': 'Новый пароль отправлен на вашу почту.',
+    'auth.error': 'Ошибка',
+    'auth.passwordResetFailed': 'Не удалось сбросить пароль.',
+    'auth.validation.emailRequired': 'Введите корректный адрес электронной почты',
+    'auth.validation.passwordMin': 'Пароль должен содержать не менее 6 символов',
+    'auth.loginTarget': 'Тип входа',
+    'auth.engineer': 'Инженер',
+    'auth.general': 'Общий',
+    'auth.loginTargetNote': 'Если на этот email зарегистрировано несколько типов, откроется выбранная страница.',
+    'auth.goToRegisterPage': 'Вы будете перенаправлены на страницу регистрации.',
+    'auth.goToRegister': 'Перейти к регистрации',
+    // Completion modal
+    'profileCompletion.modalTitle': 'Завершённость профиля',
+    'profileCompletion.modalMessagePrefix': 'Текущий уровень завершённости профиля: ',
+    'profileCompletion.modalMessageSuffix': '%. Завершите профиль для лучшего подбора вакансий.',
+    'profileCompletion.later': 'Позже',
+    'profileCompletion.completeNow': 'Завершить сейчас',
+  },
+  uz: {
+    // Common (subset used on login)
+    'common.loading': 'Yuklanmoqda...',
+    'common.login': 'Kirish',
+    'common.register': "Ro'yxatdan o'tish",
+    'common.error': 'Xato',
+    // Auth (login/register/forgot)
+    'auth.title': "Ish izlovchi uchun kirish va ro'yxatdan o'tish",
+    'auth.subtitle': "Hisobingizga kiring yoki yangisini yarating",
+    'auth.backToHome': 'Bosh sahifaga qaytish',
+    'auth.loginTab': 'Kirish',
+    'auth.jobSeekerTab': "Ish izlovchi ro'yxatdan o'tishi",
+    'auth.jobSeekerLoginTitle': 'Ish izlovchi kirishi',
+    'auth.jobSeekerLoginDescription': "Mavjud hisob bilan kiring",
+    'auth.jobSeekerRegisterTitle': "Ish izlovchini ro'yxatdan o'tkazish",
+    'auth.jobSeekerRegisterDescription': "Yangi ish izlovchi hisobini yarating",
+    'auth.email': 'Elektron pochta',
+    'auth.emailPlaceholder': 'example@email.com',
+    'auth.password': 'Parol',
+    'auth.passwordPlaceholder': 'Parolingizni kiriting',
+    'auth.loginButton': 'Kirish',
+    'auth.registerButton': "Ro'yxatdan o'tish",
+    'auth.loggingIn': 'Kirilmoqda...',
+    'auth.registering': "Ro'yxatdan otilmoqda...",
+    'auth.forgotPassword': 'Parolni unutdingizmi',
+    'auth.resetPassword': 'Parolni tiklash',
+    'auth.sending': 'Yuborilmoqda...',
+    'auth.backToLogin': 'Kirish sahifasiga qaytish',
+    'auth.passwordResetSuccess': 'Parol tiklandi',
+    'auth.passwordResetEmailSent': 'Yangi parol emailingizga yuborildi.',
+    'auth.error': 'Xato',
+    'auth.passwordResetFailed': 'Parolni tiklab bo‘lmadi.',
+    'auth.validation.emailRequired': 'Yaroqli elektron pochta kiriting',
+    'auth.validation.passwordMin': 'Parol kamida 6 ta belgidan iborat bo‘lishi kerak',
+    'auth.loginTarget': 'Kirish turi',
+    'auth.engineer': 'Muhandis',
+    'auth.general': 'Umumiy',
+    'auth.loginTargetNote': "Agar shu email bilan bir nechta tur bo'lsa, tanlangan sahifa ochiladi.",
+    'auth.goToRegisterPage': "Ro'yxatdan o'tish sahifasiga o'tasiz.",
+    'auth.goToRegister': "Ro'yxatdan o'tish",
+    // Completion modal
+    'profileCompletion.modalTitle': 'Profil toʻliqligi',
+    'profileCompletion.modalMessagePrefix': 'Joriy profil toʻliqligi: ',
+    'profileCompletion.modalMessageSuffix': '%. Profilni toʻliq bajarsangiz, ish mosligi yaxshilanadi.',
+    'profileCompletion.later': 'Keyinroq',
+    'profileCompletion.completeNow': "Hozir yakunlash",
   }
+};
+
+// 簡易機械翻訳（オフライン置換ベース）
+// 注意: 厳密な翻訳ではなく、自動置換で英語→ロシア語/ウズベク語へ近似翻訳します。
+// 重要画面での違和感があれば後続で人手修正してください。
+const MT_REPLACE_RU: Array<[RegExp, string]> = [
+  [/Job Seeker/gi, 'Соискатель'],
+  [/Login/gi, 'Вход'],
+  [/Register/gi, 'Регистрация'],
+  [/Email Address/gi, 'Электронная почта'],
+  [/Email/gi, 'Электронная почта'],
+  [/Password/gi, 'Пароль'],
+  [/Forgot Password/gi, 'Забыли пароль'],
+  [/Reset Password/gi, 'Сбросить пароль'],
+  [/User Type/gi, 'Тип пользователя'],
+  [/Company/gi, 'Компания'],
+  [/Admin/gi, 'Администратор'],
+  [/Settings/gi, 'Настройки'],
+  [/Dashboard/gi, 'Панель управления'],
+  [/My Page/gi, 'Моя страница'],
+  [/Documents/gi, 'Документы'],
+  [/Profile/gi, 'Профиль'],
+  [/Save/gi, 'Сохранить'],
+  [/Saving/gi, 'Сохранение'],
+  [/Error/gi, 'Ошибка'],
+  [/Loading/gi, 'Загрузка'],
+  [/Search/gi, 'Поиск'],
+  [/Home/gi, 'Главная'],
+  [/Engineer/gi, 'Инженер'],
+  [/General/gi, 'Общий'],
+  [/You will be redirected to the registration page\./gi, 'Вы будете перенаправлены на страницу регистрации.'],
+  [/Go to Registration/gi, 'Перейти к регистрации'],
+];
+
+const MT_REPLACE_UZ: Array<[RegExp, string]> = [
+  [/Job Seeker/gi, 'Ish izlovchi'],
+  [/Login/gi, 'Kirish'],
+  [/Register/gi, "Ro'yxatdan o'tish"],
+  [/Email Address/gi, 'Elektron pochta'],
+  [/Email/gi, 'Elektron pochta'],
+  [/Password/gi, 'Parol'],
+  [/Forgot Password/gi, 'Parolni unutdingizmi'],
+  [/Reset Password/gi, 'Parolni tiklash'],
+  [/User Type/gi, 'Foydalanuvchi turi'],
+  [/Company/gi, 'Kompaniya'],
+  [/Admin/gi, 'Administrator'],
+  [/Settings/gi, 'Sozlamalar'],
+  [/Dashboard/gi, 'Boshqaruv paneli'],
+  [/My Page/gi, 'Mening sahifam'],
+  [/Documents/gi, 'Hujjatlar'],
+  [/Profile/gi, 'Profil'],
+  [/Save/gi, 'Saqlash'],
+  [/Saving/gi, 'Saqlanmoqda'],
+  [/Error/gi, 'Xato'],
+  [/Loading/gi, 'Yuklanmoqda'],
+  [/Search/gi, 'Qidirish'],
+  [/Home/gi, 'Bosh sahifa'],
+  [/Engineer/gi, 'Muhandis'],
+  [/General/gi, 'Umumiy'],
+  [/You will be redirected to the registration page\./gi, "Ro'yxatdan o'tish sahifasiga o'tasiz."],
+  [/Go to Registration/gi, "Ro'yxatdan o'tish"],
+];
+
+const machineTranslate = (text: string, lang: Language): string => {
+  if (!text) return text;
+  const rules = lang === 'ru' ? MT_REPLACE_RU : lang === 'uz' ? MT_REPLACE_UZ : [];
+  let out = text;
+  for (const [pattern, repl] of rules) {
+    out = out.replace(pattern, repl);
+  }
+  return out;
 };
 
 export function LanguageProvider({ children }: LanguageProviderProps) {
@@ -1879,7 +2066,7 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
 
   useEffect(() => {
     const savedLanguage = localStorage.getItem('language') as Language;
-    if (savedLanguage && (savedLanguage === 'ja' || savedLanguage === 'en')) {
+    if (savedLanguage && (savedLanguage === 'ja' || savedLanguage === 'en' || savedLanguage === 'ru' || savedLanguage === 'uz')) {
       setLanguage(savedLanguage);
     }
   }, []);
@@ -1890,7 +2077,24 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
   };
 
   const t = (key: string): string => {
-    return translations[language]?.[key] || key;
+    const primary = translations[language]?.[key];
+    if (primary) return primary;
+    const fallbackEn = translations.en?.[key];
+    if (fallbackEn) {
+      // 推奨方式: ru/uz では英語フォールバックを簡易機械翻訳で置換
+      if (language === 'ru' || language === 'uz') {
+        return machineTranslate(fallbackEn, language);
+      }
+      return fallbackEn;
+    }
+    const fallbackJa = translations.ja?.[key];
+    if (fallbackJa) {
+      if (language === 'ru' || language === 'uz') {
+        return machineTranslate(fallbackJa, language);
+      }
+      return fallbackJa;
+    }
+    return key;
   };
 
   return (

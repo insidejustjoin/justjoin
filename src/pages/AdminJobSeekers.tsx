@@ -21,7 +21,6 @@ import { JobSeekerStatusModal } from '@/components/JobSeekerStatusModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { ALL_SKILLS } from '@/constants/skills';
 import { toast } from '@/hooks/use-toast';
-import { JobSeekerStatusCard } from '@/components/JobSeekerStatusCard';
 
 
 // 共通のJobSeeker型を使用
@@ -138,7 +137,8 @@ export function AdminJobSeekers() {
       // 各求職者の書類データを並行して取得
       const promises = jobSeekers.map(async (jobSeeker) => {
         try {
-          const response = await fetch(`${apiUrl}/api/documents/${jobSeeker.user_id}?registrationType=${jobSeeker.registration_type === 'general' ? 'general' : 'engineer'}`, {
+          const regTypeForFetch = (jobSeeker as any).registration_type === 'general' ? 'general' : 'engineer';
+          const response = await fetch(`${apiUrl}/api/documents/${jobSeeker.user_id}?registrationType=${regTypeForFetch}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
@@ -171,7 +171,7 @@ export function AdminJobSeekers() {
       const results = await Promise.all(promises);
       
       // 書類データを取得した求職者の情報を更新
-      const updatedJobSeekers = jobSeekers.map(jobSeeker => {
+      const updatedJobSeekersRaw = jobSeekers.map(jobSeeker => {
         const documentData = results.find(result => result?.userId === jobSeeker.user_id)?.data;
         if (documentData) {
           return {
@@ -187,6 +187,14 @@ export function AdminJobSeekers() {
           };
         }
         return jobSeeker;
+      });
+      // user_id で重複排除
+      const seen: Record<string, boolean> = {};
+      const updatedJobSeekers = updatedJobSeekersRaw.filter(js => {
+        const key = String(js.user_id || js.id);
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
       });
       
       // 更新された求職者データを状態に反映
@@ -386,10 +394,27 @@ export function AdminJobSeekers() {
       console.log('API Response data:', data);
       
       if (data.success) {
-        const jobSeekersData = data.jobSeekers || [];
-        console.log('Job seekers data:', jobSeekersData);
+        const jobSeekersDataRaw = data.jobSeekers || [];
+        // API 由来の重複があっても user_id で一意化
+        const uniqSeen: Record<string, boolean> = {};
+        const jobSeekersDataAll = jobSeekersDataRaw.filter((js: any) => {
+          const key = String(js.user_id || js.id);
+          if (uniqSeen[key]) return false;
+          uniqSeen[key] = true;
+          return true;
+        });
+        // タブに応じて雇用ステータスでフィルタ（active / employed / withdrawn）
+        const filterByTab = (items: any[]) => {
+          const statusWanted =
+            activeTab === 'employed' ? 'employed' :
+            activeTab === 'withdrawn' ? 'withdrawn' : 'active';
+          return items.filter((it: any) => (it.employment_status || 'active') === statusWanted);
+        };
+        const jobSeekersData = filterByTab(jobSeekersDataAll);
+        console.log('Job seekers data (filtered by tab):', { activeTab, count: jobSeekersData.length });
+        // 一覧状態はタブでフィルタ済みの集合を保持し、表示用はさらに詳細フィルタを適用
         setJobSeekers(jobSeekersData);
-        setFilteredJobSeekers(jobSeekersData);
+        setFilteredJobSeekers(applyFilters(jobSeekersData, currentFilters));
         setLastFetchTime(Date.now());
         
         // 各求職者の面接状態を取得
@@ -487,7 +512,10 @@ export function AdminJobSeekers() {
   useEffect(() => {
     if (jobSeekers.length > 0) {
       console.log('Auto-applying filters due to currentFilters change');
-      applyFilters(jobSeekers, currentFilters);
+      const filtered = applyFilters(jobSeekers, currentFilters);
+      setFilteredJobSeekers(filtered);
+    } else {
+      setFilteredJobSeekers([]);
     }
   }, [currentFilters, jobSeekers]);
 
@@ -923,8 +951,11 @@ export function AdminJobSeekers() {
     setShowStatusModal(true);
   };
 
-  // ステータス変更後の処理
-  const handleStatusChange = () => {
+  // ステータス変更後の処理（次に開くべきタブへ自動遷移）
+  const handleStatusChange = (nextTab?: 'active' | 'employed' | 'withdrawn') => {
+    if (nextTab) {
+      setActiveTab(nextTab);
+    }
     fetchJobSeekerStatuses();
     fetchJobSeekers(true);
   };
@@ -1388,10 +1419,9 @@ export function AdminJobSeekers() {
     setFilterChange(prev => prev + 1);
   };
 
-  // 仮登録一覧
   useEffect(() => {
     fetchJobSeekers();
-  }, [registrationTypeTab]);
+  }, [activeTab, registrationTypeTab]);
 
   return (
     <AdminPageLayout title="管理者ダッシュボード">
@@ -1744,7 +1774,7 @@ export function AdminJobSeekers() {
                             <div>
                               <p><strong>電話:</strong> {jobSeeker.phone || '未設定'}</p>
                               <p><strong>登録日:</strong> {new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</p>
-                              <p><strong>入力率:</strong> <span className="font-semibold text-blue-600">{jobSeeker.completion_rate || 0}%</span></p>
+                              <p><strong>入力率:</strong> <span className="font-semibold text-blue-600">{(jobSeeker as any).completion_rate || 0}%</span></p>
                             </div>
                           </div>
                         </div>
@@ -1785,7 +1815,7 @@ export function AdminJobSeekers() {
                           className="bg-green-100 hover:bg-green-200 border-green-300"
                         >
                           <Building2 className="h-4 w-4 mr-2" />
-                          就職済み
+                          {activeTab === 'active' ? '就職前' : activeTab === 'employed' ? '求職者に戻す' : '就職状態'}
                         </Button>
                         <Button
                           onClick={() => {
@@ -1874,26 +1904,28 @@ export function AdminJobSeekers() {
           </TabsContent>
 
           {/* 退会済み一覧タブ */}
-          <TabsContent value="withdrawn">
+          <TabsContent value="withdrawn" className="space-y-4">
             {statusLoading ? (
               <div className="flex justify-center items-center py-8">
                 <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-                <span className="ml-2 text-gray-600">読み込み中...</span>
+                <span className="ml-2 text-gray-600">データを読み込み中...</span>
               </div>
             ) : jobSeekerStatuses.withdrawn.length === 0 ? (
               <Alert>
                 <Users className="h-4 w-4" />
-                <AlertDescription>退会済みの求職者はいません。</AlertDescription>
+                <AlertDescription>
+                  退会済みの求職者が見つかりませんでした。
+                </AlertDescription>
               </Alert>
             ) : (
               <div className="space-y-4">
                 {jobSeekerStatuses.withdrawn.map((jobSeeker) => (
-                  <Card key={jobSeeker.user_id} className="hover:shadow-md transition-shadow">
+                  <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                            <UserMinus className="h-6 w-6 text-gray-600" />
+                          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                            <UserMinus className="h-6 w-6 text-red-600" />
                           </div>
                           <div>
                             <h3 className="font-semibold text-lg">
@@ -1901,16 +1933,16 @@ export function AdminJobSeekers() {
                             </h3>
                             <p className="text-gray-600">{jobSeeker.email}</p>
                             <div className="flex items-center gap-4 mt-2">
-                              <Badge variant="secondary" className="bg-gray-100 text-gray-800">
+                              <Badge variant="secondary" className="bg-red-100 text-red-800">
                                 退会済み
                               </Badge>
-                              {jobSeeker.withdrawal_date && (
-                                <span className="text-sm text-gray-600">
-                                  退会日: {new Date(jobSeeker.withdrawal_date).toLocaleDateString('ja-JP')}
-                                </span>
-                              )}
+                              <span className="text-sm text-gray-600">
+                                退会日: {new Date(jobSeeker.withdrawal_date).toLocaleDateString('ja-JP')}
+                              </span>
                               {jobSeeker.reason && (
-                                <span className="text-sm text-gray-600">理由: {jobSeeker.reason}</span>
+                                <span className="text-sm text-gray-600">
+                                  理由: {jobSeeker.reason}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -1921,16 +1953,16 @@ export function AdminJobSeekers() {
                             size="sm"
                             variant="outline"
                           >
-                            <MessageSquare className="h-4 w-4 mr-2" />
-                            詳細
-                          </Button>
-                          <Button
-                            onClick={() => reactivateJobSeeker(jobSeeker)}
-                            size="sm"
-                            className="bg-blue-600 hover:bg-blue-700"
-                          >
                             <UserPlus className="h-4 w-4 mr-2" />
                             求職者に復帰
+                          </Button>
+                          <Button
+                            onClick={() => deleteJobSeeker(jobSeeker.user_id, jobSeeker.full_name)}
+                            size="sm"
+                            variant="destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            完全削除
                           </Button>
                         </div>
                       </div>
@@ -1940,6 +1972,7 @@ export function AdminJobSeekers() {
               </div>
             )}
           </TabsContent>
+
         </Tabs>
 
         {/* 書類生成モーダル */}
@@ -1959,7 +1992,7 @@ export function AdminJobSeekers() {
               
               <DocumentGenerator
                 isAdminMode={true}
-                registrationType={selectedJobSeeker.registration_type === 'general' ? 'general' : 'engineer'}
+                registrationType={(selectedJobSeeker as any).registration_type === 'general' ? 'general' : 'engineer'}
                 jobSeekerData={selectedJobSeeker}
                 onClose={closeDocumentGenerator}
               />

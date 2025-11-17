@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -1223,8 +1223,8 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     return age;
   };
 
-  // 入力率計算関数
-  const calculateCompletionRate = (data: DocumentData): number => {
+  // 入力率計算関数（registrationTypeを考慮）
+  const calculateCompletionRate = (data: DocumentData, regType: DocumentRegistrationType = 'engineer'): number => {
     // スコア方式に変更: 各必須項目=1点、スキルは比率で最大3点。理由2項目は任意ボーナス。
     let score = 0;
     let maxScore = 0;
@@ -1275,14 +1275,17 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     // 職務経歴書
     addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
       
-    // スキルシート（全スキルの評価入力率を比率で加点、最大3点）
-    const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
-    const skillsMaxWeight = 3; // 以前はWindows/MacOS/Linuxの3項目だったため、重み3を維持
-    if (skills.length > 0) {
-      const completed = skills.filter(s => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
-      maxScore += skillsMaxWeight;
-      score += skillsMaxWeight * (completed / skills.length);
+    // スキルシート（エンジニアの場合のみ、全スキルの評価入力率を比率で加点、最大3点）
+    if (regType === 'engineer') {
+      const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
+      const skillsMaxWeight = 3; // 以前はWindows/MacOS/Linuxの3項目だったため、重み3を維持
+      if (skills.length > 0) {
+        const completed = skills.filter(s => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
+        maxScore += skillsMaxWeight;
+        score += skillsMaxWeight * (completed / skills.length);
+      }
     }
+    // 一般職の場合はスキルシートを除外（maxScoreに加算しない）
 
     // 日本語資格（必須・「なし/None」でも充足扱い）
     const currentLevelName = data.japaneseLevel || (data.certificateStatus?.name || '');
@@ -1318,18 +1321,18 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
 
     // デバッグログ
     console.log('=== 入力率計算（新ロジック）===');
-    console.log('baseRate:', Math.round(baseRate) + '%', 'bonus:', bonus + '%', 'final:', finalRate + '%');
+    console.log('registrationType:', regType, 'baseRate:', Math.round(baseRate) + '%', 'bonus:', bonus + '%', 'final:', finalRate + '%');
 
     return finalRate;
   };
 
   // 入力率を更新
   useEffect(() => {
-    const rate = calculateCompletionRate(documentData);
-    console.log('入力率計算結果:', rate + '%');
+    const rate = calculateCompletionRate(documentData, effectiveRegistrationType);
+    console.log('入力率計算結果:', rate + '%', 'registrationType:', effectiveRegistrationType);
     console.log('現在のデータ:', documentData);
     setCompletionRate(rate);
-  }, [documentData]);
+  }, [documentData, effectiveRegistrationType]);
 
   // データベース保存機能
   const saveToDatabase = async () => {
@@ -1500,36 +1503,40 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   };
 
   // 保存されたデータを読み込み
-  const loadFromDatabase = async () => {
-    if (!user) return;
-    await loadFromDatabaseByUserId(String(user.id), effectiveRegistrationType);
-  };
-
-  const loadFromDatabaseByUserId = async (userId: string, registrationTypeOverride?: DocumentRegistrationType) => {
+  const loadFromDatabaseByUserId = useCallback(async (userId: string, registrationTypeOverride?: DocumentRegistrationType) => {
     try {
+      console.log('[DocumentGenerator] loadFromDatabaseByUserId 開始:', { userId, registrationTypeOverride });
       setIsLoadingData(true);
       
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
 
-      const typeForLoad = registrationTypeOverride ?? effectiveRegistrationType;
+      const typeForLoad = registrationTypeOverride ?? (registrationType || (jobSeekerData?.registration_type === 'general' ? 'general' : 'engineer'));
       const queryParams = new URLSearchParams({
         registrationType: typeForLoad,
       });
 
-      const response = await fetch(`${apiUrl}/api/documents/${userId}?${queryParams.toString()}`);
+      const url = `${apiUrl}/api/documents/${userId}?${queryParams.toString()}`;
+      console.log('[DocumentGenerator] API呼び出し:', url);
+      
+      const response = await fetch(url);
 
       if (!response.ok) {
         if (response.status === 404) {
           // 保存されたデータが見つからない場合は基本データのみで設定
+          console.log('[DocumentGenerator] 404: データが見つかりません（初回利用の可能性）');
           setLastSavedAt(null);
+          setIsLoadingData(false);
           return;
         }
         
         const responseText = await response.text();
+        console.error('[DocumentGenerator] APIエラー:', response.status, responseText);
+        setIsLoadingData(false);
         throw new Error(`読み込みエラー: ${response.status} - ${responseText}`);
       }
 
       const result = await response.json();
+      console.log('[DocumentGenerator] APIレスポンス:', { success: result.success, hasData: !!result.data, dataKeys: result.data ? Object.keys(result.data).length : 0 });
       
       const updatedTimestamp = result.updatedAt ?? result.lastUpdatedAt ?? null;
       if (updatedTimestamp) {
@@ -1540,16 +1547,19 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       
       if (!result.success) {
         // データが見つからない場合は正常な状態として扱う（初回利用の可能性）
-        if (result.message === '書類が見つかりません') {
+        if (result.message === '書類が見つかりません' || result.message === 'ドキュメントデータが見つかりません') {
           setLastSavedAt(null);
+          setIsLoadingData(false);
           return;
         }
+        setIsLoadingData(false);
         throw new Error(result.message || 'データの読み込みに失敗しました');
       }
 
       const savedData = result.data;
       
-      if (savedData) {
+      // データが存在する場合（空オブジェクトでも処理する）
+      if (savedData && typeof savedData === 'object') {
         // データの整合性を確保するために、不足している部分を初期値で補完
         const mergedData: DocumentData = {
           // 基本情報（resume.basicInfo もフォールバック）
@@ -1689,12 +1699,17 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
         };
         
         setDocumentData(mergedData);
+        console.log('[DocumentGenerator] データ読み込み成功:', Object.keys(mergedData).length, 'keys');
         toast({
           title: t('common.success'),
           description: t('documents.loadSuccess'),
         });
+      } else {
+        // データが存在しない場合でもローディングを解除
+        console.log('[DocumentGenerator] データが存在しません');
       }
     } catch (error: any) {
+      console.error('[DocumentGenerator] データ読み込みエラー:', error);
       toast({
         title: t('common.error'),
         description: error.message || t('documents.loadError'),
@@ -1703,20 +1718,49 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     } finally {
       setIsLoadingData(false);
     }
-  };
+  }, [registrationType, jobSeekerData?.registration_type, t]);
 
-  // コンポーネントマウント時にデータを読み込み
+  // コンポーネントマウント時にデータを読み込み（一度だけ実行）
+  const hasLoadedRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(false);
+  
   useEffect(() => {
-    if (!isAdminMode) {
+    // 読み込み中は実行しない（無限ループ防止）
+    if (isLoadingRef.current || isLoadingData) {
+      console.log('[DocumentGenerator] 読み込み中なのでスキップ', { isLoadingRef: isLoadingRef.current, isLoadingData });
+      return;
+    }
+    
+    // 既に読み込み済みの場合は実行しない
+    const regType = registrationType || (jobSeekerData?.registration_type === 'general' ? 'general' : 'engineer');
+    const loadKey = `${user?.id || ''}-${isAdminMode}-${jobSeekerData?.user_id || ''}-${regType}`;
+    if (hasLoadedRef.current === loadKey) {
+      console.log('[DocumentGenerator] 既に読み込み済み:', loadKey);
+      return;
+    }
+    
+    console.log('[DocumentGenerator] データ読み込み開始:', loadKey);
+    isLoadingRef.current = true;
+    hasLoadedRef.current = loadKey;
+    
+    if (!isAdminMode && user) {
       // 通常モード：現在のユーザーのデータを読み込み
-      loadFromDatabase();
-    } else if (jobSeekerData) {
+      const typeToLoad = registrationType || (jobSeekerData?.registration_type === 'general' ? 'general' : 'engineer');
+      loadFromDatabaseByUserId(String(user.id), typeToLoad).finally(() => {
+        isLoadingRef.current = false;
+      });
+    } else if (isAdminMode && jobSeekerData) {
       // 管理者モード：選択された求職者のデータを読み込み
       const adminRegistrationType: DocumentRegistrationType =
         jobSeekerData.registration_type === 'general' ? 'general' : 'engineer';
-      loadFromDatabaseByUserId(jobSeekerData.user_id, adminRegistrationType);
+      loadFromDatabaseByUserId(jobSeekerData.user_id, adminRegistrationType).finally(() => {
+        isLoadingRef.current = false;
+      });
+    } else {
+      isLoadingRef.current = false;
     }
-  }, [user, isAdminMode, jobSeekerData, effectiveRegistrationType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isAdminMode, jobSeekerData?.user_id, registrationType, jobSeekerData?.registration_type]);
 
   // フロントエンドだけでExcelファイルを生成する関数
   const generateExcelFile = async () => {

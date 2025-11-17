@@ -828,23 +828,26 @@ export function JobSeekerMyPage() {
       {showCompletionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="text-lg font-semibold">
+                <FuriganaText 
+                  text={t('profileCompletion.modalTitle')} 
+                  showFurigana={showFurigana}
+                />
+              </h3>
+              <div className="ml-2">
+                <LanguageToggle />
+              </div>
+            </div>
             <div className="text-center">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
                 <User className="h-6 w-6 text-blue-600" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                <FuriganaText 
-                  text="プロフィール完成度 / Profile Completion" 
-                  showFurigana={showFurigana}
-                />
-              </h3>
               <p className="text-sm text-gray-600 mb-4">
                 <FuriganaText 
-                  text={`現在のプロフィール完成度は${completionRate}%です。プロフィールを完成させることで、より良い求人とのマッチングが可能になります。`}
+                  text={`${t('profileCompletion.modalMessagePrefix')}${completionRate}%${t('profileCompletion.modalMessageSuffix')}`}
                   showFurigana={showFurigana}
                 />
-                <br/>
-                Your current profile completion rate is {completionRate}%. Completing your profile will enable better job matching.
               </p>
               <div className="flex gap-3">
                 <Button
@@ -853,7 +856,7 @@ export function JobSeekerMyPage() {
                   className="flex-1"
                 >
                   <FuriganaText 
-                    text="後で / Later" 
+                    text={t('profileCompletion.later')}
                     showFurigana={showFurigana}
                   />
                 </Button>
@@ -865,7 +868,7 @@ export function JobSeekerMyPage() {
                   className="flex-1"
                 >
                   <FuriganaText 
-                    text="今すぐ完了 / Complete Now" 
+                    text={t('profileCompletion.completeNow')}
                     showFurigana={showFurigana}
                   />
                 </Button>

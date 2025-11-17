@@ -536,32 +536,134 @@ app.put('/api/jobseekers/profile', async (req, res) => {
   }
 });
 
-// 完成度取得APIエンドポイント（documentsのロジックに統一）
+// 完成度取得APIエンドポイント（documentsのロジックと同一の再計算を実施）
 app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const { query } = await import('../integrations/postgres/client.js');
+    const { registrationType } = req.query;
+    
+    console.log('[入力率取得API] userId:', userId, 'registrationType:', registrationType);
+    
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'userIdが必要です' });
+    }
 
-    // documentsのロジックと同じく、データベースのcompletion_rateを直接取得
-    const result = await query(
-      'SELECT completion_rate FROM job_seekers WHERE user_id = $1',
+    const { query } = await import('../integrations/postgres/client.js');
+    const documentsModule = await import('./api/documents.js');
+    const calculateCompletionRate = (documentsModule as any).calculateCompletionRate as (data: any, registrationType?: 'engineer' | 'general') => number;
+
+    const normalizeRegistrationType = (value: any): 'engineer' | 'general' => {
+      if (typeof value !== 'string') return 'engineer';
+      const trimmed = value.trim().toLowerCase();
+      return trimmed === 'general' ? 'general' : 'engineer';
+    };
+    const registrationTypeFilter = registrationType ? normalizeRegistrationType(registrationType) : null;
+
+    // job_seekersテーブルから現在の入力率を取得
+    const jsResult = await query(
+      `SELECT completion_rate, registration_type 
+         FROM job_seekers 
+        WHERE user_id = $1`,
       [userId]
     );
-    
-    if (result.rows.length > 0) {
-      res.json({ 
-        success: true, 
-        completionRate: result.rows[0].completion_rate || 0 
-      });
-    } else {
-      res.json({ 
-        success: true, 
-        completionRate: 0 
-      });
+
+    const existingRecord = jsResult.rows[0] || null;
+    const existingRate = typeof existingRecord?.completion_rate === 'number' ? existingRecord?.completion_rate : 0;
+    const existingRegistrationType = normalizeRegistrationType(existingRecord?.registration_type || 'engineer');
+
+    // 最新の書類データを取得
+    const docParams: any[] = [userId];
+    let docSql = `
+      SELECT document_data, COALESCE(registration_type, 'engineer') AS registration_type
+      FROM user_documents
+      WHERE user_id = $1
+    `;
+    if (registrationTypeFilter) {
+      docSql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${docParams.length + 1})`;
+      docParams.push(registrationTypeFilter);
     }
+    docSql += ' ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST LIMIT 1';
+
+    let docResult = await query(docSql, docParams);
+
+    // registrationType指定で見つからない場合は直近のデータをフォールバックで取得
+    if (docResult.rows.length === 0 && registrationTypeFilter) {
+      docResult = await query(
+        `
+        SELECT document_data, COALESCE(registration_type, 'engineer') AS registration_type
+        FROM user_documents
+        WHERE user_id = $1
+        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+        LIMIT 1
+        `,
+        [userId]
+      );
+    }
+
+    let finalRate = existingRate;
+    let finalRegistrationType = registrationTypeFilter || existingRegistrationType;
+
+    if (docResult.rows.length > 0 && docResult.rows[0].document_data && calculateCompletionRate) {
+      let documentData = docResult.rows[0].document_data;
+      if (typeof documentData === 'string') {
+        try {
+          documentData = JSON.parse(documentData);
+        } catch (parseError) {
+          console.warn('[入力率取得API] document_data parse error:', parseError);
+        }
+      }
+      
+      const docRegistrationType = normalizeRegistrationType(
+        docResult.rows[0].registration_type || registrationTypeFilter || existingRegistrationType
+      );
+      finalRegistrationType = docRegistrationType;
+      finalRate = calculateCompletionRate(documentData, docRegistrationType);
+    } else {
+      // 書類データが無い場合もregistrationTypeFilterを尊重
+      finalRegistrationType = registrationTypeFilter || existingRegistrationType;
+    }
+
+    if (!Number.isFinite(finalRate) || finalRate < 0) {
+      finalRate = 0;
+    }
+    if (finalRate > 100) {
+      finalRate = 100;
+    }
+
+    // job_seekersテーブルを最新の入力率で更新（登録タイプごとに保持）
+    const updateResult = await query(
+      `
+      UPDATE job_seekers
+         SET completion_rate = $2,
+             updated_at = NOW()
+       WHERE user_id = $1
+         AND LOWER(COALESCE(rtrim(registration_type), 'engineer')) = LOWER($3)
+       RETURNING user_id
+      `,
+      [userId, finalRate, finalRegistrationType]
+    );
+
+    if (updateResult.rowCount === 0) {
+      await query(
+        `
+        INSERT INTO job_seekers (user_id, completion_rate, registration_type, created_at, updated_at)
+        VALUES ($1, $2, $3, NOW(), NOW())
+        `,
+        [userId, finalRate, finalRegistrationType]
+      );
+    }
+
+    console.log('[入力率取得API] final completionRate:', finalRate, 'registrationType:', finalRegistrationType);
+
+    res.json({ 
+      success: true, 
+      completionRate: finalRate,
+      registrationType: finalRegistrationType
+    });
+
   } catch (error) {
     console.error('入力率取得エラー:', error);
-    res.status(500).json({ error: '入力率の取得に失敗しました' });
+    res.status(500).json({ success: false, error: '入力率の取得に失敗しました' });
   }
 });
 
@@ -570,11 +672,54 @@ app.get('/api/jobseekers/registration-types/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
-    const result = await query(
-      `SELECT registration_type FROM job_seekers WHERE user_id = $1`,
-      [userId]
+    console.log('[registration-types] resolve for userId=', userId);
+    const all: string[] = [];
+    // job_seekers
+    try {
+      const js = await query(
+        `SELECT COALESCE(registration_type, 'engineer') AS registration_type
+           FROM job_seekers
+          WHERE user_id = $1`,
+        [userId]
+      );
+      js.rows.forEach((r: any) => all.push(r.registration_type));
+    } catch (e) {
+      console.warn('[registration-types] job_seekers query failed:', (e as any)?.message || e);
+    }
+    // user_documents
+    try {
+      const docs = await query(
+        `SELECT DISTINCT COALESCE(registration_type, 'engineer') AS registration_type
+           FROM user_documents
+          WHERE user_id = $1`,
+        [userId]
+      );
+      docs.rows.forEach((r: any) => all.push(r.registration_type));
+    } catch (e) {
+      console.warn('[registration-types] user_documents query failed:', (e as any)?.message || e);
+    }
+    // temporary_registrations（仮登録でdocuments_completed/completedのもの）
+    try {
+      const temps = await query(
+        `SELECT DISTINCT COALESCE(tr.registration_type, 'engineer') AS registration_type
+           FROM temporary_registrations tr
+           JOIN users u ON u.email = tr.email
+          WHERE u.id = $1
+            AND tr.status IN ('documents_completed','completed')`,
+        [userId]
+      );
+      temps.rows.forEach((r: any) => all.push(r.registration_type));
+    } catch (e) {
+      console.warn('[registration-types] temporary_registrations query failed:', (e as any)?.message || e);
+    }
+    const types = Array.from(
+      new Set(
+        all
+          .filter(Boolean)
+          .map((t: string) => (String(t).toLowerCase().trim() === 'general' ? 'general' : 'engineer'))
+      )
     );
-    const types = result.rows.map((r: any) => r.registration_type || 'engineer');
+    console.log('[registration-types] resolved types:', types);
     res.json({ success: true, types });
   } catch (error) {
     console.error('登録タイプ取得エラー:', error);
@@ -691,17 +836,27 @@ app.get('/api/admin/jobseekers', async (req, res) => {
     const buildQuery = async (type: 'engineer' | 'general' | 'all') => {
       let whereClause = 'WHERE 1=1';
       const params: any[] = [];
-
+      let typeIdx: number | null = null;
       if (type === 'engineer') {
+        // engineer: 明示engineer または 未設定(NULL)を含める
         whereClause += ` AND (js.registration_type IS NULL OR LOWER(js.registration_type) = $${params.length + 1})`;
         params.push('engineer');
       } else if (type === 'general') {
+        // general: 厳密にgeneralのみ（NULLは含めない）
         whereClause += ` AND LOWER(js.registration_type) = $${params.length + 1}`;
         params.push('general');
       }
 
       const result = await query(
         `
+          WITH latest AS (
+            SELECT DISTINCT ON (user_id)
+              user_id,
+              status,
+              updated_at
+            FROM job_seeker_status_history
+            ORDER BY user_id, created_at DESC
+          )
           SELECT 
             u.id as id,
             js.id as js_id,
@@ -723,7 +878,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             u.created_at as user_created_at,
             u.created_at as registeredAt,
             u.updated_at as user_updated_at,
-            'unemployed'::text as employment_status,
+            COALESCE(latest.status, 'active')::text as employment_status,
             COALESCE(js.completion_rate, 0)::int as completion_rate,
             COALESCE(js.registration_type, 'engineer') as registration_type,
             COALESCE(
@@ -733,13 +888,19 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             '[]' as skills,
             0 as experience_years,
             '' as desired_job_title,
-            '' as self_introduction
+            '' as self_introduction,
+            doc.document_data as document_data,
+            doc.registration_type as doc_registration_type
           FROM job_seekers js
           LEFT JOIN users u ON js.user_id = u.id
+          LEFT JOIN latest ON latest.user_id = js.user_id
           LEFT JOIN LATERAL (
-            SELECT document_data
+            SELECT 
+              document_data, 
+              COALESCE(ud.registration_type, 'engineer') as registration_type
             FROM user_documents ud
             WHERE ud.user_id = u.id
+              AND LOWER(COALESCE(ud.registration_type, 'engineer')) = LOWER(COALESCE(js.registration_type, 'engineer'))
             ORDER BY ud.updated_at DESC
             LIMIT 1
           ) doc ON TRUE
@@ -749,34 +910,85 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         params
       );
 
-      return result.rows.map((row) => ({
-        id: row.id,
-        js_id: row.js_id,
-        user_id: row.user_id,
-        first_name: row.first_name,
-        last_name: row.last_name,
-        full_name: row.full_name,
-        date_of_birth: row.date_of_birth,
-        gender: row.gender,
-        nationality: row.nationality,
-        phone: row.phone,
-        address: row.address,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        email: row.email,
-        user_status: row.user_status,
-        registeredAt: row.registeredAt,
-        employment_status: row.employment_status,
-        completion_rate: row.completion_rate,
-        registration_type: row.registration_type,
-        profile_photo: row.profile_photo
+      // 入力率を再計算して確認（documents.tsのロジックを使用）
+      const documentsModule = await import('./api/documents.js');
+      const calculateCompletionRate = (documentsModule as any).calculateCompletionRate;
+      const normalizeRegistrationType = (value: any): 'engineer' | 'general' => {
+        if (typeof value !== 'string') return 'engineer';
+        const trimmed = value.trim().toLowerCase();
+        return trimmed === 'general' ? 'general' : 'engineer';
+      };
+
+      return Promise.all(result.rows.map(async (row) => {
+        let finalCompletionRate = row.completion_rate;
+        
+        // 書類データがある場合は再計算して確認
+        if (row.document_data && calculateCompletionRate) {
+          try {
+            const docData = typeof row.document_data === 'string' 
+              ? JSON.parse(row.document_data) 
+              : row.document_data;
+            const regType = normalizeRegistrationType(row.registration_type || row.doc_registration_type || 'engineer');
+            const calculated = calculateCompletionRate(docData, regType);
+            
+            // デバッグログ（一般職の場合のみ詳細ログ）
+            if (regType === 'general') {
+              console.log('[管理者ページ] 入力率再計算（一般職）:', {
+                userId: row.user_id,
+                registrationType: regType,
+                jsRegistrationType: row.registration_type,
+                docRegistrationType: row.doc_registration_type,
+                oldRate: finalCompletionRate,
+                newRate: calculated,
+                hasSkillSheet: !!docData.skillSheet,
+                skillCount: docData.skillSheet?.skills ? Object.keys(docData.skillSheet.skills).length : 0
+              });
+            }
+            
+            // 計算結果が異なる場合は更新
+            if (calculated !== finalCompletionRate) {
+              finalCompletionRate = calculated;
+              // バックグラウンドでデータベースを更新
+              query(
+                `UPDATE job_seekers 
+                 SET completion_rate = $1, updated_at = NOW() 
+                 WHERE user_id = $2 AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)`,
+                [calculated, row.user_id, regType]
+              ).catch(err => console.warn('Completion rate update failed:', err));
+            }
+          } catch (err) {
+            console.warn('Completion rate recalculation failed for user', row.user_id, err);
+          }
+        }
+        
+        return {
+          id: row.id,
+          js_id: row.js_id,
+          user_id: row.user_id,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          full_name: row.full_name,
+          date_of_birth: row.date_of_birth,
+          gender: row.gender,
+          nationality: row.nationality,
+          phone: row.phone,
+          address: row.address,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          email: row.email,
+          user_status: row.user_status,
+          registeredAt: row.registeredAt,
+          employment_status: row.employment_status,
+          completion_rate: finalCompletionRate,
+          registration_type: row.registration_type,
+          profile_photo: row.profile_photo
+        };
       }));
     };
 
     const buildMinimalQuery = async (type: 'engineer' | 'general' | 'all') => {
       let whereClause = 'WHERE 1=1';
       const params: any[] = [];
-
       if (type === 'engineer') {
         whereClause += ` AND (js.registration_type IS NULL OR LOWER(js.registration_type) = $${params.length + 1})`;
         params.push('engineer');
@@ -787,6 +999,14 @@ app.get('/api/admin/jobseekers', async (req, res) => {
 
       const result = await query(
         `
+          WITH latest AS (
+            SELECT DISTINCT ON (user_id)
+              user_id,
+              status,
+              updated_at
+            FROM job_seeker_status_history
+            ORDER BY user_id, created_at DESC
+          )
           SELECT
             u.id as id,
             js.id as js_id,
@@ -803,9 +1023,11 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             u.email,
             u.status as user_status,
             COALESCE(js.registration_type, 'engineer') as registration_type,
-            COALESCE(js.completion_rate, 0)::int as completion_rate
+            COALESCE(js.completion_rate, 0)::int as completion_rate,
+            COALESCE(latest.status, 'active')::text as employment_status
           FROM job_seekers js
           LEFT JOIN users u ON js.user_id = u.id
+          LEFT JOIN latest ON latest.user_id = js.user_id
           ${whereClause}
           ORDER BY js.created_at DESC
         `,
@@ -858,13 +1080,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       }
     }
 
-    if (jobSeekers.length === 0 && normalizedType) {
-      try {
-        jobSeekers = await buildMinimalQuery('all');
-      } catch (fallbackError) {
-        console.error('jobseekers fallback on empty failed', fallbackError);
-        return res.json({ success: true, jobSeekers: [] });
-      }
+    if (jobSeekers.length === 0 && (normalizedType === 'engineer' || normalizedType === 'general')) {
+      return res.json({ success: true, jobSeekers: [] });
     }
 
     return res.json({ success: true, jobSeekers });
@@ -1009,38 +1226,114 @@ app.get('/api/jobseekers/:id', async (req, res) => {
 app.get('/api/jobseekers/profile/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    
+    const { registrationType } = req.query as { registrationType?: string };
+    const normalizeType = (v?: string) =>
+      typeof v === 'string' && v.trim().toLowerCase() === 'general' ? 'general' : 'engineer';
+    const type = normalizeType(registrationType);
+
     const { query } = await import('../integrations/postgres/client.js');
-    
-    const result = await query(`
-      SELECT 
-        full_name,
-        phone,
-        self_introduction,
-        address,
-        desired_job_title,
-        experience_years,
-        updated_at
-      FROM job_seekers
-      WHERE user_id = $1
-    `, [userId]);
-    
-    if (result.rows.length === 0) {
+
+    // 指定タイプ優先で取得（存在しなければ404にせず最終的に最低限のユーザー情報を返す）
+    const base = await query(
+      `
+        SELECT 
+          full_name,
+          first_name,
+          last_name,
+          phone,
+          self_introduction,
+          address,
+          desired_job_title,
+          experience_years,
+          profile_photo,
+          registration_type,
+          updated_at
+        FROM job_seekers
+        WHERE user_id = $1
+          AND LOWER(COALESCE(registration_type,'engineer')) = LOWER($2)
+        LIMIT 1
+      `,
+      [userId, type]
+    );
+
+    let row = base.rows[0];
+
+    if (!row) {
+      // タイプ一致がない場合はengineer優先で1件だけ拾う（後方互換）
+      const fallback = await query(
+        `
+          SELECT 
+            full_name,
+            first_name,
+            last_name,
+            phone,
+            self_introduction,
+            address,
+            desired_job_title,
+            experience_years,
+            profile_photo,
+            registration_type,
+            updated_at
+          FROM job_seekers
+          WHERE user_id = $1
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `,
+        [userId]
+      );
+      row = fallback.rows[0] || null;
+    }
+
+    // 顔写真が未設定の場合、該当タイプの user_documents から補完
+    if (row && !row.profile_photo) {
+      try {
+        const doc = await query(
+          `
+            SELECT document_data
+            FROM user_documents
+            WHERE user_id = $1
+              AND LOWER(COALESCE(registration_type,'engineer')) = LOWER($2)
+            ORDER BY updated_at DESC
+            LIMIT 1
+          `,
+          [userId, type]
+        );
+        if (doc.rows.length > 0) {
+          const dd = doc.rows[0].document_data;
+          const photo =
+            typeof dd === 'string'
+              ? (() => {
+                  try {
+                    const p = JSON.parse(dd);
+                    return p?.resume?.photoUrl || null;
+                  } catch {
+                    return null;
+                  }
+                })()
+              : dd?.resume?.photoUrl || null;
+          if (photo) {
+            row.profile_photo = photo;
+          }
+        }
+      } catch {}
+    }
+
+    if (!row) {
       return res.status(404).json({
         success: false,
-        message: 'プロフィールが見つかりません'
+        message: 'プロフィールが見つかりません',
       });
     }
-    
+
     res.json({
       success: true,
-      profile: result.rows[0]
+      profile: row,
     });
   } catch (error) {
     console.error('プロフィール取得エラー:', error);
     res.status(500).json({
       success: false,
-      message: 'プロフィールの取得に失敗しました'
+      message: 'プロフィールの取得に失敗しました',
     });
   }
 });
@@ -1486,20 +1779,53 @@ app.get('/api/admin/users', async (req, res) => {
 app.get('/api/documents/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    const { registrationType } = req.query;
     const { query } = await import('../integrations/postgres/client.js');
     
-    console.log('[DOCS][GET] userId =', userId);
+    console.log('[DOCS][GET] userId =', userId, 'registrationType =', registrationType);
 
-    // 複数document_typeをマージして返却
-    const result = await query(`
-      SELECT document_type, document_data, created_at
+    // registrationTypeを正規化
+    const normalizeRegistrationType = (value: any): 'engineer' | 'general' => {
+      if (typeof value !== 'string') return 'engineer';
+      const trimmed = value.trim().toLowerCase();
+      return trimmed === 'general' ? 'general' : 'engineer';
+    };
+    const normalizedType = registrationType ? normalizeRegistrationType(registrationType) : null;
+
+    // 複数document_typeをマージして返却（registrationTypeを考慮）
+    let sql = `
+      SELECT document_type, document_data, created_at, updated_at, registration_type
       FROM user_documents 
-      WHERE user_id = $1 
-      ORDER BY created_at ASC
-    `, [userId]);
+      WHERE user_id = $1
+    `;
+    const params: any[] = [userId];
+    
+    if (normalizedType) {
+      sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
+      params.push(normalizedType);
+    }
+    
+    sql += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST`;
+    
+    let result = await query(sql, params);
+    console.log('[DOCS][GET] 最初のクエリ結果:', result.rows.length, 'rows', 'registrationType =', normalizedType);
+    
+    // registrationTypeが指定されていない場合のみ、フィルタリングなしで再試行
+    if (result.rows.length === 0 && !normalizedType) {
+      console.log('[DOCS][GET] registrationType未指定のため、全データで再試行');
+      const fallbackSql = `
+        SELECT document_type, document_data, created_at, updated_at, registration_type
+        FROM user_documents 
+        WHERE user_id = $1
+        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+      `;
+      result = await query(fallbackSql, [userId]);
+      console.log('[DOCS][GET] フォールバッククエリ結果:', result.rows.length, 'rows');
+    }
     
     if (result.rows.length === 0) {
       // フォールバック: temporary_registrations の documents_data
+      console.log('[DOCS][GET] user_documentsにデータなし、temporary_registrationsを確認');
       const temp = await query(`
         SELECT tr.documents_data
         FROM temporary_registrations tr
@@ -1513,28 +1839,75 @@ app.get('/api/documents/:userId', async (req, res) => {
         try {
           doc = typeof doc === 'string' ? JSON.parse(doc) : doc;
         } catch {}
+        console.log('[DOCS][GET] temporary_registrationsからデータ取得成功');
         return res.json({ success: true, data: doc, createdAt: null, updatedAt: null });
       }
+      console.log('[DOCS][GET] データが見つかりません（404）');
       return res.status(404).json({ success: false, message: 'ドキュメントデータが見つかりません' });
     }
     
-    const merged: any = {}; const liftBasic = (d:any)=>{ if(!d) return; const b=d.resume?.basicInfo; if(b){ merged.lastName=merged.lastName||b.lastName; merged.firstName=merged.firstName||b.firstName; merged.kanaLastName=merged.kanaLastName||b.kanaLastName; merged.kanaFirstName=merged.kanaFirstName||b.kanaFirstName; merged.birthDate=merged.birthDate||b.dateOfBirth; merged.gender=merged.gender||b.gender; merged.nationality=merged.nationality||b.nationality; merged.liveAddress=merged.liveAddress||b.address; merged.livePhoneNumber=merged.livePhoneNumber||b.phone; merged.liveMail=merged.liveMail||b.email; }};
-    for (const row of result.rows) {
+    // 最新の書類データを取得（registrationTypeに一致するもの）
+    let merged: any = {};
+    if (result.rows.length > 0) {
+      // 最新の書類データを使用
+      const latestRow = result.rows[0];
       try {
-        const data = row.document_data || {};
-        Object.assign(merged, data);
-        liftBasic(data);
-        if (data.resume) merged.resume = { ...(merged.resume || {}), ...data.resume };
-        if (data.workHistory) merged.workHistory = { ...(merged.workHistory || {}), ...data.workHistory };
-        if (data.skillSheet) {
-          merged.skillSheet = { ...(merged.skillSheet || {}), ...data.skillSheet };
-          if (data.skillSheet.skills) merged.skillSheet.skills = { ...(merged.skillSheet.skills || {}), ...data.skillSheet.skills };
+        const data = latestRow.document_data || {};
+        if (typeof data === 'string') {
+          merged = JSON.parse(data);
+        } else {
+          merged = data;
         }
-        if (data.certificateStatus) merged.certificateStatus = { ...(merged.certificateStatus || {}), ...data.certificateStatus };
-      } catch {}
+      } catch (parseError) {
+        console.warn('[DOCS][GET] JSON parse error:', parseError);
+        merged = latestRow.document_data || {};
+      }
+    } else {
+      // フォールバック: registrationTypeを指定せずに取得
+      const fallbackResult = await query(`
+        SELECT document_data
+        FROM user_documents 
+        WHERE user_id = $1 
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `, [userId]);
+      
+      if (fallbackResult.rows.length > 0) {
+        try {
+          const data = fallbackResult.rows[0].document_data || {};
+          if (typeof data === 'string') {
+            merged = JSON.parse(data);
+          } else {
+            merged = data;
+          }
+        } catch (parseError) {
+          console.warn('[DOCS][GET] Fallback JSON parse error:', parseError);
+          merged = fallbackResult.rows[0].document_data || {};
+        }
+      }
     }
 
-    console.log('[DOCS][GET] merged keys =', Object.keys(merged));
+    // temporary_registrationsのフォールバック
+    if (Object.keys(merged).length === 0) {
+      const temp = await query(`
+        SELECT tr.documents_data
+        FROM temporary_registrations tr
+        JOIN users u ON u.email = tr.email
+        WHERE u.id = $1 AND tr.status IN ('pending','documents_completed','completed')
+        ORDER BY tr.updated_at DESC NULLS LAST, tr.created_at DESC NULLS LAST
+        LIMIT 1
+      `, [userId]);
+      if (temp.rows.length > 0 && temp.rows[0].documents_data) {
+        let doc = temp.rows[0].documents_data;
+        try {
+          doc = typeof doc === 'string' ? JSON.parse(doc) : doc;
+        } catch {}
+        merged = doc;
+      }
+    }
+
+    // データが存在しない場合でも成功レスポンスを返す（空オブジェクトでもOK）
+    console.log('[DOCS][GET] merged keys =', Object.keys(merged).length, 'registrationType =', normalizedType);
 
     res.json({ success: true, data: merged });
   } catch (error) {
@@ -1729,43 +2102,40 @@ app.delete('/api/user/account/:userId', async (req, res) => {
 
 
 
-// 統一ログインAPI（求職者・企業・管理者対応）
-app.post('/api/login', async (req, res) => {
-  try {
-    const { email, password, userType, recaptchaToken, registrationType } = req.body;
-    const recaptchaV2Response = req.body?.['g-recaptcha-response'];
-    // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化）
-    if (process.env.RECAPTCHA_SECRET_KEY) {
-      if (!recaptchaV2Response && !recaptchaToken) {
-        return res.status(400).json({ success: false, message: 'reCAPTCHA 検証が必要です' });
-      }
-      try {
-        const params = new URLSearchParams();
-        params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-        params.append('response', recaptchaV2Response || recaptchaToken);
-        if (req.ip) params.append('remoteip', req.ip);
-        const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString(),
-        });
-        const verifyJson = await verifyResp.json();
-        if (!verifyJson.success) {
-          return res.status(403).json({ success: false, message: 'reCAPTCHA 検証に失敗しました' });
-        }
-        // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）※v2の場合はスコアなし
-        if (!recaptchaV2Response && verifyJson.score !== undefined && verifyJson.score < 0.5) {
-          console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
-          return res.status(403).json({ 
-            success: false, 
-            message: 'reCAPTCHA 検証に失敗しました（スコア不足）' 
-          });
-        }
-      } catch (e) {
-        console.error('reCAPTCHA 検証エラー:', e);
-        return res.status(500).json({ success: false, message: 'reCAPTCHA 検証エラー' });
-      }
+// レート制限用のストレージ（メモリベース、本番環境ではRedisなどを推奨）
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
+// レート制限ミドルウェア
+const rateLimit = (maxRequests: number, windowMs: number) => {
+  return (req: any, res: any, next: any) => {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+    const key = `${ip}:${req.path}`;
+    
+    const record = rateLimitStore.get(key);
+    
+    if (!record || now > record.resetTime) {
+      // 新しいウィンドウを開始
+      rateLimitStore.set(key, { count: 1, resetTime: now + windowMs });
+      return next();
     }
+    
+    if (record.count >= maxRequests) {
+      return res.status(429).json({
+        success: false,
+        message: 'リクエストが多すぎます。しばらく待ってから再度お試しください。'
+      });
+    }
+    
+    record.count++;
+    next();
+  };
+};
+
+// 統一ログインAPI（求職者・企業・管理者対応）
+app.post('/api/login', rateLimit(5, 60000), async (req, res) => {
+  try {
+    const { email, password, userType, registrationType } = req.body;
     console.log('=== ログインリクエスト開始 ===');
     console.log('リクエストボディ:', { email, userType, hasPassword: !!password, passwordLength: password ? password.length : 0 });
     
@@ -1897,15 +2267,26 @@ app.post('/api/login', async (req, res) => {
         console.warn('登録タイプ取得に失敗しました:', typeError);
       }
 
+      try {
+        const docTypeResult = await query(
+          `
+            SELECT DISTINCT COALESCE(registration_type, 'engineer') AS registration_type
+              FROM user_documents
+             WHERE user_id = $1
+          `,
+          [user.id]
+        );
+        const docTypes = docTypeResult.rows.map((row: any) =>
+          row.registration_type === 'general' ? 'general' : 'engineer'
+        );
+        registrationTypes = Array.from(new Set([...registrationTypes, ...docTypes]));
+      } catch (docTypeError) {
+        console.warn('書類ベースの登録タイプ取得に失敗しました:', docTypeError);
+      }
+
       if (registrationType) {
         const normalized =
           registrationType === 'general' || registrationType === 'engineer' ? registrationType : 'engineer';
-        if (registrationTypes.length === 0 && normalized) {
-          return res.status(403).json({
-            success: false,
-            message: 'このアカウントでは指定された登録タイプが利用できません'
-          });
-        }
         if (registrationTypes.length > 0 && !registrationTypes.includes(normalized)) {
           return res.status(403).json({
             success: false,

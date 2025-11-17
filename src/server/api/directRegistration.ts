@@ -5,38 +5,39 @@ import { emailService } from '../../services/emailService.js';
 
 const router = express.Router();
 
-// 既存ユーザーチェックAPI
-router.post('/check', async (req, res) => {
-  try {
-    const { email, firstName, lastName, recaptchaToken } = req.body;
+// レート制限用のストレージ（メモリベース）
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
-    // reCAPTCHA 検証（v2優先、v3フォールバック）
-    if (process.env.RECAPTCHA_SECRET_KEY) {
-      const recaptchaV2 = (req.body && (req.body['g-recaptcha-response'] as string)) || '';
-      const recaptchaV3 = recaptchaToken || '';
-
-      if (!recaptchaV2 && !recaptchaV3) {
-        console.warn('reCAPTCHA トークンが提供されませんでした（/check）。検証をスキップして継続します。');
-      } else {
-        try {
-          const params = new URLSearchParams();
-          params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-          params.append('response', recaptchaV2 || recaptchaV3);
-          if (req.ip) params.append('remoteip', req.ip);
-          const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: params.toString(),
-          });
-          const verifyJson = await verifyResp.json();
-          if (!verifyJson.success) {
-            console.warn('reCAPTCHA 検証失敗（/check）。警告として継続します。', verifyJson);
-          }
-        } catch (e) {
-          console.warn('reCAPTCHA 検証エラー（/check・継続）:', e);
-        }
-      }
+// レート制限ミドルウェア
+const rateLimit = (maxRequests: number, windowMs: number) => {
+  return (req: any, res: any, next: any) => {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+    const key = `${ip}:${req.path}`;
+    
+    const record = rateLimitStore.get(key);
+    
+    if (!record || now > record.resetTime) {
+      rateLimitStore.set(key, { count: 1, resetTime: now + windowMs });
+      return next();
     }
+    
+    if (record.count >= maxRequests) {
+      return res.status(429).json({
+        success: false,
+        message: 'リクエストが多すぎます。しばらく待ってから再度お試しください。'
+      });
+    }
+    
+    record.count++;
+    next();
+  };
+};
+
+// 既存ユーザーチェックAPI
+router.post('/check', rateLimit(10, 60000), async (req, res) => {
+  try {
+    const { email, firstName, lastName } = req.body;
 
     // バリデーション（最低限）
     if (!email) {
@@ -120,30 +121,9 @@ router.post('/check', async (req, res) => {
 });
 
 // エンジニア向け本登録API
-router.post('/engineer', async (req, res) => {
+router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
     try {
-    const { email, firstName, lastName, password, documentsData, recaptchaToken } = req.body;
-
-    // reCAPTCHA 検証（v2優先・失敗時も処理継続：ユーザー登録の妨げを避ける）
-    if (process.env.RECAPTCHA_SECRET_KEY) {
-      const v2 = (req.body && (req.body['g-recaptcha-response'] as string)) || '';
-      const v3 = recaptchaToken || '';
-      try {
-        const params = new URLSearchParams();
-        params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-        params.append('response', v2 || v3);
-        if (req.ip) params.append('remoteip', req.ip);
-        const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
-        });
-        const verifyJson = await verifyResp.json();
-        if (!verifyJson.success) {
-          console.warn('reCAPTCHA 検証失敗（/check）。検証をスキップして継続します。');
-        }
-      } catch (e) {
-        console.warn('reCAPTCHA 検証エラー（/check・継続）:', e);
-      }
-    }
+    const { email, firstName, lastName, password, documentsData } = req.body;
 
     // バリデーション
     if (!email || !firstName || !lastName || !password) {
@@ -442,41 +422,9 @@ router.post('/engineer', async (req, res) => {
 });
 
 // 一般職向け本登録API
-router.post('/general', async (req, res) => {
+router.post('/general', rateLimit(3, 60000), async (req, res) => {
   try {
-    const { email, firstName, lastName, password, documentsData, recaptchaToken } = req.body;
-
-    // reCAPTCHA 検証（RECAPTCHA_SECRET_KEY が設定されている場合のみ有効化／未入力でも継続）
-    if (process.env.RECAPTCHA_SECRET_KEY) {
-      const v2 = (req.body && (req.body['g-recaptcha-response'] as string)) || '';
-      const v3 = recaptchaToken || '';
-      const responseToken = v2 || v3;
-      if (!responseToken) {
-        console.warn('reCAPTCHA トークンが提供されていません（/general）。検証をスキップして継続します。');
-      } else {
-        try {
-          const params = new URLSearchParams();
-          params.append('secret', process.env.RECAPTCHA_SECRET_KEY);
-          params.append('response', responseToken);
-          if (req.ip) params.append('remoteip', req.ip);
-          const verifyResp = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: params.toString(),
-          });
-          const verifyJson = await verifyResp.json();
-          if (!verifyJson.success) {
-            console.warn('reCAPTCHA 検証失敗（/general）。検証をスキップして継続します。');
-          }
-          // reCAPTCHA v3スコアチェック（0.0〜1.0、通常0.5以上で合格）
-          if (verifyJson.score !== undefined && verifyJson.score < 0.5) {
-            console.warn(`reCAPTCHA v3スコアが低い: ${verifyJson.score}`);
-          }
-        } catch (e) {
-          console.warn('reCAPTCHA 検証エラー（/general・継続）:', e);
-        }
-      }
-    }
+    const { email, firstName, lastName, password, documentsData } = req.body;
 
     // バリデーション
     if (!email || !firstName || !lastName || !password) {

@@ -189,6 +189,7 @@ router.post('/admin/employ/:userId', authenticate, async (req, res) => {
       RETURNING *
     `, [userId, company_name, company_url || null, employment_date, req.body.notes || null]);
 
+    await refreshCurrentStatusView();
     res.json({
       success: true,
       data: result.rows[0],
@@ -235,6 +236,7 @@ router.post('/admin/withdraw/:userId', authenticate, async (req, res) => {
       RETURNING *
     `, [userId, withdrawal_date, reason || null, req.body.notes || null]);
 
+    await refreshCurrentStatusView();
     res.json({
       success: true,
       data: result.rows[0],
@@ -277,6 +279,7 @@ router.post('/admin/reactivate/:userId', authenticate, async (req, res) => {
       RETURNING *
     `, [userId, notes || null]);
 
+    await refreshCurrentStatusView();
     res.json({
       success: true,
       data: result.rows[0],

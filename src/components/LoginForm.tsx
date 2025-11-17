@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -12,18 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-
-declare global {
-  interface Window {
-    grecaptcha: {
-      ready: (callback: () => void) => void;
-      execute?: (siteKey: string, options: { action: string }) => Promise<string>;
-      render?: (container: any, parameters: any) => any;
-      getResponse?: (widgetId?: number) => string;
-      reset?: (widgetId?: number) => void;
-    };
-  }
-}
 
 const loginSchema = z.object({
   email: z.string().email('有効なメールアドレスを入力してください'),
@@ -51,11 +39,6 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
   const { login, registerJobSeeker, registerCompany } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
-  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
-  const widgetIdRef = useRef<number | null>(null);
-  const recaptchaRenderRef = useRef<() => void>(() => {});
-  const [isRecaptchaReady, setIsRecaptchaReady] = useState(false);
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -72,100 +55,17 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
     resolver: zodResolver(companyRegisterSchema)
   });
 
-  useEffect(() => {
-    if (!siteKey) return;
-
-    let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-    let scriptEl: HTMLScriptElement | null = null;
-    let loadListener: (() => void) | null = null;
-
-    const renderRecaptcha = () => {
-      if (cancelled || widgetIdRef.current !== null || !recaptchaContainerRef.current) return;
-      const grecaptcha = typeof window !== 'undefined' ? window.grecaptcha : undefined;
-      if (!grecaptcha || typeof grecaptcha.render !== 'function' || typeof grecaptcha.ready !== 'function') return;
-
-      grecaptcha.ready(() => {
-        if (cancelled || widgetIdRef.current !== null || !recaptchaContainerRef.current) return;
-        try {
-          const id = grecaptcha.render(recaptchaContainerRef.current as Element, { sitekey: siteKey });
-          widgetIdRef.current = typeof id === 'number' ? id : Number(id);
-          setIsRecaptchaReady(true);
-        } catch (error) {
-          console.warn('reCAPTCHA v2レンダリングに失敗しました', error);
-        }
-      });
-    };
-
-    const ensureScript = () => {
-      if (typeof document === 'undefined') return;
-      const existing = document.querySelector<HTMLScriptElement>('script[src^="https://www.google.com/recaptcha/api.js"]');
-      if (existing) {
-        scriptEl = existing;
-        if ((window as any).grecaptcha) {
-          renderRecaptcha();
-        } else {
-          loadListener = () => renderRecaptcha();
-          existing.addEventListener('load', loadListener);
-        }
-      } else {
-        scriptEl = document.createElement('script');
-        scriptEl.src = 'https://www.google.com/recaptcha/api.js?render=explicit&hl=ja';
-        scriptEl.async = true;
-        scriptEl.defer = true;
-        loadListener = () => renderRecaptcha();
-        scriptEl.addEventListener('load', loadListener);
-        document.head.appendChild(scriptEl);
-      }
-    };
-
-    recaptchaRenderRef.current = renderRecaptcha;
-    setIsRecaptchaReady(false);
-    ensureScript();
-    interval = setInterval(renderRecaptcha, 1000);
-
-    return () => {
-      cancelled = true;
-      if (interval) clearInterval(interval);
-      if (loadListener && scriptEl) {
-        scriptEl.removeEventListener('load', loadListener);
-      }
-      recaptchaRenderRef.current = () => {};
-    };
-  }, [siteKey]);
-
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
       console.log('ログイン処理開始:', { email: data.email, userType: data.userType });
-
-      let recaptchaV2Response = '';
-      if (data.userType !== 'admin' && typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
-        try {
-          if (!isRecaptchaReady) {
-            throw new Error('reCAPTCHA is not ready yet');
-          }
-          recaptchaV2Response =
-            widgetIdRef.current !== null
-              ? window.grecaptcha.getResponse?.(widgetIdRef.current) || ''
-              : window.grecaptcha.getResponse();
-        } catch (error) {
-          console.warn('reCAPTCHA v2レスポンス取得に失敗しました', error);
-          toast.error('reCAPTCHAの初期化中です。数秒後に再度お試しください。');
-          return;
-        }
-        if (!recaptchaV2Response) {
-          toast.error('reCAPTCHAを完了してください');
-          return;
-        }
-      }
 
       const success = await login(
         data.email,
         data.password,
         data.userType,
         undefined,
-        data.userType !== 'admin' ? recaptchaV2Response : undefined
+        undefined
       );
       console.log('ログイン結果:', success);
       
@@ -187,15 +87,6 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
     } catch (error) {
       console.error('ログイン処理エラー:', error);
     } finally {
-      if (typeof window !== 'undefined' && window.grecaptcha && typeof window.grecaptcha.reset === 'function' && widgetIdRef.current !== null) {
-        try {
-          window.grecaptcha.reset(widgetIdRef.current);
-        } catch (error) {
-          console.warn('reCAPTCHAリセットに失敗しました', error);
-        } finally {
-          setIsRecaptchaReady(true);
-        }
-      }
       setIsLoading(false);
     }
   };
@@ -298,30 +189,10 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
                     )}
                   </div>
 
-                  {siteKey && (
-                    <div
-                      className="flex flex-col items-center space-y-2"
-                      onMouseEnter={() => recaptchaRenderRef.current()}
-                      onFocus={() => recaptchaRenderRef.current()}
-                    >
-                      <div
-                        ref={recaptchaContainerRef}
-                        className="g-recaptcha"
-                        data-sitekey={siteKey}
-                      />
-                      {!isRecaptchaReady && (
-                        <p className="text-xs text-muted-foreground">reCAPTCHAを読み込み中です…</p>
-                      )}
-                    </div>
-                  )}
-
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={isLoading || (!isRecaptchaReady && loginForm.watch('userType') !== 'admin')}
-                    onMouseEnter={() => recaptchaRenderRef.current()}
-                    onFocus={() => recaptchaRenderRef.current()}
-                    onClick={() => recaptchaRenderRef.current()}
+                    disabled={isLoading}
                   >
                     {isLoading ? 'ログイン中...' : 'ログイン'}
                   </Button>
