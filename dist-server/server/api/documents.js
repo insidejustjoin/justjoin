@@ -381,7 +381,10 @@ router.post('/', async (req, res) => {
         }
         const userIdStr = String(userId);
         const normalizedData = typeof documentData === 'string' ? JSON.parse(documentData) : documentData;
-        const normalizedRegistrationType = normalizeRegistrationType(registrationType);
+        if (registrationType !== 'engineer' && registrationType !== 'general') {
+            return res.status(400).json({ success: false, message: 'registrationType は engineer または general が必須です' });
+        }
+        const normalizedRegistrationType = registrationType;
         // データベースに保存（メインストレージ）
         try {
             const checkQuery = `
@@ -427,7 +430,7 @@ router.post('/', async (req, res) => {
             // 完成度を計算し、job_seekersテーブルに反映
             let completionRate = null;
             if (documentType === 'resume' || documentType === 'jobseeker_documents' || documentType === 'all') {
-                completionRate = calculateCompletionRate(normalizedData);
+                completionRate = calculateCompletionRate(normalizedData, normalizedRegistrationType);
             }
             await upsertJobSeekerProfile(userIdStr, normalizedRegistrationType, completionRate, normalizedData);
             logger.info('書類保存成功（データベース）', { userId: userIdStr, documentType, completionRate, registrationType: normalizedRegistrationType }, undefined, 'api_success');
@@ -665,8 +668,8 @@ router.delete('/:userId', async (req, res) => {
         });
     }
 });
-// 入力率計算関数
-const calculateCompletionRate = (data) => {
+// 入力率計算関数（registrationTypeを考慮）
+export const calculateCompletionRate = (data, registrationType = 'engineer') => {
     let score = 0;
     let maxScore = 0;
     const addField = (value) => {
@@ -714,14 +717,17 @@ const calculateCompletionRate = (data) => {
     addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume?.qualifications.length > 0));
     // 職務経歴書
     addField(data.workHistory?.noWorkHistory ? true : (data.workHistory?.workExperiences && data.workHistory.workExperiences.length > 0));
-    // スキル（全スキルの評価入力率に応じて最大3点）
-    const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
-    const skillsMaxWeight = 3;
-    if (skills.length > 0) {
-        const completed = skills.filter((s) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
-        maxScore += skillsMaxWeight;
-        score += skillsMaxWeight * (completed / skills.length);
+    // スキル（エンジニアの場合のみ、全スキルの評価入力率に応じて最大3点）
+    if (registrationType === 'engineer') {
+        const skills = data.skillSheet?.skills ? Object.values(data.skillSheet.skills) : [];
+        const skillsMaxWeight = 3;
+        if (skills.length > 0) {
+            const completed = skills.filter((s) => typeof s?.evaluation === 'string' && s.evaluation.trim() !== '' && s.evaluation !== '-').length;
+            maxScore += skillsMaxWeight;
+            score += skillsMaxWeight * (completed / skills.length);
+        }
     }
+    // 一般職の場合はスキルシートを除外（maxScoreに加算しない）
     // 日本語資格（現在）: 「なし/None」でも充足扱い、日付も同様
     const currentLevelName = data.japaneseLevel || (data.certificateStatus?.name || '');
     const isNoneCurrent = (currentLevelName === 'なし' || currentLevelName === 'なし / None');
@@ -746,7 +752,21 @@ const calculateCompletionRate = (data) => {
         bonus += 2;
     if (data.whyInterestJapan && data.whyInterestJapan.length >= 300)
         bonus += 2;
-    return Math.min(100, Math.round(baseRate + bonus));
+    const finalRate = Math.min(100, Math.round(baseRate + bonus));
+    // デバッグログ（一般職の場合のみ詳細ログ）
+    if (registrationType === 'general') {
+        console.log('[入力率計算] 一般職:', {
+            registrationType,
+            score,
+            maxScore,
+            baseRate: Math.round(baseRate),
+            bonus,
+            finalRate,
+            hasSkillSheet: !!data.skillSheet,
+            skillCount: data.skillSheet?.skills ? Object.keys(data.skillSheet.skills).length : 0
+        });
+    }
+    return finalRate;
 };
 // 書類データ保存APIエンドポイント
 router.post('/jobseekers/documents', async (req, res) => {
@@ -757,9 +777,12 @@ router.post('/jobseekers/documents', async (req, res) => {
             return res.status(400).json({ error: 'userIdとdocumentDataが必要です' });
         }
         const userIdStr = String(userId);
-        const normalizedRegistrationType = normalizeRegistrationType(registrationType);
+        if (registrationType !== 'engineer' && registrationType !== 'general') {
+            return res.status(400).json({ success: false, message: 'registrationType は engineer または general が必須です' });
+        }
+        const normalizedRegistrationType = registrationType;
         // 入力率を計算
-        const completionRate = calculateCompletionRate(documentData);
+        const completionRate = calculateCompletionRate(documentData, normalizedRegistrationType);
         // 既存のデータを確認
         const existingData = await query(`
         SELECT * 
@@ -804,22 +827,26 @@ router.get('/jobseekers/completion-rate/:userId', async (req, res) => {
         await ensureUserDocumentsRegistrationTypeColumn();
         const { userId } = req.params;
         const { registrationType } = req.query;
+        console.log('[入力率取得API] userId:', userId, 'registrationType:', registrationType);
         if (!userId) {
             return res.status(400).json({ error: 'userIdが必要です' });
         }
         const registrationTypeFilter = typeof registrationType === 'string' ? normalizeRegistrationType(registrationType) : null;
-        let sql = 'SELECT completion_rate FROM job_seekers WHERE user_id = $1';
+        console.log('[入力率取得API] registrationTypeFilter:', registrationTypeFilter);
+        let sql = 'SELECT completion_rate, registration_type FROM job_seekers WHERE user_id = $1';
         const params = [userId];
         if (registrationTypeFilter) {
             sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
             params.push(registrationTypeFilter);
         }
         const result = await query(sql, params);
+        console.log('[入力率取得API] job_seekers query result:', result.rows.length, 'rows');
         let completionRate = result.rows.length > 0 ? result.rows[0].completion_rate : null;
         let recalculated = false;
         if (completionRate === null || typeof completionRate !== 'number' || Number.isNaN(completionRate)) {
             completionRate = 0;
         }
+        console.log('[入力率取得API] initial completionRate:', completionRate);
         try {
             const docParams = [userId];
             let docSql = `
@@ -833,23 +860,32 @@ router.get('/jobseekers/completion-rate/:userId', async (req, res) => {
             }
             docSql += ' ORDER BY updated_at DESC LIMIT 1';
             const docResult = await query(docSql, docParams);
+            console.log('[入力率取得API] document query result:', docResult.rows.length, 'rows');
             if (docResult.rows.length > 0 && docResult.rows[0].document_data) {
                 const docRegistrationType = normalizeRegistrationType(docResult.rows[0].registration_type || registrationTypeFilter || 'engineer');
-                const calculated = calculateCompletionRate(docResult.rows[0].document_data);
+                console.log('[入力率取得API] docRegistrationType:', docRegistrationType);
+                const calculated = calculateCompletionRate(docResult.rows[0].document_data, docRegistrationType);
+                console.log('[入力率取得API] calculated rate:', calculated, 'current rate:', completionRate);
                 if (calculated !== completionRate) {
                     completionRate = calculated;
                     recalculated = true;
+                    console.log('[入力率取得API] rate updated to:', completionRate);
                 }
                 await upsertJobSeekerProfile(String(userId), docRegistrationType, completionRate, docResult.rows[0].document_data);
             }
             else if (registrationTypeFilter) {
                 // ドキュメントが存在しない場合でも、レコードがなければ作成しておく
+                console.log('[入力率取得API] no document found, creating profile with rate:', completionRate);
                 await upsertJobSeekerProfile(String(userId), registrationTypeFilter, completionRate, null);
+            }
+            else {
+                console.log('[入力率取得API] no document found and no registrationTypeFilter');
             }
         }
         catch (recalcError) {
             console.warn('completion rate recalculation skipped:', recalcError);
         }
+        console.log('[入力率取得API] final completionRate:', completionRate);
         res.json({
             success: true,
             completionRate: completionRate || 0,
@@ -865,6 +901,13 @@ router.get('/jobseekers/completion-rate/:userId', async (req, res) => {
 router.get('/interview-history/:userId', authenticate, async (req, res) => {
     try {
         const { userId } = req.params;
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'INVALID_PARAMS',
+                message: 'ユーザーIDが必要です'
+            });
+        }
         // 面接URLの状態を確認
         const urlQuery = `
       SELECT is_used, created_at, interview_token
@@ -873,7 +916,24 @@ router.get('/interview-history/:userId', authenticate, async (req, res) => {
       ORDER BY created_at DESC
       LIMIT 1
     `;
-        const urlResult = await query(urlQuery, [userId]);
+        let urlResult;
+        try {
+            urlResult = await query(urlQuery, [userId]);
+        }
+        catch (dbError) {
+            console.error('面接履歴取得エラー（データベース）:', dbError);
+            // データベースエラーの場合でも、空のデータを返す
+            return res.json({
+                success: true,
+                data: {
+                    hasInterview: false,
+                    totalInterviews: 0,
+                    canTakeInterview: true,
+                    status: 'not_taken',
+                    interviewUrl: null
+                }
+            });
+        }
         // 面接履歴を取得
         let interviewData = {
             hasInterview: false,
@@ -882,7 +942,7 @@ router.get('/interview-history/:userId', authenticate, async (req, res) => {
             status: 'not_taken',
             interviewUrl: null
         };
-        if (urlResult.rows.length > 0) {
+        if (urlResult && urlResult.rows && urlResult.rows.length > 0) {
             const urlData = urlResult.rows[0];
             if (urlData.is_used) {
                 // 面接完了済み
@@ -901,7 +961,7 @@ router.get('/interview-history/:userId', authenticate, async (req, res) => {
                     totalInterviews: 0,
                     canTakeInterview: true,
                     status: 'available',
-                    interviewUrl: `https://interview.justjoin.jp?token=${urlData.interview_token}`
+                    interviewUrl: urlData.interview_token ? `https://interview.justjoin.jp?token=${urlData.interview_token}` : null
                 };
             }
         }
@@ -912,10 +972,16 @@ router.get('/interview-history/:userId', authenticate, async (req, res) => {
     }
     catch (error) {
         console.error('面接履歴取得エラー:', error);
-        res.status(500).json({
-            success: false,
-            error: 'INTERNAL_ERROR',
-            message: '面接履歴を取得できませんでした'
+        // エラーが発生した場合でも、空のデータを返す（フロントエンドがクラッシュしないように）
+        res.json({
+            success: true,
+            data: {
+                hasInterview: false,
+                totalInterviews: 0,
+                canTakeInterview: true,
+                status: 'not_taken',
+                interviewUrl: null
+            }
         });
     }
 });
@@ -1360,7 +1426,10 @@ router.post('/', async (req, res) => {
         }
         const userIdStr = String(userId);
         const normalizedData = typeof documentData === 'string' ? JSON.parse(documentData) : documentData;
-        const normalizedRegistrationType = normalizeRegistrationType(registrationType);
+        if (registrationType !== 'engineer' && registrationType !== 'general') {
+            return res.status(400).json({ success: false, message: 'registrationType は engineer または general が必須です' });
+        }
+        const normalizedRegistrationType = registrationType;
         console.log('[DOCS][POST] save start', { userId: userIdStr, documentType, keys: Object.keys(normalizedData || {}) });
         const existing = await query(`
         SELECT id 
@@ -1464,12 +1533,13 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
                 error: 'interviewEnabledパラメータが必要です'
             });
         }
-        // 求職者の面接表示設定を更新
+        // 求職者の面接表示設定を更新（user_idでも動作するように修正）
+        // idはjob_seekers.idまたはuser_idの可能性がある
         const updateQuery = `
       UPDATE job_seekers 
       SET interview_enabled = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING id, interview_enabled
+      WHERE id = $2 OR user_id = $2
+      RETURNING id, user_id, interview_enabled
     `;
         const result = await query(updateQuery, [interviewEnabled, id]);
         if (result.rows.length === 0) {

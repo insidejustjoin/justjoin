@@ -39,6 +39,7 @@ const ensureJobSeekerStatusStructures = async () => {
       CREATE TABLE IF NOT EXISTS job_seeker_status_history (
         id SERIAL PRIMARY KEY,
         user_id UUID NOT NULL,
+        registration_type VARCHAR(20) DEFAULT 'engineer',
         status VARCHAR(32) NOT NULL DEFAULT 'active',
         company_name TEXT,
         company_url TEXT,
@@ -50,14 +51,33 @@ const ensureJobSeekerStatusStructures = async () => {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
     `);
+    // registration_typeカラムが存在しない場合は追加
+    await query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'job_seeker_status_history' 
+          AND column_name = 'registration_type'
+        ) THEN
+          ALTER TABLE job_seeker_status_history 
+          ADD COLUMN registration_type VARCHAR(20) DEFAULT 'engineer';
+        END IF;
+      END $$;
+    `);
     await query(`
       CREATE INDEX IF NOT EXISTS idx_job_seeker_status_history_user_id_created_at
         ON job_seeker_status_history (user_id, created_at DESC)
     `);
     await query(`
+      CREATE INDEX IF NOT EXISTS idx_job_seeker_status_history_user_type
+        ON job_seeker_status_history (user_id, registration_type, created_at DESC)
+    `);
+    await query(`
       CREATE MATERIALIZED VIEW IF NOT EXISTS current_job_seeker_status AS
-      SELECT DISTINCT ON (user_id)
+      SELECT DISTINCT ON (user_id, registration_type)
         user_id,
+        registration_type,
         status,
         company_name,
         company_url,
@@ -68,7 +88,7 @@ const ensureJobSeekerStatusStructures = async () => {
         created_at,
         updated_at
       FROM job_seeker_status_history
-      ORDER BY user_id, created_at DESC
+      ORDER BY user_id, registration_type, created_at DESC
     `);
     await refreshCurrentStatusView();
   } catch (error) {
@@ -98,8 +118,9 @@ router.get('/admin/status', authenticate, async (req, res) => {
     const result = await query(
       `
         WITH latest AS (
-          SELECT DISTINCT ON (user_id)
+          SELECT DISTINCT ON (user_id, registration_type)
             user_id,
+            registration_type,
             status,
             company_name,
             company_url,
@@ -109,7 +130,7 @@ router.get('/admin/status', authenticate, async (req, res) => {
             notes,
             updated_at
           FROM job_seeker_status_history
-          ORDER BY user_id, created_at DESC
+          ORDER BY user_id, registration_type, created_at DESC
         )
         SELECT
           js.user_id as id,
@@ -120,6 +141,7 @@ router.get('/admin/status', authenticate, async (req, res) => {
           js.phone,
           COALESCE(js.profile_photo, doc.document_data -> 'resume' ->> 'photoUrl') AS profile_photo,
           js.created_at,
+          COALESCE(js.registration_type, 'engineer') as registration_type,
           COALESCE(latest.status, 'active') as status,
           latest.company_name,
           latest.company_url,
@@ -130,11 +152,13 @@ router.get('/admin/status', authenticate, async (req, res) => {
           COALESCE(latest.updated_at, js.created_at) as status_updated_at
         FROM job_seekers js
         INNER JOIN users u ON js.user_id = u.id
-        LEFT JOIN latest ON latest.user_id = js.user_id
+        LEFT JOIN latest ON latest.user_id = js.user_id 
+          AND LOWER(COALESCE(latest.registration_type, 'engineer')) = LOWER(COALESCE(js.registration_type, 'engineer'))
         LEFT JOIN LATERAL (
           SELECT document_data
           FROM user_documents ud
           WHERE ud.user_id = js.user_id
+            AND LOWER(COALESCE(ud.registration_type, 'engineer')) = LOWER(COALESCE(js.registration_type, 'engineer'))
           ORDER BY ud.updated_at DESC
           LIMIT 1
         ) doc ON TRUE
@@ -159,9 +183,9 @@ router.post('/admin/employ/:userId', authenticate, async (req, res) => {
   try {
     await ensureJobSeekerStatusStructures();
     const { userId } = req.params;
-    const { company_name, company_url, employment_date } = req.body;
+    const { company_name, company_url, employment_date, registration_type } = req.body;
     
-    console.log('就職済み変更リクエスト:', { userId, company_name, employment_date });
+    console.log('就職済み変更リクエスト:', { userId, company_name, employment_date, registration_type });
     
     if (!company_name || !employment_date) {
       return res.status(400).json({ success: false, error: '企業名と就職日は必須です' });
@@ -181,13 +205,26 @@ router.post('/admin/employ/:userId', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: '求職者が見つかりません' });
     }
 
+    // registration_typeを取得（リクエストから取得、なければjob_seekersから取得）
+    let finalRegistrationType = registration_type || 'engineer';
+    if (!registration_type) {
+      const jsCheck = await query(
+        'SELECT registration_type FROM job_seekers WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1',
+        [userId]
+      );
+      if (jsCheck.rows.length > 0 && jsCheck.rows[0].registration_type) {
+        finalRegistrationType = jsCheck.rows[0].registration_type;
+      }
+    }
+    finalRegistrationType = finalRegistrationType.toLowerCase() === 'general' ? 'general' : 'engineer';
+
     // ステータス履歴に就職済みレコードを追加
     const result = await query(`
       INSERT INTO job_seeker_status_history 
-        (user_id, status, company_name, company_url, employment_date, notes)
-      VALUES ($1, 'employed', $2, $3, $4, $5)
+        (user_id, registration_type, status, company_name, company_url, employment_date, notes)
+      VALUES ($1, $2, 'employed', $3, $4, $5, $6)
       RETURNING *
-    `, [userId, company_name, company_url || null, employment_date, req.body.notes || null]);
+    `, [userId, finalRegistrationType, company_name, company_url || null, employment_date, req.body.notes || null]);
 
     await refreshCurrentStatusView();
     res.json({
@@ -206,9 +243,9 @@ router.post('/admin/withdraw/:userId', authenticate, async (req, res) => {
   try {
     await ensureJobSeekerStatusStructures();
     const { userId } = req.params;
-    const { reason, withdrawal_date } = req.body;
+    const { reason, withdrawal_date, registration_type } = req.body;
     
-    console.log('退会済み変更リクエスト:', { userId, reason, withdrawal_date });
+    console.log('退会済み変更リクエスト:', { userId, reason, withdrawal_date, registration_type });
     
     if (!withdrawal_date) {
       return res.status(400).json({ success: false, error: '退会日は必須です' });
@@ -228,13 +265,26 @@ router.post('/admin/withdraw/:userId', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: '求職者が見つかりません' });
     }
 
+    // registration_typeを取得（リクエストから取得、なければjob_seekersから取得）
+    let finalRegistrationType = registration_type || 'engineer';
+    if (!registration_type) {
+      const jsCheck = await query(
+        'SELECT registration_type FROM job_seekers WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1',
+        [userId]
+      );
+      if (jsCheck.rows.length > 0 && jsCheck.rows[0].registration_type) {
+        finalRegistrationType = jsCheck.rows[0].registration_type;
+      }
+    }
+    finalRegistrationType = finalRegistrationType.toLowerCase() === 'general' ? 'general' : 'engineer';
+
     // ステータス履歴に退会済みレコードを追加
     const result = await query(`
       INSERT INTO job_seeker_status_history 
-        (user_id, status, withdrawal_date, reason, notes)
-      VALUES ($1, 'withdrawn', $2, $3, $4)
+        (user_id, registration_type, status, withdrawal_date, reason, notes)
+      VALUES ($1, $2, 'withdrawn', $3, $4, $5)
       RETURNING *
-    `, [userId, withdrawal_date, reason || null, req.body.notes || null]);
+    `, [userId, finalRegistrationType, withdrawal_date, reason || null, req.body.notes || null]);
 
     await refreshCurrentStatusView();
     res.json({
@@ -253,9 +303,9 @@ router.post('/admin/reactivate/:userId', authenticate, async (req, res) => {
   try {
     await ensureJobSeekerStatusStructures();
     const { userId } = req.params;
-    const { notes } = req.body;
+    const { notes, registration_type } = req.body;
 
-    console.log('復帰変更リクエスト:', { userId, notes });
+    console.log('復帰変更リクエスト:', { userId, notes, registration_type });
 
     // UUIDの形式チェック
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -271,13 +321,26 @@ router.post('/admin/reactivate/:userId', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: '求職者が見つかりません' });
     }
 
+    // registration_typeを取得（リクエストから取得、なければjob_seekersから取得）
+    let finalRegistrationType = registration_type || 'engineer';
+    if (!registration_type) {
+      const jsCheck = await query(
+        'SELECT registration_type FROM job_seekers WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1',
+        [userId]
+      );
+      if (jsCheck.rows.length > 0 && jsCheck.rows[0].registration_type) {
+        finalRegistrationType = jsCheck.rows[0].registration_type;
+      }
+    }
+    finalRegistrationType = finalRegistrationType.toLowerCase() === 'general' ? 'general' : 'engineer';
+
     // ステータス履歴にアクティブレコードを追加
     const result = await query(`
       INSERT INTO job_seeker_status_history 
-        (user_id, status, notes)
-      VALUES ($1, 'active', $2)
+        (user_id, registration_type, status, notes)
+      VALUES ($1, $2, 'active', $3)
       RETURNING *
-    `, [userId, notes || null]);
+    `, [userId, finalRegistrationType, notes || null]);
 
     await refreshCurrentStatusView();
     res.json({

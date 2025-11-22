@@ -77,7 +77,8 @@ export function JobSeekerStatusModal({
             company_name: companyName,
             company_url: companyUrl,
             employment_date: employmentDate,
-            notes: employmentNotes
+            notes: employmentNotes,
+            registration_type: jobSeeker.registration_type || 'engineer'
           };
           break;
 
@@ -94,14 +95,16 @@ export function JobSeekerStatusModal({
           body = {
             withdrawal_date: withdrawalDate,
             reason: withdrawalReason,
-            notes: withdrawalNotes
+            notes: withdrawalNotes,
+            registration_type: jobSeeker.registration_type || 'engineer'
           };
           break;
 
         case 'reactivate':
           endpoint = `/api/job-seeker-status/admin/reactivate/${jobSeeker.user_id}`;
           body = {
-            notes: reactivateNotes
+            notes: reactivateNotes,
+            registration_type: jobSeeker.registration_type || 'engineer'
           };
           break;
         default:

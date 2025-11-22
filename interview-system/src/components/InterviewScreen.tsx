@@ -7,14 +7,7 @@ import {
   XIcon,
   MessageCircleIcon,
   Volume2Icon,
-  VolumeXIcon,
-  PlayIcon,
-  PauseIcon,
-  SkipForwardIcon,
-  AlertCircleIcon,
-  CheckCircleIcon,
-  VideoIcon,
-  VideoOffIcon
+  VolumeXIcon
 } from 'lucide-react';
 import { Language, Question } from '@/types/interview';
 
@@ -93,9 +86,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const [recordingTime, setRecordingTime] = useState(0);
   const [canStartRecording, setCanStartRecording] = useState(false);
   const [hasPlayedAudio, setHasPlayedAudio] = useState(false);
-  const [isVideoRecording, setIsVideoRecording] = useState(false);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [audioRecorder, setAudioRecorder] = useState<MediaRecorder | null>(null);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   
@@ -119,11 +109,9 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   const texts = {
     ja: {
@@ -245,7 +233,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     fetchSessionInfo();
   }, [sessionId]);
 
-  // 面接品質監視
+  // 面接品質監視（音声のみ）
   useEffect(() => {
     const checkQuality = () => {
       // ネットワーク品質チェック
@@ -265,21 +253,17 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         }
       }
 
-      // 録画品質チェック
-      if (mediaRecorder && mediaRecorder.state === 'recording') {
-        const stream = mediaRecorder.stream;
-        const videoTrack = stream.getVideoTracks()[0];
+      // 音声品質チェック（サンプルレートのみ簡易チェック）
+      if (audioRecorder && audioRecorder.state === 'recording') {
+        const stream = audioRecorder.stream;
         const audioTrack = stream.getAudioTracks()[0];
-        
-        if (videoTrack && audioTrack) {
-          const videoSettings = videoTrack.getSettings();
+
+        if (audioTrack) {
           const audioSettings = audioTrack.getSettings();
-          
-          if (videoSettings.width && videoSettings.width >= 1280 && 
-              audioSettings.sampleRate && audioSettings.sampleRate >= 44100) {
+
+          if (audioSettings.sampleRate && audioSettings.sampleRate >= 44100) {
             setRecordingQuality('high');
-          } else if (videoSettings.width && videoSettings.width >= 640 && 
-                     audioSettings.sampleRate && audioSettings.sampleRate >= 22050) {
+          } else if (audioSettings.sampleRate && audioSettings.sampleRate >= 22050) {
             setRecordingQuality('medium');
           } else {
             setRecordingQuality('low');
@@ -290,46 +274,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
     const qualityInterval = setInterval(checkQuality, 5000);
     return () => clearInterval(qualityInterval);
-  }, [mediaRecorder]);
-
-  // 録画録音の開始
-  const startVideoRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
-      });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-
-      const recorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm;codecs=vp9'
-      });
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          setRecordedChunks(prev => [...prev, event.data]);
-        }
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        console.log('録画完了:', url);
-        // ここで録画データをサーバーに送信
-        uploadRecording(blob, 'video');
-      };
-
-      setMediaRecorder(recorder);
-      recorder.start();
-      setIsVideoRecording(true);
-      console.log('録画録音開始');
-    } catch (error) {
-      console.error('録画録音開始エラー:', error);
-    }
-  };
+  }, [audioRecorder]);
 
   // 音声録音の開始
   const startAudioRecording = async () => {
@@ -390,13 +335,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     }
   };
 
-  // 録画録音の停止
-  const stopVideoRecording = () => {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-      setIsVideoRecording(false);
-      console.log('録画録音停止');
-    }
+  // 録音の停止（音声のみ）
+  const stopAudioRecording = () => {
     if (audioRecorder && audioRecorder.state !== 'inactive') {
       audioRecorder.stop();
       console.log('音声録音停止');
@@ -556,9 +496,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       setIsRecording(true);
       setTranscript('');
       
-      // 動画録画開始
-      startVideoRecording();
-      
       // 音声録画開始
       startAudioRecording();
       
@@ -588,8 +525,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       setIsRecording(false);
       setIsListening(false);
       
-      // 動画録画停止
-      stopVideoRecording();
+      // 音声録音停止
+      stopAudioRecording();
       
       // 音声認識停止
       if (recognitionRef.current) {
@@ -666,7 +603,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         
         if (data.isComplete) {
           console.log('面接完了');
-          stopVideoRecording();
+          stopAudioRecording();
           onComplete();
         } else {
           console.log('次の質問を設定:', data.nextQuestion);
@@ -693,7 +630,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
   const endInterview = async () => {
     if (window.confirm(t.confirmEnd)) {
-      stopVideoRecording();
+      stopAudioRecording();
       try {
         const response = await fetch('/api/interview/end', {
           method: 'POST',
@@ -762,15 +699,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   <BarChart3Icon className="h-4 w-4" />
                   <span className="font-medium">{progress.current}/{progress.total} ({progress.percentage}%)</span>
                 </div>
-                <div className="flex items-center space-x-2 text-gray-600">
-                  {isVideoRecording ? (
-                    <div className="flex items-center space-x-1 text-red-600">
-                      <VideoIcon className="h-4 w-4" />
-                      <span className="text-xs">{t.videoRecording}</span>
-                    </div>
-                  ) : null}
-                </div>
-                
+                {/* 録音品質インジケーター */}
                 {/* 面接品質インジケーター */}
                 <div className="flex items-center space-x-3 ml-4">
                   <div className="flex items-center space-x-1">
@@ -915,27 +844,9 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           </div>
         </div>
 
-        {/* 録画プレビュー（小さく表示） */}
-        <div className="bg-white rounded-xl shadow-xl p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">録画プレビュー</h3>
-            <div className="flex items-center space-x-2">
-              {isVideoRecording ? (
-                <div className="flex items-center space-x-1 text-red-600">
-                  <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-                  <span className="text-sm">{t.videoRecording}</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="relative">
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              className="w-full h-32 object-cover rounded-lg bg-gray-100"
-            />
-          </div>
+        {/* 録音に関する注意表示（カメラは使用しない） */}
+        <div className="mt-4 text-center text-xs text-gray-500">
+          この面接ではカメラ映像は保存されず、音声のみが録音されます。
         </div>
       </div>
     </div>

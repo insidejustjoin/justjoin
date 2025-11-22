@@ -9,7 +9,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { User, Mail, Calendar, Edit, FileText, Building, Briefcase, Star, Trophy, AlertTriangle, MessageSquare, Clock, CheckCircle, XCircle, ExternalLink, Globe, Bell, Copy } from 'lucide-react';
 import { LanguageToggle } from '@/components/LanguageToggle';
-import { FuriganaText } from '@/components/FuriganaText';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Link, useNavigate } from 'react-router-dom';
@@ -31,8 +30,6 @@ export function JobSeekerMyPageEngineer() {
   const [isStartingInterview, setIsStartingInterview] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   
-  // ふりがな表示設定（デフォルトで表示）
-  const [showFurigana, setShowFurigana] = useState(true);
 
   // エンジニア権限ガード（エンジニアを持たない場合はログインへ戻す）
   useRegistrationTypeGuard('engineer');
@@ -144,13 +141,13 @@ export function JobSeekerMyPageEngineer() {
   const getInterviewStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.completed')} showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" />{t('myPage.completed')}</Badge>;
       case 'in_progress':
-        return <Badge variant="default" className="bg-blue-500"><Clock className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.inProgress')} showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="default" className="bg-blue-500"><Clock className="h-3 w-3 mr-1" />{t('myPage.inProgress')}</Badge>;
       case 'cancelled':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.cancelled')} showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />{t('myPage.cancelled')}</Badge>;
       default:
-        return <Badge variant="outline"><FuriganaText text={t('myPage.notTaken')} showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="outline">{t('myPage.notTaken')}</Badge>;
     }
   };
 
@@ -158,15 +155,15 @@ export function JobSeekerMyPageEngineer() {
   const getRecommendationBadge = (recommendation: string) => {
     switch (recommendation) {
       case 'strong_yes':
-        return <Badge className="bg-emerald-500"><FuriganaText text="強く推薦" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-emerald-500">強く推薦</Badge>;
       case 'yes':
-        return <Badge className="bg-green-500"><FuriganaText text="推薦" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-green-500">推薦</Badge>;
       case 'maybe':
-        return <Badge className="bg-yellow-500"><FuriganaText text="要検討" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-yellow-500">要検討</Badge>;
       case 'no':
-        return <Badge className="bg-red-500"><FuriganaText text="非推薦" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-red-500">非推薦</Badge>;
       case 'strong_no':
-        return <Badge className="bg-red-700"><FuriganaText text="強く非推薦" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-red-700">強く非推薦</Badge>;
       default:
         return null;
     }
@@ -215,7 +212,8 @@ export function JobSeekerMyPageEngineer() {
               const updatedUserData = {
                 ...basicUserData,
                 full_name: profileData.full_name || '',
-                interview_enabled: profileData.interview_enabled || false
+                interview_enabled: profileData.interview_enabled || false,
+                profile_photo: profileData.profile_photo || null
               };
               setUserData(updatedUserData);
             }
@@ -275,9 +273,14 @@ export function JobSeekerMyPageEngineer() {
           const rate = result.completionRate || 0;
           setCompletionRate(rate);
           
-          // 入力率が100%未満の場合はモーダルを表示
-          if (rate < 100) {
+          // 入力率が100%未満の場合で、まだモーダルが表示されていない場合のみモーダルを表示
+          // localStorageで既に表示済みかチェック（ページリロード時は表示）
+          const modalShownKey = `completion_modal_shown_${user.id}`;
+          const hasShownModal = localStorage.getItem(modalShownKey);
+          
+          if (rate < 100 && !hasShownModal && !showCompletionModal) {
             setShowCompletionModal(true);
+            // モーダルを閉じた時にlocalStorageに記録（ボタンのonClickで設定）
           }
         }
               } else {
@@ -316,7 +319,7 @@ export function JobSeekerMyPageEngineer() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">
-            <FuriganaText text={t('loadingData')} showFurigana={showFurigana} />
+{t('loadingData')}
           </p>
         </div>
       </div>
@@ -332,7 +335,7 @@ export function JobSeekerMyPageEngineer() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">
-            <FuriganaText text="ログインページにリダイレクト中..." showFurigana={showFurigana} />
+            ログインページにリダイレクト中...
           </p>
         </div>
       </div>
@@ -346,7 +349,7 @@ export function JobSeekerMyPageEngineer() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">
-            <FuriganaText text={t('loadingData')} showFurigana={showFurigana} />
+{t('loadingData')}
           </p>
         </div>
       </div>
@@ -357,7 +360,7 @@ export function JobSeekerMyPageEngineer() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">
-          <FuriganaText text="求職者アカウントでログインしてください。" showFurigana={showFurigana} />
+          求職者アカウントでログインしてください。
         </div>
       </div>
     );
@@ -383,18 +386,10 @@ export function JobSeekerMyPageEngineer() {
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">
-                  <FuriganaText 
-                    text={getMultilingualText('myPageTitle')} 
-                    showFurigana={showFurigana}
-                    onToggleFurigana={setShowFurigana}
-                    showToggleButton={true}
-                  />
+                  {getMultilingualText('myPageTitle')}
                 </h1>
                 <p className="text-gray-600 mt-2">
-                  <FuriganaText 
-                    text={t('myPage.myPageDescription')} 
-                    showFurigana={showFurigana}
-                  />
+                  {t('myPage.myPageDescription')}
                 </p>
               </div>
               {/* 通知ベルと言語切り替えを右上に配置 */}
@@ -428,10 +423,7 @@ export function JobSeekerMyPageEngineer() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                <FuriganaText 
-                  text={getMultilingualText('documentCreation')} 
-                  showFurigana={showFurigana}
-                />
+                {getMultilingualText('documentCreation')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -441,38 +433,23 @@ export function JobSeekerMyPageEngineer() {
                   <div className="flex items-center gap-2">
                     <Trophy className="h-5 w-5 text-blue-600" />
                     <h3 className="text-lg font-semibold text-blue-800">
-                      <FuriganaText 
-                        text={t('profileCompletion.rate')} 
-                        showFurigana={showFurigana}
-                      />
+                      {t('profileCompletion.rate')}
                     </h3>
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-blue-600">{completionRate}%</div>
                     <div className="text-sm text-blue-600">
                       {completionRate < 30 && (
-                        <FuriganaText 
-                          text={t('profileCompletion.initialEntry')} 
-                          showFurigana={showFurigana}
-                        />
+                        <>{t('profileCompletion.initialEntry')}</>
                       )}
                       {completionRate >= 30 && completionRate < 70 && (
-                        <FuriganaText 
-                          text={t('profileCompletion.incomplete')} 
-                          showFurigana={showFurigana}
-                        />
+                        <>{t('profileCompletion.incomplete')}</>
                       )}
                       {completionRate >= 70 && completionRate < 100 && (
-                        <FuriganaText 
-                          text={t('profileCompletion.almostComplete')} 
-                          showFurigana={showFurigana}
-                        />
+                        <>{t('profileCompletion.almostComplete')}</>
                       )}
                       {completionRate === 100 && (
-                        <FuriganaText 
-                          text={t('profileCompletion.complete')} 
-                          showFurigana={showFurigana}
-                        />
+                        <>{t('profileCompletion.complete')}</>
                       )}
                     </div>
                   </div>
@@ -483,35 +460,23 @@ export function JobSeekerMyPageEngineer() {
                     <div className="flex items-center gap-2">
                       <Star className="h-4 w-4 text-yellow-500" />
                       <span>
-                        <FuriganaText 
-                          text={t('profileCompletion.encourageCompletion')} 
-                          showFurigana={showFurigana}
-                        />
+                        {t('profileCompletion.encourageCompletion')}
                       </span>
                     </div>
                   )}
                   {completionRate >= 30 && completionRate < 70 && (
                     <span>
-                      <FuriganaText 
-                        text={t('profileCompletion.basicComplete')} 
-                        showFurigana={showFurigana}
-                      />
+                      {t('profileCompletion.basicComplete')}
                     </span>
                   )}
                   {completionRate >= 70 && completionRate < 100 && (
                     <span>
-                      <FuriganaText 
-                        text={t('profileCompletion.almostDone')} 
-                        showFurigana={showFurigana}
-                      />
+                      {t('profileCompletion.almostDone')}
                     </span>
                   )}
                   {completionRate === 100 && (
                     <span>
-                      <FuriganaText 
-                        text={t('profileCompletion.perfect')} 
-                        showFurigana={showFurigana}
-                      />
+                      {t('profileCompletion.perfect')}
                     </span>
                   )}
                 </div>
@@ -523,10 +488,7 @@ export function JobSeekerMyPageEngineer() {
                 className="w-full h-12 text-lg"
               >
                 <FileText className="h-5 w-5 mr-2" />
-                <FuriganaText 
-                  text={t('createEditDocuments')} 
-                  showFurigana={showFurigana}
-                />
+                {t('createEditDocuments')}
               </Button>
             </CardContent>
           </Card>
@@ -537,16 +499,10 @@ export function JobSeekerMyPageEngineer() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" />
-                  <FuriganaText 
-                    text={getMultilingualText('aiInterview')} 
-                    showFurigana={showFurigana}
-                  />
+                  {getMultilingualText('aiInterview')}
                 </CardTitle>
                 <CardDescription>
-                  <FuriganaText 
-                    text={getMultilingualText('aiInterviewDescription')} 
-                    showFurigana={showFurigana}
-                  />
+                  {getMultilingualText('aiInterviewDescription')}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -554,10 +510,7 @@ export function JobSeekerMyPageEngineer() {
                   <div className="text-center py-4">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
                     <p className="text-sm text-gray-600">
-                      <FuriganaText 
-                        text="面接情報を読み込み中..." 
-                        showFurigana={showFurigana}
-                      />
+                      面接情報を読み込み中...
                     </p>
                   </div>
                 ) : interviewData ? (
@@ -567,10 +520,7 @@ export function JobSeekerMyPageEngineer() {
                         <MessageSquare className="h-6 w-6 text-blue-500" />
                         <div>
                           <p className="text-sm font-medium">
-                            <FuriganaText 
-                              text={t('myPage.interviewStatus')} 
-                              showFurigana={showFurigana}
-                            />
+                            {t('myPage.interviewStatus')}
                           </p>
                           <div className="flex items-center gap-2 mt-1">
                             {getInterviewStatusBadge(interviewData.status)}
@@ -580,10 +530,7 @@ export function JobSeekerMyPageEngineer() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-gray-600">
-                          <FuriganaText 
-                            text={t('myPage.examCount')} 
-                            showFurigana={showFurigana}
-                          />
+                          {t('myPage.examCount')}
                         </p>
                         <p className="text-lg font-semibold">{interviewData.totalInterviews}/1</p>
                       </div>
@@ -592,28 +539,19 @@ export function JobSeekerMyPageEngineer() {
                     {interviewData.hasInterview && interviewData.latestCompletion && (
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <h4 className="text-sm font-medium mb-2">
-                          <FuriganaText 
-                            text={t('myPage.latestInterviewResults')} 
-                            showFurigana={showFurigana}
-                          />
+                          {t('myPage.latestInterviewResults')}
                         </h4>
                         <div className="space-y-2 text-sm">
                           <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                             <span className="text-gray-600">
-                              <FuriganaText 
-                                text={t('myPage.completionDateTime')} 
-                                showFurigana={showFurigana}
-                              />
+                              {t('myPage.completionDateTime')}
                             </span>
                             <span>{format(new Date(interviewData.latestCompletion), 'yyyy年MM月dd日 HH:mm', { locale: ja })}</span>
                           </div>
                           {interviewData.latestScore && (
                             <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                               <span className="text-gray-600">
-                                <FuriganaText 
-                                  text={t('myPage.totalScore')} 
-                                  showFurigana={showFurigana}
-                                />
+                                {t('myPage.totalScore')}
                               </span>
                               <span className="font-medium">{Math.round(interviewData.latestScore)}/100</span>
                             </div>
@@ -632,18 +570,12 @@ export function JobSeekerMyPageEngineer() {
                         {isStartingInterview ? (
                           <>
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                            <FuriganaText 
-                              text="面接を開始中..." 
-                              showFurigana={showFurigana}
-                            />
+                            面接を開始中...
                           </>
                         ) : (
                           <>
                             <MessageSquare className="h-5 w-5 mr-2" />
-                            <FuriganaText 
-                              text={getMultilingualText('startAIInterview')} 
-                              showFurigana={showFurigana}
-                            />
+                            {getMultilingualText('startAIInterview')}
                           </>
                         )}
                       </Button>
@@ -656,16 +588,10 @@ export function JobSeekerMyPageEngineer() {
                           <CheckCircle className="h-6 w-6 text-green-600" />
                         </div>
                         <p className="text-sm text-gray-600 mb-3">
-                          <FuriganaText 
-                            text={getMultilingualText('aiInterviewCompleted')} 
-                            showFurigana={showFurigana}
-                          />
+                          {getMultilingualText('aiInterviewCompleted')}
                         </p>
                         <p className="text-xs text-gray-500">
-                          <FuriganaText 
-                            text={getMultilingualText('aiInterviewOneTimeOnly')} 
-                            showFurigana={showFurigana}
-                          />
+                          {getMultilingualText('aiInterviewOneTimeOnly')}
                         </p>
                       </div>
                     )}
@@ -677,10 +603,7 @@ export function JobSeekerMyPageEngineer() {
                           <Clock className="h-6 w-6 text-yellow-600" />
                         </div>
                         <p className="text-sm text-gray-600">
-                          <FuriganaText 
-                            text={getMultilingualText('interviewPreparing')} 
-                            showFurigana={showFurigana}
-                          />
+                          {getMultilingualText('interviewPreparing')}
                         </p>
                       </div>
                     )}
@@ -691,20 +614,14 @@ export function JobSeekerMyPageEngineer() {
                       <AlertTriangle className="h-6 w-6 text-red-600" />
                     </div>
                     <p className="text-sm text-gray-600 mb-3">
-                      <FuriganaText 
-                        text={getMultilingualText('interviewLoadError')} 
-                        showFurigana={showFurigana}
-                      />
+                      {getMultilingualText('interviewLoadError')}
                     </p>
                     <Button
                       onClick={fetchInterviewHistory}
                       variant="outline"
                       size="sm"
                     >
-                      <FuriganaText 
-                        text={getMultilingualText('reload')} 
-                        showFurigana={showFurigana}
-                      />
+                      {getMultilingualText('reload')}
                     </Button>
                   </div>
                 )}
@@ -718,16 +635,10 @@ export function JobSeekerMyPageEngineer() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" />
-                  <FuriganaText 
-                    text="テスト用面接システム" 
-                    showFurigana={showFurigana}
-                  />
+                  テスト用面接システム
                 </CardTitle>
                 <CardDescription>
-                  <FuriganaText 
-                    text="開発・テスト環境での面接システム動作確認用" 
-                    showFurigana={showFurigana}
-                  />
+                  開発・テスト環境での面接システム動作確認用
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -736,10 +647,7 @@ export function JobSeekerMyPageEngineer() {
                   className="w-full h-12 text-lg bg-green-600 hover:bg-green-700"
                 >
                   <ExternalLink className="h-5 w-5 mr-2" />
-                  <FuriganaText 
-                    text="テスト用面接システムを開く" 
-                    showFurigana={showFurigana}
-                  />
+                  テスト用面接システムを開く
                 </Button>
               </CardContent>
             </Card>
@@ -752,38 +660,43 @@ export function JobSeekerMyPageEngineer() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <User className="h-5 w-5" />
-                    <FuriganaText 
-                      text={getMultilingualText('profileInformation')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('profileInformation')}
                   </CardTitle>
                   <CardDescription>
-                    <FuriganaText 
-                      text={getMultilingualText('profileDescription')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('profileDescription')}
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild>
                   <Link to="/settings">
                     <Edit className="h-4 w-4 mr-2" />
-                    <FuriganaText 
-                      text={getMultilingualText('edit')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('edit')}
                   </Link>
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* 顔写真表示 */}
+              <div className="flex flex-col items-center gap-4 pb-4">
+                <div className="w-32 h-32 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                  {userData?.profile_photo ? (
+                    <img
+                      src={userData.profile_photo}
+                      alt={userData?.full_name || 'プロフィール写真'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-16 h-16 text-gray-500" />
+                  )}
+                </div>
+              </div>
+              
+              <Separator />
+              
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <User className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    <FuriganaText 
-                      text={getMultilingualText('fullName')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('fullName')}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {userData?.full_name || user.profile?.full_name || getMultilingualText('notSet')}
@@ -797,10 +710,7 @@ export function JobSeekerMyPageEngineer() {
                 <Mail className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    <FuriganaText 
-                      text={getMultilingualText('email')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('email')}
                   </p>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                 </div>
@@ -812,10 +722,7 @@ export function JobSeekerMyPageEngineer() {
                 <Calendar className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    <FuriganaText 
-                      text={getMultilingualText('registrationDate')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('registrationDate')}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {format(new Date(user.created_at), 'yyyy年MM月dd日', { locale: ja })}
@@ -833,10 +740,7 @@ export function JobSeekerMyPageEngineer() {
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <div className="flex items-start justify-between mb-2">
               <h3 className="text-lg font-semibold">
-                <FuriganaText 
-                  text={t('profileCompletion.modalTitle')} 
-                  showFurigana={showFurigana}
-                />
+                {t('profileCompletion.modalTitle')}
               </h3>
               <div className="ml-2">
                 <LanguageToggle />
@@ -847,33 +751,34 @@ export function JobSeekerMyPageEngineer() {
                 <User className="h-6 w-6 text-blue-600" />
               </div>
               <p className="text-sm text-gray-600 mb-4">
-                <FuriganaText 
-                  text={`${t('profileCompletion.modalMessagePrefix')}${completionRate}%${t('profileCompletion.modalMessageSuffix')}`}
-                  showFurigana={showFurigana}
-                />
+                {`${t('profileCompletion.modalMessagePrefix')}${completionRate}%${t('profileCompletion.modalMessageSuffix')}`}
               </p>
               <div className="flex gap-3">
                 <Button
-                  onClick={() => setShowCompletionModal(false)}
+                  onClick={() => {
+                    setShowCompletionModal(false);
+                    // モーダルを閉じたことを記録（次のページリロードまで表示しない）
+                    if (user?.id) {
+                      localStorage.setItem(`completion_modal_shown_${user.id}`, 'true');
+                    }
+                  }}
                   variant="outline"
                   className="flex-1"
                 >
-                  <FuriganaText 
-                    text={t('profileCompletion.later')}
-                    showFurigana={showFurigana}
-                  />
+                  {t('profileCompletion.later')}
                 </Button>
                 <Button
                   onClick={() => {
                     setShowCompletionModal(false);
+                    // モーダルを閉じたことを記録
+                    if (user?.id) {
+                      localStorage.setItem(`completion_modal_shown_${user.id}`, 'true');
+                    }
                     navigate('/jobseeker/documents-engineer');
                   }}
                   className="flex-1"
                 >
-                  <FuriganaText 
-                    text={t('profileCompletion.completeNow')}
-                    showFurigana={showFurigana}
-                  />
+                  {t('profileCompletion.completeNow')}
                 </Button>
               </div>
             </div>

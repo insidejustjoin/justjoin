@@ -212,7 +212,8 @@ export function JobSeekerMyPage() {
               const updatedUserData = {
                 ...basicUserData,
                 full_name: profileData.full_name || '',
-                interview_enabled: profileData.interview_enabled || false
+                interview_enabled: profileData.interview_enabled || false,
+                profile_photo: profileData.profile_photo || null
               };
               setUserData(updatedUserData);
             }
@@ -773,6 +774,23 @@ export function JobSeekerMyPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* 顔写真表示 */}
+              <div className="flex flex-col items-center gap-4 pb-4">
+                <div className="w-32 h-32 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                  {userData?.profile_photo ? (
+                    <img
+                      src={userData.profile_photo}
+                      alt={userData?.full_name || 'プロフィール写真'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-16 h-16 text-gray-500" />
+                  )}
+                </div>
+              </div>
+              
+              <Separator />
+              
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <User className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">

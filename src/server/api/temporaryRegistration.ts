@@ -553,7 +553,7 @@ router.post('/complete/:token', async (req, res) => {
     // 求職者詳細情報作成
     await query(
       `INSERT INTO job_seekers (user_id, first_name, last_name, profile_photo, completion_rate, created_at, updated_at) 
-       VALUES ($1, $2, $3, NOW(), NOW())`,
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
       [userId, registration.first_name, registration.last_name, profilePhoto, completionRate]
     );
 

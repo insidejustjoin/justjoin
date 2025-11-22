@@ -395,6 +395,7 @@ export function AdminJobSeekers() {
       
       if (data.success) {
         const jobSeekersDataRaw = data.jobSeekers || [];
+        console.log('Raw job seekers data:', { count: jobSeekersDataRaw.length, sample: jobSeekersDataRaw[0] });
         // API 由来の重複があっても user_id で一意化
         const uniqSeen: Record<string, boolean> = {};
         const jobSeekersDataAll = jobSeekersDataRaw.filter((js: any) => {
@@ -403,12 +404,18 @@ export function AdminJobSeekers() {
           uniqSeen[key] = true;
           return true;
         });
+        console.log('After deduplication:', { count: jobSeekersDataAll.length, employmentStatuses: jobSeekersDataAll.map((js: any) => ({ id: js.user_id, status: js.employment_status })) });
         // タブに応じて雇用ステータスでフィルタ（active / employed / withdrawn）
         const filterByTab = (items: any[]) => {
           const statusWanted =
             activeTab === 'employed' ? 'employed' :
             activeTab === 'withdrawn' ? 'withdrawn' : 'active';
-          return items.filter((it: any) => (it.employment_status || 'active') === statusWanted);
+          const filtered = items.filter((it: any) => {
+            const status = it.employment_status || 'active';
+            return status === statusWanted;
+          });
+          console.log('Tab filter:', { activeTab, statusWanted, beforeCount: items.length, afterCount: filtered.length, sampleStatuses: items.slice(0, 3).map((it: any) => it.employment_status) });
+          return filtered;
         };
         const jobSeekersData = filterByTab(jobSeekersDataAll);
         console.log('Job seekers data (filtered by tab):', { activeTab, count: jobSeekersData.length });
@@ -1316,7 +1323,9 @@ export function AdminJobSeekers() {
       // 各求職者に対して面接表示設定を更新
       const results = await Promise.allSettled(
         selectedJobSeekers.map(async (jobSeeker) => {
-          const response = await fetch(`${apiUrl}/api/documents/admin/jobseekers/${jobSeeker.id}/interview-visibility`, {
+          // user_idまたはjs_idを使用（優先順位: user_id > js_id > id）
+          const jobSeekerId = (jobSeeker as any).user_id || (jobSeeker as any).js_id || jobSeeker.id;
+          const response = await fetch(`${apiUrl}/api/documents/admin/jobseekers/${jobSeekerId}/interview-visibility`, {
             method: 'PUT',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -1330,7 +1339,8 @@ export function AdminJobSeekers() {
           if (response.ok) {
             return { success: true, jobSeeker };
           } else {
-            return { success: false, jobSeeker, error: '設定更新に失敗' };
+            const errorData = await response.json().catch(() => ({ error: '設定更新に失敗' }));
+            return { success: false, jobSeeker, error: errorData.error || '設定更新に失敗' };
           }
         })
       );
@@ -1743,6 +1753,13 @@ export function AdminJobSeekers() {
                               {getInterviewStatusDisplay(jobSeeker.user_id).text}
                             </Badge>
                             
+                            {/* 面接音声有無バッジ */}
+                            {(jobSeeker as any).has_interview_audio && (
+                              <Badge variant="outline" className="bg-purple-100 text-purple-700">
+                                音声録音あり
+                              </Badge>
+                            )}
+                            
                             {/* 面接受験回数バッジ */}
                             {jobSeeker.interview_attempts && jobSeeker.interview_attempts.count > 0 && (
                               <Badge variant="outline" className="bg-blue-100 text-blue-700">
@@ -1808,6 +1825,26 @@ export function AdminJobSeekers() {
                           <RefreshCw className="h-4 w-4 mr-2" />
                           面接再有効化
                         </Button>
+                        {/* 面接有効化/無効化ボタン */}
+                        <Button
+                          onClick={() => toggleSingleInterviewVisibility(jobSeeker, !jobSeeker.interviewEnabled)}
+                          size="sm"
+                          variant="outline"
+                          className={jobSeeker.interviewEnabled ? "bg-red-100 hover:bg-red-200 border-red-300 text-red-800" : "bg-green-100 hover:bg-green-200 border-green-300 text-green-800"}
+                          disabled={bulkOperationLoading}
+                        >
+                          {jobSeeker.interviewEnabled ? (
+                            <>
+                              <X className="h-4 w-4 mr-2" />
+                              面接無効化
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-4 w-4 mr-2" />
+                              面接有効化
+                            </>
+                          )}
+                        </Button>
                         <Button
                           onClick={() => openStatusModal(jobSeeker)}
                           size="sm"
@@ -1845,12 +1882,17 @@ export function AdminJobSeekers() {
 
           {/* 就職済み一覧タブ */}
           <TabsContent value="employed" className="space-y-4">
-            {statusLoading ? (
+            {loading ? (
               <div className="flex justify-center items-center py-8">
                 <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
                 <span className="ml-2 text-gray-600">データを読み込み中...</span>
-        </div>
-            ) : jobSeekerStatuses.employed.length === 0 ? (
+              </div>
+            ) : error ? (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : filteredJobSeekers.length === 0 ? (
               <Alert>
                 <Users className="h-4 w-4" />
                 <AlertDescription>
@@ -1859,40 +1901,201 @@ export function AdminJobSeekers() {
               </Alert>
             ) : (
               <div className="space-y-4">
-                {jobSeekerStatuses.employed.map((jobSeeker) => (
+                {/* 一括選択ヘッダー */}
+                <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSelectAll}
+                    className="flex items-center gap-2"
+                  >
+                    {isSelectAll ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    {isSelectAll ? '全選択解除' : '全選択'}
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    {selectedJobSeekers.length} / {filteredJobSeekers.length} 選択中
+                  </span>
+                </div>
+
+                {/* 求職者カード */}
+                {filteredJobSeekers.map((jobSeeker) => (
                   <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Building2 className="h-6 w-6 text-blue-600" />
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-4 flex-1">
+                          {/* 選択チェックボックス */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSelectJobSeeker(jobSeeker)}
+                            className={`flex items-center gap-2 ${
+                              isJobSeekerSelected(jobSeeker) 
+                                ? 'bg-blue-100 border-blue-300' 
+                                : 'bg-white'
+                            }`}
+                          >
+                            {isJobSeekerSelected(jobSeeker) ? (
+                              <CheckSquare className="h-4 w-4 text-blue-600" />
+                            ) : (
+                              <Square className="h-4 w-4" />
+                            )}
+                          </Button>
+
+                          {/* 顔写真 */}
+                          <div className="flex-shrink-0">
+                            {jobSeeker.profile_photo ? (
+                              <div className="w-[76px] h-[102px]">
+                                <img
+                                  src={jobSeeker.profile_photo}
+                                  alt={`${jobSeeker.full_name}の写真`}
+                                  className="w-full h-full object-cover rounded-lg border"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-[76px] h-[102px] bg-gray-200 rounded-lg border flex items-center justify-center">
+                                <span className="text-gray-500 text-xs">写真なし</span>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-lg">
-                              {jobSeeker.full_name || `${jobSeeker.first_name} ${jobSeeker.last_name}`}
-                            </h3>
-                            <p className="text-gray-600">{jobSeeker.email}</p>
-                            <div className="flex items-center gap-4 mt-2">
+
+                          {/* 求職者情報 */}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-4 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {jobSeeker.full_name || '名前未設定'}
+                              </h3>
                               <Badge variant="secondary" className="bg-green-100 text-green-800">
                                 就職済み
                               </Badge>
-                              <span className="text-sm text-gray-600">
-                                就職先: {jobSeeker.company_name}
-                              </span>
-                              <span className="text-sm text-gray-600">
-                                就職日: {new Date(jobSeeker.employment_date).toLocaleDateString('ja-JP')}
-                              </span>
+                              <Badge variant="secondary">
+                                {getDisplayAge(jobSeeker) ? `${getDisplayAge(jobSeeker)}歳` : '年齢未設定'}
+                              </Badge>
+                              <Badge variant="outline">
+                                {getGenderLabel(jobSeeker.gender || '')}
+                              </Badge>
+                              {jobSeeker.nationality && (
+                                <Badge variant="outline">
+                                  {jobSeeker.nationality}
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {/* 就職情報 */}
+                            {(jobSeeker as any).company_name || (jobSeeker as any).employment_date ? (
+                              <div className="mb-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                                <div className="flex items-center gap-4 text-sm">
+                                  {(jobSeeker as any).company_name && (
+                                    <div>
+                                      <span className="font-semibold text-green-800">就職先:</span>{' '}
+                                      <span className="text-green-700">{(jobSeeker as any).company_name}</span>
+                                    </div>
+                                  )}
+                                  {(jobSeeker as any).employment_date && (
+                                    <div>
+                                      <span className="font-semibold text-green-800">就職日:</span>{' '}
+                                      <span className="text-green-700">
+                                        {new Date((jobSeeker as any).employment_date).toLocaleDateString('ja-JP')}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {(jobSeeker as any).company_url && (
+                                    <div>
+                                      <a 
+                                        href={(jobSeeker as any).company_url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 hover:underline"
+                                      >
+                                        企業URL
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                              <div>
+                                <p><strong>生年月日:</strong> {jobSeeker.date_of_birth ? new Date(jobSeeker.date_of_birth).toLocaleDateString('ja-JP') : '未設定'}</p>
+                                <p><strong>国籍:</strong> {jobSeeker.nationality || '未設定'}</p>
+                                <p><strong>日本語資格:</strong> {jobSeeker.japaneseLevel || jobSeeker.japanese_level || '未設定'}</p>
+                                <p><strong>メール:</strong> {jobSeeker.email || jobSeeker.user_email || '未設定'}</p>
+                              </div>
+                              <div>
+                                <p><strong>電話:</strong> {jobSeeker.phone || '未設定'}</p>
+                                <p><strong>登録日:</strong> {new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</p>
+                                <p><strong>入力率:</strong> <span className="font-semibold text-blue-600">{(jobSeeker as any).completion_rate || 0}%</span></p>
+                              </div>
                             </div>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+
+                        {/* アクションボタン */}
+                        <div className="flex flex-col gap-2 ml-4">
+                          <Button
+                            onClick={() => openDetailModal(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            詳細表示
+                          </Button>
+                          <Button
+                            onClick={() => openDocumentGenerator(jobSeeker)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            書類作成
+                          </Button>
+                          {/* 面接有効化/無効化ボタン */}
+                          <Button
+                            onClick={() => toggleSingleInterviewVisibility(jobSeeker, !jobSeeker.interviewEnabled)}
+                            size="sm"
+                            variant="outline"
+                            className={jobSeeker.interviewEnabled ? "bg-red-100 hover:bg-red-200 border-red-300 text-red-800" : "bg-green-100 hover:bg-green-200 border-green-300 text-green-800"}
+                            disabled={bulkOperationLoading}
+                          >
+                            {jobSeeker.interviewEnabled ? (
+                              <>
+                                <X className="h-4 w-4 mr-2" />
+                                面接無効化
+                              </>
+                            ) : (
+                              <>
+                                <Play className="h-4 w-4 mr-2" />
+                                面接有効化
+                              </>
+                            )}
+                          </Button>
                           <Button
                             onClick={() => openStatusModal(jobSeeker)}
                             size="sm"
                             variant="outline"
+                            className="bg-green-100 hover:bg-green-200 border-green-300"
                           >
                             <UserPlus className="h-4 w-4 mr-2" />
-                            求職者に復帰
+                            求職者に戻す
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              console.log('削除ボタンクリック:', { 
+                                user_id: jobSeeker.user_id, 
+                                full_name: jobSeeker.full_name,
+                                user_idType: typeof jobSeeker.user_id,
+                                isUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(jobSeeker.user_id))
+                              });
+                              deleteJobSeeker(jobSeeker.user_id, jobSeeker.full_name);
+                            }}
+                            size="sm"
+                            variant="destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            削除
                           </Button>
                         </div>
                       </div>

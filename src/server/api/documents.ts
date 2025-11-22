@@ -1786,12 +1786,13 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
       });
     }
 
-    // 求職者の面接表示設定を更新
+    // 求職者の面接表示設定を更新（user_idでも動作するように修正）
+    // idはjob_seekers.idまたはuser_idの可能性がある
     const updateQuery = `
       UPDATE job_seekers 
       SET interview_enabled = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING id, interview_enabled
+      WHERE id = $2 OR user_id = $2
+      RETURNING id, user_id, interview_enabled
     `;
     
     const result = await query(updateQuery, [interviewEnabled, id]);

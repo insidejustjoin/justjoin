@@ -850,12 +850,19 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       const result = await query(
         `
           WITH latest AS (
-            SELECT DISTINCT ON (user_id)
+            SELECT DISTINCT ON (user_id, registration_type)
               user_id,
+              registration_type,
               status,
+              company_name,
+              company_url,
+              employment_date,
+              withdrawal_date,
+              reason,
+              notes,
               updated_at
             FROM job_seeker_status_history
-            ORDER BY user_id, created_at DESC
+            ORDER BY user_id, registration_type, created_at DESC
           )
           SELECT 
             u.id as id,
@@ -879,6 +886,18 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             u.created_at as registeredAt,
             u.updated_at as user_updated_at,
             COALESCE(latest.status, 'active')::text as employment_status,
+            latest.company_name,
+            latest.company_url,
+            latest.employment_date,
+            latest.withdrawal_date,
+            latest.reason,
+            latest.notes,
+            -- 最新の音声録音があるかどうか
+            EXISTS (
+              SELECT 1 FROM interview_recordings ir
+              WHERE ir.applicant_id = u.id::text
+                AND ir.recording_type = 'audio'
+            ) as has_interview_audio,
             COALESCE(js.completion_rate, 0)::int as completion_rate,
             COALESCE(js.registration_type, 'engineer') as registration_type,
             COALESCE(
@@ -893,7 +912,8 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             doc.registration_type as doc_registration_type
           FROM job_seekers js
           LEFT JOIN users u ON js.user_id = u.id
-          LEFT JOIN latest ON latest.user_id = js.user_id
+          LEFT JOIN latest ON latest.user_id = js.user_id 
+            AND LOWER(COALESCE(latest.registration_type, 'engineer')) = LOWER(COALESCE(js.registration_type, 'engineer'))
           LEFT JOIN LATERAL (
             SELECT 
               document_data, 
@@ -979,6 +999,12 @@ app.get('/api/admin/jobseekers', async (req, res) => {
           user_status: row.user_status,
           registeredAt: row.registeredAt,
           employment_status: row.employment_status,
+          company_name: row.company_name,
+          company_url: row.company_url,
+          employment_date: row.employment_date,
+          withdrawal_date: row.withdrawal_date,
+          reason: row.reason,
+          notes: row.notes,
           completion_rate: finalCompletionRate,
           registration_type: row.registration_type,
           profile_photo: row.profile_photo
@@ -1000,12 +1026,19 @@ app.get('/api/admin/jobseekers', async (req, res) => {
       const result = await query(
         `
           WITH latest AS (
-            SELECT DISTINCT ON (user_id)
+            SELECT DISTINCT ON (user_id, registration_type)
               user_id,
+              registration_type,
               status,
+              company_name,
+              company_url,
+              employment_date,
+              withdrawal_date,
+              reason,
+              notes,
               updated_at
             FROM job_seeker_status_history
-            ORDER BY user_id, created_at DESC
+            ORDER BY user_id, registration_type, created_at DESC
           )
           SELECT
             u.id as id,
@@ -1024,10 +1057,23 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             u.status as user_status,
             COALESCE(js.registration_type, 'engineer') as registration_type,
             COALESCE(js.completion_rate, 0)::int as completion_rate,
-            COALESCE(latest.status, 'active')::text as employment_status
+            COALESCE(latest.status, 'active')::text as employment_status,
+            latest.company_name,
+            latest.company_url,
+            latest.employment_date,
+            latest.withdrawal_date,
+            latest.reason,
+            latest.notes,
+            -- 最新の音声録音があるかどうか
+            EXISTS (
+              SELECT 1 FROM interview_recordings ir
+              WHERE ir.applicant_id = u.id::text
+                AND ir.recording_type = 'audio'
+            ) as has_interview_audio
           FROM job_seekers js
           LEFT JOIN users u ON js.user_id = u.id
-          LEFT JOIN latest ON latest.user_id = js.user_id
+          LEFT JOIN latest ON latest.user_id = js.user_id 
+            AND LOWER(COALESCE(latest.registration_type, 'engineer')) = LOWER(COALESCE(js.registration_type, 'engineer'))
           ${whereClause}
           ORDER BY js.created_at DESC
         `,
@@ -1051,7 +1097,14 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         email: row.email,
         user_status: row.user_status,
         registeredAt: row.created_at,
-        employment_status: 'unemployed',
+        employment_status: row.employment_status || 'active',
+        company_name: row.company_name,
+        company_url: row.company_url,
+        employment_date: row.employment_date,
+        withdrawal_date: row.withdrawal_date,
+        reason: row.reason,
+        notes: row.notes,
+        has_interview_audio: row.has_interview_audio,
         completion_rate: row.completion_rate,
         registration_type: row.registration_type,
         profile_photo: null
