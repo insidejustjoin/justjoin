@@ -28,6 +28,8 @@ export interface Question {
   text: {
     ja: string
     en: string
+    ru?: string
+    uz?: string
   }
   order: number
   isRequired: boolean

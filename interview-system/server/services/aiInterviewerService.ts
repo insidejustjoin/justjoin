@@ -222,8 +222,8 @@ export class AIInterviewerService {
       const isFirst = session.currentQuestionIndex === 0;
       message += this.generateQuestionIntroduction(nextQuestion, language, isFirst) + '\n\n';
       
-      // 質問テキストを追加
-      message += nextQuestion.text[language];
+      // 質問テキストを追加（ロシア語とウズベク語の場合は英語にフォールバック）
+      message += nextQuestion.text[language] || (language === 'ru' || language === 'uz' ? nextQuestion.text.en : nextQuestion.text.ja);
     }
 
     const isComplete = !nextQuestion;
@@ -249,7 +249,7 @@ export class AIInterviewerService {
     
     if (firstQuestion) {
       message += '\n\n' + this.generateQuestionIntroduction(firstQuestion, session.language, true);
-      message += '\n\n' + firstQuestion.text[session.language];
+      message += '\n\n' + (firstQuestion.text[session.language] || (session.language === 'ru' || session.language === 'uz' ? firstQuestion.text.en : firstQuestion.text.ja));
     }
 
     return {
