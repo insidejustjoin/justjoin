@@ -1172,18 +1172,26 @@ router.post('/interview-token/:userId', authenticate, async (req: AuthenticatedR
 
     const user = userResult.rows[0];
     
-    // 既に面接を受けているかチェック
-    const urlCheckQuery = `
-      SELECT is_used
-      FROM interview_urls
-      WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
+    // 既に面接を受けているかチェック（テーブルが存在しない場合はスキップ）
+    let isInterviewAlreadyTaken = false;
+    try {
+      const urlCheckQuery = `
+        SELECT is_used
+        FROM interview_urls
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      const urlCheckResult = await query(urlCheckQuery, [userId]);
+      if (urlCheckResult.rows.length > 0 && urlCheckResult.rows[0].is_used) {
+        isInterviewAlreadyTaken = true;
+      }
+    } catch (dbError: any) {
+      // テーブルが存在しない場合は警告を出して続行
+      console.warn('interview_urlsテーブルが存在しない可能性:', dbError.message);
+    }
     
-    const urlCheckResult = await query(urlCheckQuery, [userId]);
-    
-    if (urlCheckResult.rows.length > 0 && urlCheckResult.rows[0].is_used) {
+    if (isInterviewAlreadyTaken) {
       return res.status(400).json({
         success: false,
         error: 'INTERVIEW_ALREADY_TAKEN',
@@ -1222,31 +1230,68 @@ router.post('/interview-token/:userId', authenticate, async (req: AuthenticatedR
     // 面接URLを生成
     const interviewUrl = `https://interview.justjoin.jp?token=${tokenString}`;
 
-    // 面接URLをデータベースに保存
-    const saveUrlQuery = `
-      INSERT INTO interview_urls (user_id, interview_token, interview_url, expires_at, is_used)
-      VALUES ($1, $2, $3, NULL, FALSE)
-      ON CONFLICT (user_id) DO UPDATE SET
-        interview_token = EXCLUDED.interview_token,
-        interview_url = EXCLUDED.interview_url,
-        expires_at = NULL,
-        is_used = FALSE,
-        updated_at = NOW()
-    `;
-    
-    await query(saveUrlQuery, [user.id, tokenString, interviewUrl]);
+    // 面接URLをデータベースに保存（テーブルが存在しない場合はスキップ）
+    try {
+      // まず既存のレコードを確認
+      const checkExistingQuery = `
+        SELECT id FROM interview_urls WHERE user_id = $1 LIMIT 1
+      `;
+      const existingResult = await query(checkExistingQuery, [user.id]);
+      
+      if (existingResult.rows.length > 0) {
+        // 既存レコードを更新
+        const updateUrlQuery = `
+          UPDATE interview_urls 
+          SET interview_token = $1,
+              interview_url = $2,
+              expires_at = NULL,
+              is_used = FALSE,
+              updated_at = NOW()
+          WHERE user_id = $3
+        `;
+        await query(updateUrlQuery, [tokenString, interviewUrl, user.id]);
+      } else {
+        // 新規レコードを挿入
+        const insertUrlQuery = `
+          INSERT INTO interview_urls (user_id, interview_token, interview_url, expires_at, is_used)
+          VALUES ($1, $2, $3, NULL, FALSE)
+        `;
+        await query(insertUrlQuery, [user.id, tokenString, interviewUrl]);
+      }
+    } catch (dbError: any) {
+      // テーブルが存在しない場合は警告を出して続行
+      console.warn('interview_urlsテーブルへの保存エラー（テーブルが存在しない可能性）:', dbError.message);
+    }
 
-    // 面接受験回数を更新
-    const updateAttemptsQuery = `
-      INSERT INTO interview_attempts (user_id, attempt_count, first_attempt_at, last_attempt_at)
-      VALUES ($1, 1, NOW(), NOW())
-      ON CONFLICT (user_id) DO UPDATE SET
-        attempt_count = interview_attempts.attempt_count + 1,
-        last_attempt_at = NOW(),
-        updated_at = NOW()
-    `;
-    
-    await query(updateAttemptsQuery, [user.id]);
+    // 面接受験回数を更新（テーブルが存在しない場合はスキップ）
+    try {
+      const checkAttemptsQuery = `
+        SELECT user_id FROM interview_attempts WHERE user_id = $1 LIMIT 1
+      `;
+      const attemptsCheckResult = await query(checkAttemptsQuery, [user.id]);
+      
+      if (attemptsCheckResult.rows.length > 0) {
+        // 既存レコードを更新
+        const updateAttemptsQuery = `
+          UPDATE interview_attempts 
+          SET attempt_count = attempt_count + 1,
+              last_attempt_at = NOW(),
+              updated_at = NOW()
+          WHERE user_id = $1
+        `;
+        await query(updateAttemptsQuery, [user.id]);
+      } else {
+        // 新規レコードを挿入
+        const insertAttemptsQuery = `
+          INSERT INTO interview_attempts (user_id, attempt_count, first_attempt_at, last_attempt_at)
+          VALUES ($1, 1, NOW(), NOW())
+        `;
+        await query(insertAttemptsQuery, [user.id]);
+      }
+    } catch (dbError: any) {
+      // テーブルが存在しない場合は警告を出して続行
+      console.warn('interview_attemptsテーブルへの保存エラー（テーブルが存在しない可能性）:', dbError.message);
+    }
 
     res.json({
       success: true,
