@@ -1737,26 +1737,46 @@ app.get('/api/documents/:userId', async (req, res) => {
         // 最新の書類データを取得（registrationTypeに一致するもの）
         let merged = {};
         if (result.rows.length > 0) {
-            // 最新の書類データを使用
-            const latestRow = result.rows[0];
-            try {
-                const data = latestRow.document_data || {};
-                if (typeof data === 'string') {
-                    merged = JSON.parse(data);
-                }
-                else {
-                    merged = data;
+            // registrationTypeが指定されている場合は、一致するregistration_typeのデータのみを使用
+            const filteredRows = normalizedType
+                ? result.rows.filter(row => {
+                    const rowType = (row.registration_type || 'engineer').toLowerCase();
+                    return rowType === normalizedType.toLowerCase();
+                })
+                : result.rows;
+            if (filteredRows.length > 0) {
+                // 複数のdocument_typeをマージ（registrationTypeが一致するもののみ）
+                for (const row of filteredRows) {
+                    try {
+                        const data = row.document_data || {};
+                        let parsedData = {};
+                        if (typeof data === 'string') {
+                            parsedData = JSON.parse(data);
+                        }
+                        else {
+                            parsedData = data;
+                        }
+                        // データをマージ（後から取得したデータが優先）
+                        merged = { ...merged, ...parsedData };
+                    }
+                    catch (parseError) {
+                        console.warn('[DOCS][GET] JSON parse error:', parseError);
+                        if (typeof row.document_data === 'object') {
+                            merged = { ...merged, ...row.document_data };
+                        }
+                    }
                 }
             }
-            catch (parseError) {
-                console.warn('[DOCS][GET] JSON parse error:', parseError);
-                merged = latestRow.document_data || {};
+            else if (normalizedType) {
+                // registrationTypeが指定されているが、一致するデータが見つからない場合
+                console.log('[DOCS][GET] registrationTypeに一致するデータが見つかりません:', normalizedType);
+                return res.status(404).json({ success: false, message: '指定されたregistrationTypeの書類データが見つかりません' });
             }
         }
-        else {
-            // フォールバック: registrationTypeを指定せずに取得
+        else if (!normalizedType) {
+            // registrationTypeが指定されていない場合のみ、フォールバック処理を実行
             const fallbackResult = await query(`
-        SELECT document_data
+        SELECT document_data, registration_type
         FROM user_documents 
         WHERE user_id = $1 
         ORDER BY updated_at DESC
