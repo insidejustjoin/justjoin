@@ -1561,10 +1561,23 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       // データが存在する場合（空オブジェクトでも処理する）
       if (savedData && typeof savedData === 'object') {
         // データの整合性を確保するために、不足している部分を初期値で補完
+        // 管理者モードの場合はjobSeekerDataから名前を取得（registration_typeが一致する場合のみ）
+        const adminNameFallback = (isAdminMode && jobSeekerData && 
+          ((registrationTypeOverride || effectiveRegistrationType) === (jobSeekerData.registration_type || 'engineer'))) 
+          ? (() => {
+              const fullName = jobSeekerData.full_name || '';
+              const nameParts = fullName.split(' ');
+              return {
+                lastName: nameParts[0] || '',
+                firstName: nameParts.slice(1).join(' ') || ''
+              };
+            })()
+          : { lastName: '', firstName: '' };
+        
         const mergedData: DocumentData = {
-          // 基本情報（resume.basicInfo もフォールバック）
-          lastName: savedData.lastName || savedData.resume?.basicInfo?.lastName || '',
-          firstName: savedData.firstName || savedData.resume?.basicInfo?.firstName || '',
+          // 基本情報（resume.basicInfo もフォールバック、管理者モードの場合はjobSeekerDataから取得）
+          lastName: savedData.lastName || savedData.resume?.basicInfo?.lastName || adminNameFallback.lastName || '',
+          firstName: savedData.firstName || savedData.resume?.basicInfo?.firstName || adminNameFallback.firstName || '',
           kanaLastName: savedData.kanaLastName || savedData.resume?.basicInfo?.kanaLastName || '',
           kanaFirstName: savedData.kanaFirstName || savedData.resume?.basicInfo?.kanaFirstName || '',
           birthDate: savedData.birthDate || savedData.resume?.basicInfo?.dateOfBirth || '2000-01-01',
@@ -1732,6 +1745,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     }
     
     // 既に読み込み済みの場合は実行しない
+    // registrationTypeプロパティを優先（管理者モードでは明示的に渡される）
     const regType = registrationType || (jobSeekerData?.registration_type === 'general' ? 'general' : 'engineer');
     const loadKey = `${user?.id || ''}-${isAdminMode}-${jobSeekerData?.user_id || ''}-${regType}`;
     if (hasLoadedRef.current === loadKey) {
@@ -1739,7 +1753,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       return;
     }
     
-    console.log('[DocumentGenerator] データ読み込み開始:', loadKey);
+    console.log('[DocumentGenerator] データ読み込み開始:', { loadKey, registrationType, jobSeekerDataRegistrationType: jobSeekerData?.registration_type });
     isLoadingRef.current = true;
     hasLoadedRef.current = loadKey;
     
@@ -1751,8 +1765,16 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       });
     } else if (isAdminMode && jobSeekerData) {
       // 管理者モード：選択された求職者のデータを読み込み
+      // registrationTypeプロパティが明示的に渡されている場合はそれを優先、なければjobSeekerData.registration_typeを使用
       const adminRegistrationType: DocumentRegistrationType =
-        jobSeekerData.registration_type === 'general' ? 'general' : 'engineer';
+        registrationType || (jobSeekerData.registration_type === 'general' ? 'general' : 'engineer');
+      console.log('[DocumentGenerator] 管理者モード: データ読み込み', { 
+        userId: jobSeekerData.user_id, 
+        registrationType: adminRegistrationType,
+        jobSeekerDataRegistrationType: jobSeekerData.registration_type,
+        propRegistrationType: registrationType,
+        effectiveRegistrationType
+      });
       loadFromDatabaseByUserId(jobSeekerData.user_id, adminRegistrationType).finally(() => {
         isLoadingRef.current = false;
       });
