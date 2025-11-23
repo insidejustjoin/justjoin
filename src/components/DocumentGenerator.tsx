@@ -586,10 +586,10 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       const loadSavedDocumentData = async () => {
         try {
           const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+          // registrationTypeプロパティを優先（管理者モードでは明示的に渡される）
+          const typeForDocumentLoad = registrationType || (jobSeekerData.registration_type === 'general' ? 'general' : 'engineer');
           const savedDocumentResponse = await fetch(
-            `${apiUrl}/api/documents/${jobSeekerData.user_id}?registrationType=${
-              jobSeekerData.registration_type === 'general' ? 'general' : 'engineer'
-            }`
+            `${apiUrl}/api/documents/${jobSeekerData.user_id}?registrationType=${typeForDocumentLoad}`
           );
           let savedDocumentData = null;
           
