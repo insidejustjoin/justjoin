@@ -93,6 +93,13 @@ export function JobSeekerMyPageEngineer() {
   const startAIInterview = async () => {
     if (!user || !interviewData?.canTakeInterview) return;
     
+    // 入力率が100%でない場合は面接を開始できない
+    if (completionRate < 100) {
+      toast.error(t('profileCompletion.interviewNotAvailable'));
+      setShowCompletionModal(true);
+      return;
+    }
+    
     setIsStartingInterview(true);
     try {
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
@@ -564,8 +571,13 @@ export function JobSeekerMyPageEngineer() {
                     {interviewData.canTakeInterview && (
                       <Button
                         onClick={startAIInterview}
-                        disabled={isStartingInterview}
-                        className="w-full h-12 text-lg bg-blue-600 hover:bg-blue-700"
+                        disabled={isStartingInterview || completionRate < 100}
+                        className={`w-full h-12 text-lg ${
+                          completionRate < 100
+                            ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700'
+                        }`}
+                        title={completionRate < 100 ? t('profileCompletion.interviewNotAvailable') : ''}
                       >
                         {isStartingInterview ? (
                           <>
@@ -575,7 +587,9 @@ export function JobSeekerMyPageEngineer() {
                         ) : (
                           <>
                             <MessageSquare className="h-5 w-5 mr-2" />
-                            {getMultilingualText('startAIInterview')}
+                            {completionRate < 100
+                              ? t('profileCompletion.completeProfileFirst')
+                              : getMultilingualText('startAIInterview')}
                           </>
                         )}
                       </Button>
@@ -751,7 +765,9 @@ export function JobSeekerMyPageEngineer() {
                 <User className="h-6 w-6 text-blue-600" />
               </div>
               <p className="text-sm text-gray-600 mb-4">
-                {`${t('profileCompletion.modalMessagePrefix')}${completionRate}%${t('profileCompletion.modalMessageSuffix')}`}
+                {completionRate < 100
+                  ? t('profileCompletion.modalMessageNotComplete')
+                  : `${t('profileCompletion.modalMessagePrefix')}${completionRate}%${t('profileCompletion.modalMessageSuffix')}`}
               </p>
               <div className="flex gap-3">
                 <Button

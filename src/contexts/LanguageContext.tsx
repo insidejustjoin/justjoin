@@ -766,6 +766,9 @@ const translations: Translations = {
     'profileCompletion.modalTitle': 'プロフィール完成度',
     'profileCompletion.modalMessagePrefix': '現在のプロフィール完成度は',
     'profileCompletion.modalMessageSuffix': '%です。プロフィールを完成させることで、より良い求人とのマッチングが可能になります。',
+    'profileCompletion.modalMessageNotComplete': 'プロフィール完成度が100%に達していません。面接システムを利用するには、プロフィール完成度を100%にする必要があります。',
+    'profileCompletion.interviewNotAvailable': 'プロフィール完成度が100%になるまで面接システムを利用できません。',
+    'profileCompletion.completeProfileFirst': 'プロフィールを完成させてください',
     'profileCompletion.completeNow': '今すぐ完了',
     
     // エラー・メッセージ
@@ -1938,6 +1941,9 @@ const translations: Translations = {
     'profileCompletion.modalTitle': 'Завершённость профиля',
     'profileCompletion.modalMessagePrefix': 'Текущий уровень завершённости профиля: ',
     'profileCompletion.modalMessageSuffix': '%. Завершите профиль для лучшего подбора вакансий.',
+    'profileCompletion.modalMessageNotComplete': 'Завершённость профиля не достигла 100%. Для использования системы собеседований необходимо завершить профиль до 100%.',
+    'profileCompletion.interviewNotAvailable': 'Система собеседований недоступна, пока завершённость профиля не достигнет 100%.',
+    'profileCompletion.completeProfileFirst': 'Сначала завершите профиль',
     'profileCompletion.later': 'Позже',
     'profileCompletion.completeNow': 'Завершить сейчас',
   },
@@ -1985,6 +1991,9 @@ const translations: Translations = {
     'profileCompletion.modalTitle': 'Profil toʻliqligi',
     'profileCompletion.modalMessagePrefix': 'Joriy profil toʻliqligi: ',
     'profileCompletion.modalMessageSuffix': '%. Profilni toʻliq bajarsangiz, ish mosligi yaxshilanadi.',
+    'profileCompletion.modalMessageNotComplete': 'Profil toʻliqligi 100% ga yetmagan. Intervyu tizimidan foydalanish uchun profilni 100% ga yetkazishingiz kerak.',
+    'profileCompletion.interviewNotAvailable': 'Profil toʻliqligi 100% ga yetgunicha intervyu tizimi mavjud emas.',
+    'profileCompletion.completeProfileFirst': 'Avval profilni toʻldiring',
     'profileCompletion.later': 'Keyinroq',
     'profileCompletion.completeNow': "Hozir yakunlash",
   }
