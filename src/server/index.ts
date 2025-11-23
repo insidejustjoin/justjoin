@@ -902,6 +902,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             false as has_interview_audio,
             COALESCE(js.completion_rate, 0)::int as completion_rate,
             COALESCE(js.registration_type, 'engineer') as registration_type,
+            COALESCE(js.interview_enabled, false) as interview_enabled,
             COALESCE(
               js.profile_photo,
               doc.document_data -> 'resume' ->> 'photoUrl'
@@ -1016,6 +1017,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
           notes: row.notes,
           completion_rate: finalCompletionRate,
           registration_type: row.registration_type,
+          interview_enabled: row.interview_enabled || false,
           profile_photo: row.profile_photo
         };
       }));
@@ -1066,6 +1068,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             u.status as user_status,
             COALESCE(js.registration_type, 'engineer') as registration_type,
             COALESCE(js.completion_rate, 0)::int as completion_rate,
+            COALESCE(js.interview_enabled, false) as interview_enabled,
             COALESCE(latest.status, 'active')::text as employment_status,
             latest.company_name,
             latest.company_url,
@@ -1112,6 +1115,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         has_interview_audio: row.has_interview_audio,
         completion_rate: row.completion_rate,
         registration_type: row.registration_type,
+        interview_enabled: row.interview_enabled || false,
         profile_photo: null
       }));
     };

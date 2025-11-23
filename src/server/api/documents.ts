@@ -1299,38 +1299,58 @@ router.get('/admin/interview-status/:userId', authenticate, async (req: Authenti
       });
     }
     
-    const interviewEnabled = jobSeekerResult.rows[0].interview_enabled;
+    const interviewEnabled = jobSeekerResult.rows[0].interview_enabled || false;
     
+    // 面接が無効化されている場合は公開前として返す
     if (!interviewEnabled) {
       return res.json({
         success: true,
         data: {
           status: 'not_public',
-          message: '1次面接が公開前の場合は対象外'
+          message: '1次面接が公開前の場合は対象外',
+          interviewEnabled: false
         }
       });
     }
     
-    // 面接URLの状態を取得
-    const urlQuery = `
-      SELECT is_used, created_at
-      FROM interview_urls
-      WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
+    // 面接URLの状態を取得（テーブルが存在しない場合はエラーを無視）
+    let urlResult: any = { rows: [] };
+    try {
+      const urlQuery = `
+        SELECT is_used, created_at
+        FROM interview_urls
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      urlResult = await query(urlQuery, [userId]);
+    } catch (urlError: any) {
+      // interview_urlsテーブルが存在しない場合は空の結果として扱う
+      if (urlError?.message?.includes('does not exist') || urlError?.code === '42P01') {
+        console.warn('interview_urlsテーブルが存在しません:', urlError.message);
+      } else {
+        throw urlError;
+      }
+    }
     
-    const urlResult = await query(urlQuery, [userId]);
-    
-    // 面接受験回数を取得
-    const attemptsQuery = `
-      SELECT attempt_count, first_attempt_at, last_attempt_at
-      FROM interview_attempts
-      WHERE user_id = $1
-    `;
-    
-    const attemptsResult = await query(attemptsQuery, [userId]);
-    const attemptsData = attemptsResult.rows.length > 0 ? attemptsResult.rows[0] : { attempt_count: 0, first_attempt_at: null, last_attempt_at: null };
+    // 面接受験回数を取得（テーブルが存在しない場合はエラーを無視）
+    let attemptsData = { attempt_count: 0, first_attempt_at: null, last_attempt_at: null };
+    try {
+      const attemptsQuery = `
+        SELECT attempt_count, first_attempt_at, last_attempt_at
+        FROM interview_attempts
+        WHERE user_id = $1
+      `;
+      const attemptsResult = await query(attemptsQuery, [userId]);
+      attemptsData = attemptsResult.rows.length > 0 ? attemptsResult.rows[0] : { attempt_count: 0, first_attempt_at: null, last_attempt_at: null };
+    } catch (attemptsError: any) {
+      // interview_attemptsテーブルが存在しない場合はデフォルト値を返す
+      if (attemptsError?.message?.includes('does not exist') || attemptsError?.code === '42P01') {
+        console.warn('interview_attemptsテーブルが存在しません:', attemptsError.message);
+      } else {
+        throw attemptsError;
+      }
+    }
     
     if (urlResult.rows.length === 0) {
       return res.json({
@@ -1338,6 +1358,7 @@ router.get('/admin/interview-status/:userId', authenticate, async (req: Authenti
         data: {
           status: 'not_created',
           message: '1次面接が公開中の場合は受験前',
+          interviewEnabled: true,
           attemptCount: attemptsData.attempt_count,
           firstAttemptAt: attemptsData.first_attempt_at,
           lastAttemptAt: attemptsData.last_attempt_at
@@ -1353,6 +1374,7 @@ router.get('/admin/interview-status/:userId', authenticate, async (req: Authenti
         data: {
           status: 'completed',
           message: '1次面接を受験しURLがなくなった場合は受験完了',
+          interviewEnabled: true,
           completedAt: urlData.created_at,
           attemptCount: attemptsData.attempt_count,
           firstAttemptAt: attemptsData.first_attempt_at,
@@ -1365,6 +1387,7 @@ router.get('/admin/interview-status/:userId', authenticate, async (req: Authenti
         data: {
           status: 'available',
           message: '1次面接が公開中の場合は受験前',
+          interviewEnabled: true,
           attemptCount: attemptsData.attempt_count,
           firstAttemptAt: attemptsData.first_attempt_at,
           lastAttemptAt: attemptsData.last_attempt_at
@@ -1377,7 +1400,8 @@ router.get('/admin/interview-status/:userId', authenticate, async (req: Authenti
     res.status(500).json({
       success: false,
       error: 'INTERNAL_ERROR',
-      message: '面接状態を取得できませんでした'
+      message: '面接状態を取得できませんでした',
+      details: (error as any)?.message || null
     });
   }
 });
