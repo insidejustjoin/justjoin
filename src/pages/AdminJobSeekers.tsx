@@ -885,11 +885,19 @@ export function AdminJobSeekers() {
     return ALL_SKILLS;
   };
 
+  // 求職者を一意に識別するキーを生成（user_id + registration_type）
+  const getJobSeekerKey = (jobSeeker: JobSeeker) => {
+    const userId = jobSeeker.user_id || (jobSeeker as any).user_id || jobSeeker.id;
+    const registrationType = (jobSeeker as any).registration_type || 'engineer';
+    return `${userId}_${registrationType}`;
+  };
+
   const toggleJobSeekerSelection = (jobSeeker: JobSeeker) => {
     setSelectedJobSeekers(prev => {
-      const isSelected = prev.some(selected => selected.id === jobSeeker.id);
+      const key = getJobSeekerKey(jobSeeker);
+      const isSelected = prev.some(selected => getJobSeekerKey(selected) === key);
       if (isSelected) {
-        return prev.filter(selected => selected.id !== jobSeeker.id);
+        return prev.filter(selected => getJobSeekerKey(selected) !== key);
       } else {
         return [...prev, jobSeeker];
       }
@@ -981,9 +989,10 @@ export function AdminJobSeekers() {
 
   const handleSelectJobSeeker = (jobSeeker: JobSeeker) => {
     setSelectedJobSeekers(prev => {
-      const isSelected = prev.some(js => js.id === jobSeeker.id);
+      const key = getJobSeekerKey(jobSeeker);
+      const isSelected = prev.some(js => getJobSeekerKey(js) === key);
       if (isSelected) {
-        return prev.filter(js => js.id !== jobSeeker.id);
+        return prev.filter(js => getJobSeekerKey(js) !== key);
       } else {
         return [...prev, jobSeeker];
       }
@@ -991,7 +1000,8 @@ export function AdminJobSeekers() {
   };
 
   const isJobSeekerSelected = (jobSeeker: JobSeeker) => {
-    return selectedJobSeekers.some(js => js.id === jobSeeker.id);
+    const key = getJobSeekerKey(jobSeeker);
+    return selectedJobSeekers.some(js => getJobSeekerKey(js) === key);
   };
 
   // 面接開始一括処理
@@ -1730,7 +1740,7 @@ export function AdminJobSeekers() {
 
               {/* 求職者カード */}
               {filteredJobSeekers.map((jobSeeker) => (
-                <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
+                <Card key={getJobSeekerKey(jobSeeker)} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-4 flex-1">
@@ -1982,7 +1992,7 @@ export function AdminJobSeekers() {
 
                 {/* 求職者カード */}
                 {filteredJobSeekers.map((jobSeeker) => (
-                  <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
+                  <Card key={getJobSeekerKey(jobSeeker)} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-4 flex-1">
