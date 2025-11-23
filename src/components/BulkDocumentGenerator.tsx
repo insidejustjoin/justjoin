@@ -124,6 +124,7 @@ interface BulkDocumentGeneratorProps {
     self_introduction?: string;
     kana_last_name?: string;
     kana_first_name?: string;
+    registration_type?: string;
   }[];
   onClose: () => void;
   onComplete: () => void;
@@ -319,7 +320,9 @@ const BulkDocumentGenerator: React.FC<BulkDocumentGeneratorProps> = ({
           // 選択された求職者のデータを取得
           const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
           const apiUserId = jobSeeker.user_id || jobSeeker.id;
-          const response = await fetch(`${apiUrl}/api/documents/${apiUserId}`);
+          // registration_typeを取得（デフォルトは'engineer'）
+          const registrationType = (jobSeeker as any).registration_type || 'engineer';
+          const response = await fetch(`${apiUrl}/api/documents/${apiUserId}?registrationType=${registrationType}`);
           
           let documentData = null;
           

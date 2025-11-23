@@ -10,7 +10,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { User, Mail, Calendar, Edit, FileText, Building, Briefcase, Star, Trophy, AlertTriangle, MessageSquare, Clock, CheckCircle, XCircle, ExternalLink, Globe, Bell, Copy } from 'lucide-react';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { ja, enUS, ru, uz } from 'date-fns/locale';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useRegistrationTypeGuard } from '@/hooks/useRegistrationTypeGuard';
@@ -135,7 +135,7 @@ export function JobSeekerMyPageGeneral() {
           toast.error('1次面接は既に受験済みです');
           fetchInterviewHistory(); // 最新状態を取得
         } else {
-          toast.error('面接を開始できませんでした');
+          toast.error(t('myPage.failedToStartInterview'));
         }
       }
     } catch (error) {
@@ -518,7 +518,7 @@ export function JobSeekerMyPageGeneral() {
                   <div className="text-center py-4">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
                     <p className="text-sm text-gray-600">
-                      面接情報を読み込み中...
+                      {t('myPage.loadingInterviewInfo')}
                     </p>
                   </div>
                 ) : interviewData ? (
@@ -583,7 +583,7 @@ export function JobSeekerMyPageGeneral() {
                         {isStartingInterview ? (
                           <>
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                            面接を開始中...
+                            {t('myPage.startingInterview')}
                           </>
                         ) : (
                           <>
@@ -696,7 +696,7 @@ export function JobSeekerMyPageGeneral() {
                   {userData?.profile_photo ? (
                     <img
                       src={userData.profile_photo}
-                      alt={userData?.full_name || 'プロフィール写真'}
+                      alt={userData?.full_name || t('documents.profilePhoto')}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -740,7 +740,14 @@ export function JobSeekerMyPageGeneral() {
                     {getMultilingualText('registrationDate')}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {format(new Date(user.created_at), 'yyyy年MM月dd日', { locale: ja })}
+                    {language === 'ja' 
+                      ? format(new Date(user.created_at), 'yyyy年MM月dd日', { locale: ja })
+                      : language === 'ru'
+                      ? format(new Date(user.created_at), 'dd.MM.yyyy', { locale: ru })
+                      : language === 'uz'
+                      ? format(new Date(user.created_at), 'dd.MM.yyyy', { locale: uz })
+                      : format(new Date(user.created_at), 'MMM dd, yyyy', { locale: enUS })
+                    }
                   </p>
                 </div>
               </div>
