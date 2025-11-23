@@ -2251,7 +2251,7 @@ export function AdminJobSeekers() {
             ) : (
               <div className="space-y-4">
                 {jobSeekerStatuses.withdrawn.map((jobSeeker) => (
-                  <Card key={jobSeeker.id} className="hover:shadow-md transition-shadow">
+                  <Card key={getJobSeekerKey(jobSeeker)} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
