@@ -631,25 +631,31 @@ app.get('/api/jobseekers/completion-rate/:userId', async (req, res) => {
     }
 
     // job_seekersテーブルを最新の入力率で更新（登録タイプごとに保持）
+    // 入力率が100%の場合は自動的にinterview_enabledをtrueにする
+    const shouldEnableInterview = finalRate >= 100;
     const updateResult = await query(
       `
       UPDATE job_seekers
          SET completion_rate = $2,
+             interview_enabled = CASE 
+               WHEN $4 = true THEN true 
+               ELSE COALESCE(interview_enabled, false) 
+             END,
              updated_at = NOW()
        WHERE user_id = $1
          AND LOWER(COALESCE(rtrim(registration_type), 'engineer')) = LOWER($3)
        RETURNING user_id
       `,
-      [userId, finalRate, finalRegistrationType]
+      [userId, finalRate, finalRegistrationType, shouldEnableInterview]
     );
 
     if (updateResult.rowCount === 0) {
       await query(
         `
-        INSERT INTO job_seekers (user_id, completion_rate, registration_type, created_at, updated_at)
-        VALUES ($1, $2, $3, NOW(), NOW())
+        INSERT INTO job_seekers (user_id, completion_rate, registration_type, interview_enabled, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, NOW(), NOW())
         `,
-        [userId, finalRate, finalRegistrationType]
+        [userId, finalRate, finalRegistrationType, shouldEnableInterview]
       );
     }
 
@@ -964,12 +970,19 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             // 計算結果が異なる場合は更新
             if (calculated !== finalCompletionRate) {
               finalCompletionRate = calculated;
+              // 入力率が100%の場合は自動的にinterview_enabledをtrueにする
+              const shouldEnableInterview = calculated >= 100;
               // バックグラウンドでデータベースを更新
               query(
                 `UPDATE job_seekers 
-                 SET completion_rate = $1, updated_at = NOW() 
+                 SET completion_rate = $1, 
+                     interview_enabled = CASE 
+                       WHEN $4 = true THEN true 
+                       ELSE COALESCE(interview_enabled, false) 
+                     END,
+                     updated_at = NOW() 
                  WHERE user_id = $2 AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)`,
-                [calculated, row.user_id, regType]
+                [calculated, row.user_id, regType, shouldEnableInterview]
               ).catch(err => console.warn('Completion rate update failed:', err));
             }
           } catch (err) {
@@ -1216,6 +1229,8 @@ app.get('/api/jobseekers/:id', async (req, res) => {
       nationality: row.nationality,
       profile_photo: row.profile_photo,
       completion_rate: row.completion_rate || 0,
+      interview_enabled: row.interview_enabled || false,
+      registration_type: row.registration_type || 'engineer',
       created_at: row.created_at,
       updated_at: row.updated_at,
     };

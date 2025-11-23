@@ -44,6 +44,8 @@ const upsertJobSeekerProfile = async (userId, registrationType, completionRate, 
         const normalizedCompletion = typeof completionRate === 'number' && !Number.isNaN(completionRate) ? completionRate : 0;
         const profile = extractJobSeekerProfile(documentData);
         const targetRegistration = normalizeRegistrationType(registrationType);
+        // 入力率が100%の場合は自動的にinterview_enabledをtrueにする
+        const shouldEnableInterview = normalizedCompletion >= 100;
         const updateResult = await query(`
         UPDATE job_seekers
         SET completion_rate = $1,
@@ -56,6 +58,10 @@ const upsertJobSeekerProfile = async (userId, registrationType, completionRate, 
             address = COALESCE($8, address),
             profile_photo = COALESCE($9, profile_photo),
             registration_type = LOWER($11),
+            interview_enabled = CASE 
+              WHEN $12 = true THEN true 
+              ELSE COALESCE(interview_enabled, false) 
+            END,
             updated_at = NOW()
         WHERE user_id = $10
           AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($11)
@@ -87,10 +93,11 @@ const upsertJobSeekerProfile = async (userId, registrationType, completionRate, 
             profile_photo,
             registration_type,
             completion_rate,
+            interview_enabled,
             created_at,
             updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, LOWER($10), $11, NOW(), NOW())
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, LOWER($10), $11, $12, NOW(), NOW())
         `, [
                 userId,
                 profile.firstName,
@@ -103,6 +110,7 @@ const upsertJobSeekerProfile = async (userId, registrationType, completionRate, 
                 profile.profilePhoto,
                 targetRegistration,
                 normalizedCompletion,
+                shouldEnableInterview,
             ]);
         }
     }
