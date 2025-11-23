@@ -1388,6 +1388,58 @@ export function AdminJobSeekers() {
     }
   };
 
+  // 個別の面接有効化/無効化機能
+  const toggleSingleInterviewVisibility = async (jobSeeker: JobSeeker, enabled: boolean) => {
+    setBulkOperationLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('認証トークンが見つかりません');
+      }
+
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      
+      // user_idまたはjs_idを使用（優先順位: user_id > js_id > id）
+      const jobSeekerId = (jobSeeker as any).user_id || (jobSeeker as any).js_id || jobSeeker.id;
+      const response = await fetch(`${apiUrl}/api/documents/admin/jobseekers/${jobSeekerId}/interview-visibility`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          interviewEnabled: enabled
+        }),
+      });
+      
+      if (response.ok) {
+        toast({
+          title: "面接表示設定更新完了",
+          description: `面接表示設定を${enabled ? '有効' : '無効'}にしました`,
+        });
+        
+        // 求職者データを再取得
+        fetchJobSeekers();
+      } else {
+        const errorData = await response.json().catch(() => ({ error: '設定更新に失敗' }));
+        toast({
+          title: "エラー",
+          description: errorData.error || '面接表示設定の更新に失敗しました',
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('面接表示設定更新エラー:', error);
+      toast({
+        title: "エラー",
+        description: "面接表示設定の更新中にエラーが発生しました",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkOperationLoading(false);
+    }
+  };
+
   // フィルターコンポーネントの状態を管理
   const [showAdvancedFilterModal, setShowAdvancedFilterModal] = useState(false);
   const [filterChange, setFilterChange] = useState(0); // フィルターが変更されたことを検知
@@ -1859,12 +1911,6 @@ export function AdminJobSeekers() {
                                 </>
                               )}
                             </DropdownMenuItem>
-                            {getInterviewStatusDisplay(jobSeeker.user_id).text === '受験完了' && (
-                              <DropdownMenuItem onClick={() => resetInterview(jobSeeker)}>
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                面接再有効化
-                              </DropdownMenuItem>
-                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => openStatusModal(jobSeeker)}>
                               <Building2 className="h-4 w-4 mr-2" />
