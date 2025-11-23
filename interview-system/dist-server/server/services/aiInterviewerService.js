@@ -12,7 +12,9 @@ class AIInterviewerService {
     generateWelcomeMessage(language, applicantName) {
         const messages = {
             ja: `本日はお時間をいただき、ありがとうございます${applicantName ? `、${applicantName}さん` : ''}。私はJust JoinのAI面接官です。\n\nこれから約10〜15分間の面接を行わせていただきます。リラックスして、ご自分らしくお答えください。\n\n録画と記録についてご同意いただけましたら、早速始めさせていただきます。準備はよろしいでしょうか？`,
-            en: `Thank you for your time today${applicantName ? `, ${applicantName}` : ''}. I am an AI interviewer from Just Join.\n\nWe will conduct an interview for about 10-15 minutes. Please relax and answer in your own way.\n\nOnce you agree to recording and documentation, we can begin immediately. Are you ready?`
+            en: `Thank you for your time today${applicantName ? `, ${applicantName}` : ''}. I am an AI interviewer from Just Join.\n\nWe will conduct an interview for about 10-15 minutes. Please relax and answer in your own way.\n\nOnce you agree to recording and documentation, we can begin immediately. Are you ready?`,
+            ru: `Спасибо за ваше время сегодня${applicantName ? `, ${applicantName}` : ''}. Я AI-интервьюер от Just Join.\n\nМы проведем интервью примерно 10-15 минут. Пожалуйста, расслабьтесь и отвечайте естественно.\n\nПосле вашего согласия на запись и документирование, мы можем начать немедленно. Вы готовы?`,
+            uz: `Bugun vaqtingiz uchun rahmat${applicantName ? `, ${applicantName}` : ''}. Men Just Join'dan AI intervyu o'tkazuvchisiman.\n\nBiz taxminan 10-15 daqiqa davomida intervyu o'tkazamiz. Iltimos, tinchlanib, tabiiy javob bering.\n\nYozib olish va hujjatlashtirishga rozilik berganingizdan so'ng, darhol boshlashimiz mumkin. Tayyormisiz?`
         };
         return messages[language] || messages.ja;
     }
@@ -23,7 +25,9 @@ class AIInterviewerService {
         if (isFirst) {
             const intros = {
                 ja: 'それでは、最初の質問をさせていただきます。',
-                en: 'Now, let me ask you the first question.'
+                en: 'Now, let me ask you the first question.',
+                ru: 'Теперь позвольте задать вам первый вопрос.',
+                uz: 'Endi sizga birinchi savolni beraman.'
             };
             return intros[language] || intros.ja;
         }
@@ -39,6 +43,18 @@ class AIInterviewerService {
                 'I see, that\'s very clear. Now, let me ask you about...',
                 'Thank you for your answer. Next, I\'d like to ask...',
                 'That\'s very interesting. Now, here\'s the next question.'
+            ],
+            ru: [
+                'Спасибо. Перейдем к следующему вопросу.',
+                'Понятно, очень ясно. Теперь позвольте спросить о...',
+                'Спасибо за ваш ответ. Далее я хотел бы спросить...',
+                'Очень интересно. Теперь следующий вопрос.'
+            ],
+            uz: [
+                'Rahmat. Keyingi savolga o\'tamiz.',
+                'Tushunarli, juda aniq. Endi so\'ramoqchiman...',
+                'Javobingiz uchun rahmat. Keyingi savol...',
+                'Juda qiziqarli. Endi keyingi savol.'
             ]
         };
         const intros = randomIntros[language] || randomIntros.ja;
@@ -93,6 +109,40 @@ class AIInterviewerService {
                     'I see.',
                     'That makes sense.'
                 ]
+            },
+            ru: {
+                positive: [
+                    'Спасибо за подробное объяснение.',
+                    'Это очень ясный и конкретный ответ.',
+                    'У вас замечательный опыт.'
+                ],
+                encouraging: [
+                    'Спасибо.',
+                    'Понимаю.',
+                    'Спасибо за ваш ответ.'
+                ],
+                neutral: [
+                    'Спасибо.',
+                    'Понятно.',
+                    'Это имеет смысл.'
+                ]
+            },
+            uz: {
+                positive: [
+                    'Batafsil tushuntirganingiz uchun rahmat.',
+                    'Bu juda aniq va konkret javob.',
+                    'Sizda ajoyib tajriba bor.'
+                ],
+                encouraging: [
+                    'Rahmat.',
+                    'Tushundim.',
+                    'Javobingiz uchun rahmat.'
+                ],
+                neutral: [
+                    'Rahmat.',
+                    'Tushunarli.',
+                    'Bu mantiqiy.'
+                ]
             }
         };
         const reactionList = reactions[language]?.[reactionType] || reactions.ja[reactionType];
@@ -107,7 +157,9 @@ class AIInterviewerService {
         const answeredQuestions = session.answers?.length || 0;
         const messages = {
             ja: `お疲れさまでした。面接が完了いたしました。\n\n所要時間: 約${totalTime}分\n回答いただいた質問数: ${answeredQuestions}問\n\n本日は貴重なお時間をいただき、ありがとうございました。面接結果については、後日担当者よりご連絡いたします。\n\n何かご質問がございましたら、いつでもお気軽にお問い合わせください。`,
-            en: `Thank you for your time. The interview has been completed.\n\nDuration: Approximately ${totalTime} minutes\nQuestions answered: ${answeredQuestions}\n\nThank you for your valuable time today. We will contact you about the interview results later.\n\nIf you have any questions, please feel free to contact us at any time.`
+            en: `Thank you for your time. The interview has been completed.\n\nDuration: Approximately ${totalTime} minutes\nQuestions answered: ${answeredQuestions}\n\nThank you for your valuable time today. We will contact you about the interview results later.\n\nIf you have any questions, please feel free to contact us at any time.`,
+            ru: `Спасибо за ваше время. Интервью завершено.\n\nПродолжительность: Примерно ${totalTime} минут\nОтвеченных вопросов: ${answeredQuestions}\n\nСпасибо за ваше ценное время сегодня. Мы свяжемся с вами по поводу результатов интервью позже.\n\nЕсли у вас есть вопросы, пожалуйста, не стесняйтесь обращаться к нам в любое время.`,
+            uz: `Vaqtingiz uchun rahmat. Intervyu yakunlandi.\n\nDavomiyligi: Taxminan ${totalTime} daqiqa\nJavob berilgan savollar: ${answeredQuestions}\n\nBugun qimmatli vaqtingiz uchun rahmat. Intervyu natijalari haqida keyinroq siz bilan bog'lanamiz.\n\nAgar savollaringiz bo'lsa, istalgan vaqtda biz bilan bog'lanishdan tortinmang.`
         };
         return messages[language] || messages.ja;
     }
@@ -274,13 +326,29 @@ class AIInterviewerService {
                     if (answer.text.includes('成長'))
                         insights.push('成長志向');
                 }
-                else {
+                else if (language === 'en') {
                     if (answer.text.includes('team'))
                         insights.push('Values teamwork');
                     if (answer.text.includes('learn'))
                         insights.push('High learning motivation');
                     if (answer.text.includes('growth'))
                         insights.push('Growth-oriented');
+                }
+                else if (language === 'ru') {
+                    if (answer.text.includes('команда') || answer.text.includes('команд'))
+                        insights.push('Ценит командную работу');
+                    if (answer.text.includes('обучение') || answer.text.includes('изучение'))
+                        insights.push('Высокая мотивация к обучению');
+                    if (answer.text.includes('рост'))
+                        insights.push('Ориентация на рост');
+                }
+                else if (language === 'uz') {
+                    if (answer.text.includes('jamoa'))
+                        insights.push('Jamoa ishini qadrlaydi');
+                    if (answer.text.includes('o\'rganish') || answer.text.includes('ta\'lim'))
+                        insights.push('O\'rganishga yuqori motivatsiya');
+                    if (answer.text.includes('o\'sish'))
+                        insights.push('O\'sishga yo\'naltirilgan');
                 }
             }
         });
@@ -290,12 +358,13 @@ class AIInterviewerService {
         const strengths = [];
         answers.forEach(answer => {
             if (answer.responseTime < 120 && answer.text.length > 80) {
-                if (language === 'ja') {
-                    strengths.push('迅速で詳細な回答能力');
-                }
-                else {
-                    strengths.push('Quick and detailed response ability');
-                }
+                const strengthMessages = {
+                    ja: '迅速で詳細な回答能力',
+                    en: 'Quick and detailed response ability',
+                    ru: 'Способность быстро и подробно отвечать',
+                    uz: 'Tez va batafsil javob berish qobiliyati'
+                };
+                strengths.push(strengthMessages[language] || strengthMessages.ja);
             }
         });
         return [...new Set(strengths)].slice(0, 3);
@@ -304,12 +373,13 @@ class AIInterviewerService {
         const improvements = [];
         const shortAnswers = answers.filter(a => a.text.length < 50).length;
         if (shortAnswers > answers.length * 0.3) {
-            if (language === 'ja') {
-                improvements.push('より詳細な回答の提供');
-            }
-            else {
-                improvements.push('Providing more detailed answers');
-            }
+            const improvementMessages = {
+                ja: 'より詳細な回答の提供',
+                en: 'Providing more detailed answers',
+                ru: 'Предоставление более подробных ответов',
+                uz: 'Yanada batafsil javoblar berish'
+            };
+            improvements.push(improvementMessages[language] || improvementMessages.ja);
         }
         return improvements.slice(0, 3);
     }

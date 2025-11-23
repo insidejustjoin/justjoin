@@ -201,7 +201,12 @@ class QuestionService {
         const question = this.getQuestionById(questionId);
         if (!question)
             return '';
-        return question.text[language] || question.text.ja;
+        // ロシア語とウズベク語の場合は英語にフォールバック
+        if (question.text[language]) {
+            return question.text[language];
+        }
+        // ロシア語とウズベク語の場合は英語、それ以外は日本語
+        return question.text[language === 'ru' || language === 'uz' ? 'en' : 'ja'] || question.text.ja;
     }
     /**
      * 最初の質問を取得

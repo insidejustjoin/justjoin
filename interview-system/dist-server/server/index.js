@@ -111,7 +111,9 @@ app.get('/api/interview-verify/:token', async (req, res) => {
         });
     }
 });
-// 静的ファイルの配信（本番用）
+// 録音ファイルの配信（音声のみ・本番/開発共通）
+app.use('/uploads', express_1.default.static(path_1.default.join(process.cwd(), 'uploads')));
+// 静的ファイルの配信（本番用フロントエンド）
 if (process.env.NODE_ENV === 'production') {
     app.use(express_1.default.static(path_1.default.join(__dirname, '../../dist')));
     // SPAのルーティング対応

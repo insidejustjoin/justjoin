@@ -1170,15 +1170,25 @@ app.get('/api/admin/jobseekers', async (req, res) => {
 app.get('/api/jobseekers/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { registrationType } = req.query as { registrationType?: string };
     const { query } = await import('../integrations/postgres/client.js');
+    
+    // registrationTypeを正規化（engineerまたはgeneral、デフォルトはengineer）
+    const normalizeType = (v?: string) => {
+      if (typeof v === 'string' && v.trim().toLowerCase() === 'general') return 'general';
+      return 'engineer';
+    };
+    const type = normalizeType(registrationType);
     
     const base = await query(`
       SELECT js.*, u.email, u.status as user_status, js.completion_rate
       FROM job_seekers js
       LEFT JOIN users u ON u.id = js.user_id
-      WHERE js.user_id::text = $1 OR js.id::text = $1
+      WHERE (js.user_id::text = $1 OR js.id::text = $1)
+        AND LOWER(COALESCE(js.registration_type, 'engineer')) = LOWER($2)
+      ORDER BY js.updated_at DESC
       LIMIT 1
-    `, [id]);
+    `, [id, type]);
     
     let row = base.rows[0];
     if (!row) {

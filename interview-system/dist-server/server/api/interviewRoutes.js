@@ -396,9 +396,10 @@ router.get('/questions', async (req, res) => {
     try {
         const { language = 'ja' } = req.query;
         const questions = questionService.getAllQuestions();
+        const lang = language || 'ja';
         const localizedQuestions = questions.map(q => ({
             ...q,
-            text: q.text[language]
+            text: q.text[lang] || (lang === 'ru' || lang === 'uz' ? q.text.en : q.text.ja)
         }));
         res.json({
             success: true,

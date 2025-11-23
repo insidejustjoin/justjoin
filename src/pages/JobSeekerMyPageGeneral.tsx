@@ -203,7 +203,8 @@ export function JobSeekerMyPageGeneral() {
       if (user.user_type === 'job_seeker') {
         try {
           const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
-          const response = await fetch(`${apiUrl}/api/jobseekers/${user.id}`, {
+          // 一般職ページではregistrationType=generalを指定
+          const response = await fetch(`${apiUrl}/api/jobseekers/${user.id}?registrationType=general`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',

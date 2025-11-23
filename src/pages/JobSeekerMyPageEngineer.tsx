@@ -202,7 +202,8 @@ export function JobSeekerMyPageEngineer() {
       if (user.user_type === 'job_seeker') {
         try {
           const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
-          const response = await fetch(`${apiUrl}/api/jobseekers/${user.id}`, {
+          // エンジニアページではregistrationType=engineerを指定
+          const response = await fetch(`${apiUrl}/api/jobseekers/${user.id}?registrationType=engineer`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -216,9 +217,17 @@ export function JobSeekerMyPageEngineer() {
               const profileData = result.data;
               
               // ユーザーデータを更新
+              // full_nameがない場合はfirst_nameとlast_nameから構築
+              const fullName = profileData.full_name || 
+                (profileData.first_name && profileData.last_name 
+                  ? `${profileData.first_name} ${profileData.last_name}`.trim()
+                  : profileData.first_name || profileData.last_name || '');
+              
               const updatedUserData = {
                 ...basicUserData,
-                full_name: profileData.full_name || '',
+                full_name: fullName,
+                first_name: profileData.first_name || '',
+                last_name: profileData.last_name || '',
                 interview_enabled: profileData.interview_enabled || false,
                 profile_photo: profileData.profile_photo || null
               };

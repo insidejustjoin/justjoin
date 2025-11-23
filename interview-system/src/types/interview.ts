@@ -5,7 +5,7 @@ export type InterviewStatus = 'waiting' | 'in_progress' | 'completed' | 'cancell
 export type QuestionType = 'introduction' | 'experience' | 'achievement' | 'teamwork' | 'motivation' | 'strength_weakness' | 'technical' | 'problem_solving' | 'career_vision' | 'questions'
 
 // 言語設定
-export type Language = 'ja' | 'en'
+export type Language = 'ja' | 'en' | 'ru' | 'uz'
 
 // 応募者情報（メインプラットフォームの求職者データと統合）
 export interface Applicant {

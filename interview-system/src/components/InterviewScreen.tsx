@@ -7,7 +7,8 @@ import {
   XIcon,
   MessageCircleIcon,
   Volume2Icon,
-  VolumeXIcon
+  VolumeXIcon,
+  GlobeIcon
 } from 'lucide-react';
 import { Language, Question } from '@/types/interview';
 
@@ -88,6 +89,14 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const [hasPlayedAudio, setHasPlayedAudio] = useState(false);
   const [audioRecorder, setAudioRecorder] = useState<MediaRecorder | null>(null);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const [displayLanguage, setDisplayLanguage] = useState<Language>(language);
+  
+  // languageプロップが変更されたらdisplayLanguageも更新
+  useEffect(() => {
+    setDisplayLanguage(language);
+  }, [language]);
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
   
   // 面接品質向上のための状態
   const [recordingQuality, setRecordingQuality] = useState<'low' | 'medium' | 'high'>('high');
@@ -112,6 +121,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const audioChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isRecordingRef = useRef<boolean>(false);
 
   const texts = {
     ja: {
@@ -141,7 +151,11 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       startVideoRecording: '録画開始',
       stopVideoRecording: '録画停止',
       audioRecording: '音声録音中...',
-      recordingComplete: '録音完了'
+      recordingComplete: '録音完了',
+      answerInJapanese: '回答は日本語でお願いします',
+      languageToggle: '言語切り替え',
+      japanese: '日本語',
+      english: 'English'
     },
     en: {
       loading: 'Preparing interview...',
@@ -170,7 +184,11 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       startVideoRecording: 'Start Recording',
       stopVideoRecording: 'Stop Recording',
       audioRecording: 'Audio recording...',
-      recordingComplete: 'Recording complete'
+      recordingComplete: 'Recording complete',
+      answerInJapanese: 'Please answer in Japanese',
+      languageToggle: 'Language Toggle',
+      japanese: '日本語',
+      english: 'English'
     }
   };
 
@@ -188,11 +206,111 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     });
   }, [currentQuestion, progress, isRecording, isPlaying, canStartRecording, transcript]);
 
-  // 録画録音の初期化（簡素化版）
+  // 音声認識の初期化
   useEffect(() => {
-    // デモ版では録画録音を無効化
-    console.log('面接画面初期化完了（デモ版）');
-  }, []);
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'ja-JP'; // 日本語固定
+      
+      recognition.onresult = (event: any) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        // 暫定結果を表示
+        if (interimTranscript) {
+          setTranscript(interimTranscript);
+        }
+        
+        // 最終結果がある場合は処理
+        if (finalTranscript.trim()) {
+          const finalText = finalTranscript.trim();
+          console.log('音声認識最終結果:', finalText);
+          setTranscript(finalText);
+          
+          // 録音を停止してから回答を処理
+          setTimeout(() => {
+            stopRecording();
+            // 少し待ってから回答を送信（録音停止処理が完了するまで）
+            setTimeout(() => {
+              handleVoiceAnswer(finalText);
+            }, 300);
+          }, 100);
+        }
+      };
+      
+      recognition.onerror = (event: any) => {
+        console.error('音声認識エラー:', event.error);
+        if (event.error === 'aborted') {
+          console.log('音声認識が中断されました（正常）');
+        } else if (event.error === 'no-speech') {
+          console.log('音声が検出されませんでした');
+          setIsRecording(false);
+          isRecordingRef.current = false;
+          setCanStartRecording(true);
+        } else {
+          console.error('音声認識エラー:', event.error);
+          setIsRecording(false);
+          isRecordingRef.current = false;
+          setCanStartRecording(true);
+        }
+      };
+      
+      recognition.onend = () => {
+        console.log('音声認識終了、isRecordingRef:', isRecordingRef.current);
+        // 録音中に自動的に終了した場合は再開を試みる（ただし、手動で停止した場合は再開しない）
+        if (isRecordingRef.current && recognitionRef.current) {
+          try {
+            // 少し待ってから再開（ブラウザの制限を回避）
+            setTimeout(() => {
+              // 再度状態を確認
+              if (isRecordingRef.current && recognitionRef.current) {
+                try {
+                  recognitionRef.current.start();
+                  console.log('音声認識再開');
+                } catch (error: any) {
+                  if (error.name !== 'InvalidStateError') {
+                    console.log('音声認識再開失敗:', error);
+                  }
+                }
+              }
+            }, 500);
+          } catch (error) {
+            console.log('音声認識再開失敗（正常終了の可能性）');
+          }
+        }
+      };
+      
+      recognitionRef.current = recognition;
+      console.log('音声認識初期化完了');
+    } else {
+      console.warn('音声認識APIが利用できません');
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          // 既に停止している場合は無視
+        }
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [isRecording]);
 
   // タイマー管理
   useEffect(() => {
@@ -288,27 +406,42 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         } 
       });
 
+      setMediaStream(stream);
+      setAudioChunks([]); // チャンクをリセット
+
       const recorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus'
       });
 
+      const chunks: Blob[] = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
+          chunks.push(event.data);
           setAudioChunks(prev => [...prev, event.data]);
         }
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: 'audio/webm' });
-        console.log('音声録音完了');
-        uploadRecording(blob, 'audio');
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        console.log('音声録音完了、サイズ:', blob.size);
+        if (blob.size > 0) {
+          uploadRecording(blob, 'audio');
+        }
+        // ストリームを停止
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.onerror = (event: any) => {
+        console.error('MediaRecorderエラー:', event);
       };
 
       setAudioRecorder(recorder);
-      recorder.start();
+      recorder.start(1000); // 1秒ごとにデータを取得
       console.log('音声録音開始');
     } catch (error) {
       console.error('音声録音開始エラー:', error);
+      setIsRecording(false);
+      setCanStartRecording(true);
     }
   };
 
@@ -337,9 +470,16 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
   // 録音の停止（音声のみ）
   const stopAudioRecording = () => {
-    if (audioRecorder && audioRecorder.state !== 'inactive') {
-      audioRecorder.stop();
-      console.log('音声録音停止');
+    if (audioRecorder) {
+      if (audioRecorder.state === 'recording') {
+        audioRecorder.stop();
+        console.log('音声録音停止');
+      }
+      setAudioRecorder(null);
+    }
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+      setMediaStream(null);
     }
   };
 
@@ -376,7 +516,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         body: JSON.stringify({ 
           email: email || 'test@example.com',
           name: name || 'テストユーザー',
-          language: 'ja', // 日本語固定
+          language: language, // languageプロップを使用
           position: position || 'ソフトウェアエンジニア',
           consentGiven
         })
@@ -424,19 +564,47 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         // 既存の音声を停止
         speechSynthesis.cancel();
         
+        // 音声リストが読み込まれるまで待機
+        const loadVoices = () => {
+          return new Promise<void>((resolve) => {
+            const voices = speechSynthesis.getVoices();
+            if (voices.length > 0) {
+              resolve();
+            } else {
+              speechSynthesis.onvoiceschanged = () => resolve();
+            }
+          });
+        };
+        
+        await loadVoices();
+        
         const utterance = new SpeechSynthesisUtterance(message);
         utterance.lang = 'ja-JP';
-        utterance.rate = 0.9; // 少し遅く
-        utterance.pitch = 1.05; // 少し高め
-        utterance.volume = 0.95; // 音量調整
+        utterance.rate = 0.85; // より遅く（聞き取りやすく）
+        utterance.pitch = 1.0; // 標準ピッチ
+        utterance.volume = 1.0; // 最大音量
         
-        // より自然な音声を選択
+        // より自然な音声を選択（優先順位: Google > Microsoft > その他の日本語音声）
         const voices = speechSynthesis.getVoices();
-        const japaneseVoice = voices.find(voice => 
-          voice.lang.includes('ja') && (voice.name.includes('Google') || voice.name.includes('Microsoft'))
+        let japaneseVoice = voices.find(voice => 
+          voice.lang.includes('ja') && voice.name.includes('Google')
         );
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => 
+            voice.lang.includes('ja') && voice.name.includes('Microsoft')
+          );
+        }
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => 
+            voice.lang.includes('ja') && (voice.name.includes('女性') || voice.name.includes('Female'))
+          );
+        }
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => voice.lang.includes('ja'));
+        }
         if (japaneseVoice) {
           utterance.voice = japaneseVoice;
+          console.log('選択された音声:', japaneseVoice.name);
         }
         
         utterance.onend = () => {
@@ -494,6 +662,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     try {
       console.log('録音開始');
       setIsRecording(true);
+      isRecordingRef.current = true;
       setTranscript('');
       
       // 音声録画開始
@@ -501,11 +670,23 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       
       // 音声認識開始
       if (recognitionRef.current) {
-        recognitionRef.current.start();
+        try {
+          if (recognitionRef.current.state === 'stopped' || recognitionRef.current.state === 'idle') {
+            recognitionRef.current.start();
+            console.log('音声認識開始');
+          }
+        } catch (error: any) {
+          if (error.name === 'InvalidStateError') {
+            console.log('音声認識は既に開始されています');
+          } else {
+            console.error('音声認識開始エラー:', error);
+          }
+        }
       }
     } catch (error) {
       console.error('録音開始エラー:', error);
       setIsRecording(false);
+      isRecordingRef.current = false;
     }
   };
 
@@ -522,20 +703,32 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
     try {
       console.log('録音停止開始');
+      
+      // 状態を先に更新
       setIsRecording(false);
+      isRecordingRef.current = false;
       setIsListening(false);
+      
+      // 音声認識を停止（これにより最終結果が生成される可能性がある）
+      if (recognitionRef.current) {
+        try {
+          if (recognitionRef.current.state === 'listening' || recognitionRef.current.state === 'starting') {
+            recognitionRef.current.stop();
+            console.log('音声認識停止');
+          }
+        } catch (error) {
+          console.error('音声認識停止エラー:', error);
+        }
+      }
       
       // 音声録音停止
       stopAudioRecording();
       
-      // 音声認識停止
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      
-      console.log('録音停止完了、音声認識結果を待機中');
+      console.log('録音停止完了');
     } catch (error) {
       console.error('録音停止エラー:', error);
+      setIsRecording(false);
+      setIsListening(false);
     }
   };
 
@@ -596,28 +789,45 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       const data = await response.json();
       console.log('回答送信レスポンス:', data);
 
-      if (data.success) {
+        if (data.success) {
         console.log('回答送信成功、次の質問へ:', data);
-        setAiMessage(data.message);
-        setProgress(data.progress);
+        setAiMessage(data.message || '');
+        if (data.progress) {
+          setProgress(data.progress);
+        }
         
         if (data.isComplete) {
           console.log('面接完了');
           stopAudioRecording();
+          // 音声認識を完全に停止
+          if (recognitionRef.current) {
+            try {
+              recognitionRef.current.stop();
+            } catch (error) {
+              // 既に停止している場合は無視
+            }
+          }
           onComplete();
         } else {
           console.log('次の質問を設定:', data.nextQuestion);
-          setCurrentQuestion(data.nextQuestion);
-          setQuestionStartTime(new Date());
-          setHasPlayedAudio(false); // 次の質問用にリセット
-          setTranscript(''); // トランスクリプトをリセット
-          
-          // 次のAIメッセージを音声で再生（1回のみ）
-          console.log('次の質問の音声再生開始');
-          playAIMessage(data.message);
+          if (data.nextQuestion) {
+            setCurrentQuestion(data.nextQuestion);
+            setQuestionStartTime(new Date());
+            setHasPlayedAudio(false); // 次の質問用にリセット
+            setTranscript(''); // トランスクリプトをリセット
+            setCanStartRecording(false); // 音声再生まで録音を無効化
+            
+            // 次のAIメッセージを音声で再生（1回のみ）
+            console.log('次の質問の音声再生開始');
+            playAIMessage(data.message || '');
+          } else {
+            console.error('次の質問が取得できませんでした');
+            onError('次の質問を取得できませんでした');
+          }
         }
       } else {
         console.error('回答送信エラー:', data.error);
+        setCanStartRecording(true); // エラー時は録音を再開可能に
         onError(data.error || 'Failed to submit answer');
       }
     } catch (error) {
@@ -720,6 +930,20 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              {/* 言語切り替えボタン（ヘッダー） */}
+              <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-3 py-2">
+                <GlobeIcon className="h-4 w-4 text-gray-600" />
+                <button
+                  onClick={() => setDisplayLanguage(displayLanguage === 'ja' ? 'en' : 'ja')}
+                  className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
+                    displayLanguage === 'ja' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {displayLanguage === 'ja' ? '日本語' : 'English'}
+                </button>
+              </div>
               <button
                 onClick={toggleMute}
                 className={`p-3 rounded-full transition-all duration-200 ${
@@ -750,13 +974,25 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           <div className="mb-8">
             <div className="flex items-start space-x-4">
               <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
-                  <MessageCircleIcon className="h-6 w-6 text-white" />
+                {/* アバター画像 */}
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg relative">
+                  {!avatarError ? (
+                    <img 
+                      src="https://api.dicebear.com/7.x/avataaars/svg?seed=interviewer&backgroundColor=b6e3ff&clothingColor=262e33"
+                      alt="AI面接官"
+                      className="w-full h-full object-cover"
+                      onError={() => setAvatarError(true)}
+                    />
+                  ) : (
+                    <MessageCircleIcon className="h-8 w-8 text-white" />
+                  )}
                 </div>
               </div>
               <div className="flex-1">
                 <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200">
-                  <p className="text-gray-800 whitespace-pre-wrap text-lg leading-relaxed">{aiMessage}</p>
+                  <p className="text-gray-800 whitespace-pre-wrap text-lg leading-relaxed">
+                    {displayLanguage === 'ja' ? aiMessage : aiMessage}
+                  </p>
                 </div>
               </div>
             </div>
@@ -766,12 +1002,33 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           {currentQuestion && (
             <div className="mb-8">
               <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-yellow-400 p-6 rounded-r-2xl">
-                <h3 className="font-semibold text-yellow-800 mb-3 text-lg">
-                  質問:
-                </h3>
-                <p className="text-yellow-700 text-lg leading-relaxed">
-                  {currentQuestion.text.ja}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-yellow-800 text-lg">
+                    {displayLanguage === 'ja' ? '質問:' : 'Question:'}
+                  </h3>
+                  {/* 言語切り替えボタン */}
+                  <div className="flex items-center space-x-2">
+                    <GlobeIcon className="h-4 w-4 text-yellow-600" />
+                    <button
+                      onClick={() => setDisplayLanguage(displayLanguage === 'ja' ? 'en' : 'ja')}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
+                        displayLanguage === 'ja' 
+                          ? 'bg-yellow-600 text-white' 
+                          : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                      }`}
+                    >
+                      {displayLanguage === 'ja' ? '日本語' : 'English'}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-yellow-700 text-lg leading-relaxed mb-3">
+                  {displayLanguage === 'ja' ? currentQuestion.text.ja : (currentQuestion.text.en || currentQuestion.text.ja)}
                 </p>
+                <div className="mt-4 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
+                  <p className="text-sm text-yellow-800 font-medium">
+                    {displayLanguage === 'ja' ? '※回答は日本語でお願いします' : '※Please answer in Japanese'}
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -810,8 +1067,22 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   <p className="text-sm text-gray-600">{t.clickToStop}</p>
                 </div>
                 {transcript && (
-                  <div className="bg-gray-50 rounded-xl p-4 max-w-2xl mx-auto">
+                  <div className="bg-gray-50 rounded-xl p-4 max-w-2xl mx-auto space-y-3">
                     <p className="text-sm text-gray-700">{transcript}</p>
+                    <button
+                      onClick={() => {
+                        if (transcript.trim()) {
+                          stopRecording();
+                          setTimeout(() => {
+                            handleVoiceAnswer(transcript.trim());
+                          }, 300);
+                        }
+                      }}
+                      disabled={isSubmitting || !transcript.trim()}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isSubmitting ? t.processing : (displayLanguage === 'ja' ? '回答を送信' : 'Submit Answer')}
+                    </button>
                   </div>
                 )}
               </div>
@@ -846,7 +1117,9 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
         {/* 録音に関する注意表示（カメラは使用しない） */}
         <div className="mt-4 text-center text-xs text-gray-500">
-          この面接ではカメラ映像は保存されず、音声のみが録音されます。
+          {displayLanguage === 'ja' 
+            ? 'この面接ではカメラ映像は保存されず、音声のみが録音されます。回答は日本語でお願いします。'
+            : 'Only audio is recorded in this interview, not video. Please answer in Japanese.'}
         </div>
       </div>
     </div>
