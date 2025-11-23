@@ -892,8 +892,14 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             latest.withdrawal_date,
             latest.reason,
             latest.notes,
-            -- 最新の音声録音があるかどうか
-            EXISTS (
+            -- 最新の音声録音があるかどうか（テーブルが存在する場合のみ）
+            (
+              SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'interview_recordings'
+              )
+            ) AND EXISTS (
               SELECT 1 FROM interview_recordings ir
               WHERE ir.applicant_id = u.id::text
                 AND ir.recording_type = 'audio'
@@ -1064,8 +1070,14 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             latest.withdrawal_date,
             latest.reason,
             latest.notes,
-            -- 最新の音声録音があるかどうか
-            EXISTS (
+            -- 最新の音声録音があるかどうか（テーブルが存在する場合のみ）
+            (
+              SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'interview_recordings'
+              )
+            ) AND EXISTS (
               SELECT 1 FROM interview_recordings ir
               WHERE ir.applicant_id = u.id::text
                 AND ir.recording_type = 'audio'
@@ -1114,21 +1126,34 @@ app.get('/api/admin/jobseekers', async (req, res) => {
     let jobSeekers: any[] = [];
     try {
       jobSeekers = await buildQuery(normalizedType ?? 'all');
-    } catch (primaryError) {
-      console.warn('jobseekers query primary failed, retrying with minimal', primaryError);
-      try {
-        jobSeekers = await buildMinimalQuery(normalizedType ?? 'all');
-      } catch (minimalError) {
-        console.error('jobseekers minimal query failed', minimalError);
-        if (normalizedType) {
-          try {
-            jobSeekers = await buildMinimalQuery('all');
-          } catch (fallbackError) {
-            console.error('jobseekers query fallback failed', fallbackError);
-            throw fallbackError;
-          }
-        } else {
+    } catch (primaryError: any) {
+      // interview_recordingsテーブルが存在しない場合のエラーハンドリング
+      if (primaryError?.message?.includes('interview_recordings') || primaryError?.detail?.includes('interview_recordings')) {
+        console.warn('interview_recordings table does not exist, using minimal query', primaryError);
+        try {
+          jobSeekers = await buildMinimalQuery(normalizedType ?? 'all');
+        } catch (minimalError: any) {
+          console.error('jobseekers minimal query also failed', minimalError);
+          // さらにフォールバック: has_interview_audioを除外したクエリにフォールバック
+          // buildQueryWithoutRecordingsは既存のbuildQueryをベースに作成
           throw minimalError;
+        }
+      } else {
+        console.warn('jobseekers query primary failed, retrying with minimal', primaryError);
+        try {
+          jobSeekers = await buildMinimalQuery(normalizedType ?? 'all');
+        } catch (minimalError) {
+          console.error('jobseekers minimal query failed', minimalError);
+          if (normalizedType) {
+            try {
+              jobSeekers = await buildMinimalQuery('all');
+            } catch (fallbackError) {
+              console.error('jobseekers query fallback failed', fallbackError);
+              throw fallbackError;
+            }
+          } else {
+            throw minimalError;
+          }
         }
       }
     }
