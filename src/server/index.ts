@@ -2239,44 +2239,85 @@ const rateLimit = (maxRequests: number, windowMs: number) => {
   };
 };
 
-// 統一ログインAPI（求職者・企業・管理者対応）
+// 統一ログインAPI（求職者・企業・管理者対応）- 電話番号ベース
 app.post('/api/login', rateLimit(5, 60000), async (req, res) => {
   try {
-    const { email, password, userType, registrationType } = req.body;
+    const { phoneNumber, email, password, userType, registrationType } = req.body;
     console.log('=== ログインリクエスト開始 ===');
-    console.log('リクエストボディ:', { email, userType, hasPassword: !!password, passwordLength: password ? password.length : 0 });
     
-    if (!email || !password) {
-      console.log('バリデーションエラー: メールアドレスまたはパスワードが不足');
-      return res.status(400).json({
-        success: false,
-        message: 'メールアドレスとパスワードは必須です'
-      });
-    }
-
-    // メールアドレスの形式チェック
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      console.log('メールアドレス形式エラー:', email);
-      return res.status(400).json({
-        success: false,
-        message: '有効なメールアドレスを入力してください'
-      });
+    // 管理者の場合はemailベース、求職者の場合は電話番号ベース
+    let identifier: string;
+    let isPhoneBased = false;
+    
+    if (userType === 'job_seeker' && phoneNumber) {
+      // 求職者は電話番号ベース
+      isPhoneBased = true;
+      identifier = phoneNumber;
+      console.log('リクエストボディ（電話番号ベース）:', { phoneNumber, userType, hasPassword: !!password });
+      
+      if (!phoneNumber || !password) {
+        return res.status(400).json({
+          success: false,
+          message: '電話番号とパスワードは必須です'
+        });
+      }
+      
+      // 電話番号の形式を検証
+      const { validatePhoneNumber } = await import('../utils/phoneValidation.js');
+      const phoneValidation = validatePhoneNumber(phoneNumber);
+      if (!phoneValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: phoneValidation.error || '有効な電話番号を入力してください'
+        });
+      }
+      identifier = phoneValidation.normalized!;
+    } else {
+      // 管理者・企業はemailベース（後方互換性のため）
+      identifier = email || phoneNumber || '';
+      console.log('リクエストボディ（メールアドレスベース）:', { email, userType, hasPassword: !!password });
+      
+      if (!identifier || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'メールアドレスとパスワードは必須です'
+        });
+      }
+      
+      // メールアドレスの形式チェック
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(identifier)) {
+        return res.status(400).json({
+          success: false,
+          message: '有効なメールアドレスを入力してください'
+        });
+      }
     }
 
     console.log('データベースクライアントをインポート中...');
     const { query } = await import('../integrations/postgres/client.js');
     console.log('データベースクライアントのインポート完了');
     
-    // userTypeが指定されている場合はそのタイプで検索、そうでなければ全タイプで検索
+    // userTypeが指定されている場合はそのタイプで検索
     let result;
-    if (userType) {
-      console.log(`ユーザータイプ指定で検索: ${userType}`);
+    if (isPhoneBased && userType === 'job_seeker') {
+      // 電話番号ベースの検索（job_seekersテーブル経由）
+      console.log(`電話番号ベースで検索: ${identifier}`);
+      result = await query(`
+        SELECT u.id, u.email, u.password_hash, u.user_type as role, u.status, u.created_at, u.updated_at,
+               js.registration_type, js.phone
+        FROM job_seekers js
+        INNER JOIN users u ON js.user_id = u.id
+        WHERE js.phone = $1 AND (u.user_type = $2 OR $2 IS NULL)
+        ${registrationType ? 'AND js.registration_type = $3' : ''}
+      `, registrationType ? [identifier, userType, registrationType] : [identifier, userType]);
+    } else if (userType) {
+      console.log(`ユーザータイプ指定で検索（メール）: ${userType}`);
       result = await query(`
         SELECT id, email, password_hash, user_type as role, status, created_at, updated_at
         FROM users
         WHERE email = $1 AND user_type = $2
-      `, [email, userType]);
+      `, [identifier, userType]);
       // フォールバック: 指定タイプで見つからなければメールのみで再検索
       if (result.rows.length === 0) {
         console.log('指定タイプでは見つからず、メールのみで再検索します');
@@ -2286,25 +2327,27 @@ app.post('/api/login', rateLimit(5, 60000), async (req, res) => {
           WHERE email = $1
           ORDER BY CASE user_type WHEN 'admin' THEN 0 WHEN 'company' THEN 1 ELSE 2 END
           LIMIT 1
-        `, [email]);
+        `, [identifier]);
       }
     } else {
-      console.log('全ユーザータイプで検索');
+      console.log('全ユーザータイプで検索（メール）');
       result = await query(`
         SELECT id, email, password_hash, user_type as role, status, created_at, updated_at
         FROM users
         WHERE email = $1
-      `, [email]);
+      `, [identifier]);
     }
     
     console.log('検索結果件数:', result.rows.length);
     console.log('検索結果:', result.rows);
     
     if (result.rows.length === 0) {
-      console.log('ユーザーが見つかりません:', email);
+      console.log('ユーザーが見つかりません:', identifier);
       return res.status(401).json({
         success: false,
-        message: 'メールアドレスまたはパスワードが正しくありません'
+        message: isPhoneBased 
+          ? '電話番号またはパスワードが正しくありません'
+          : 'メールアドレスまたはパスワードが正しくありません'
       });
     }
 
@@ -2320,10 +2363,12 @@ app.post('/api/login', rateLimit(5, 60000), async (req, res) => {
     
     // パスワードハッシュが存在しない場合
     if (!user.password_hash) {
-      console.log('パスワードが設定されていません:', email);
+      console.log('パスワードが設定されていません:', identifier);
       return res.status(401).json({
         success: false,
-        message: 'メールアドレスまたはパスワードが正しくありません'
+        message: isPhoneBased 
+          ? '電話番号またはパスワードが正しくありません'
+          : 'メールアドレスまたはパスワードが正しくありません'
       });
     }
     
@@ -2338,10 +2383,12 @@ app.post('/api/login', rateLimit(5, 60000), async (req, res) => {
     console.log('パスワード検証結果:', isValidPassword);
     
     if (!isValidPassword) {
-      console.log('パスワードが一致しません:', email);
+      console.log('パスワードが一致しません:', identifier);
       return res.status(401).json({
         success: false,
-        message: 'メールアドレスまたはパスワードが正しくありません'
+        message: isPhoneBased 
+          ? '電話番号またはパスワードが正しくありません'
+          : 'メールアドレスまたはパスワードが正しくありません'
       });
     }
     
@@ -2397,7 +2444,7 @@ app.post('/api/login', rateLimit(5, 60000), async (req, res) => {
         if (registrationTypes.length > 0 && !registrationTypes.includes(normalized)) {
           return res.status(403).json({
             success: false,
-            message: `このメールアドレスでは${normalized === 'general' ? '一般職' : 'エンジニア'}としての登録は完了していません`
+            message: `この電話番号では${normalized === 'general' ? '一般職' : 'エンジニア'}としての登録は完了していません`
           });
         }
       }

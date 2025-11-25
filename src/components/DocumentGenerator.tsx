@@ -1149,8 +1149,11 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   };
 
   const validatePhoneNumber = (value: string): boolean => {
-    // 数字が1文字以上含まれていればOK（海外の電話番号に対応）
-    return /[0-9]/.test(value);
+    // 国際形式（+から始まる）に対応
+    if (!value || value.trim().length === 0) return false;
+    const cleaned = value.trim().replace(/\s+/g, '');
+    // +から始まり、その後に7〜15桁の数字がある形式を許可
+    return /^\+[0-9]{7,15}$/.test(cleaned);
   };
 
   const validatePostNumber = (value: string): boolean => {
@@ -1191,12 +1194,28 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     };
   };
 
-  // 入力値のフォーマット関数
+  // 入力値のフォーマット関数（国際形式対応）
   const formatPhoneNumber = (value: string): string => {
-    const cleaned = value.replace(/[^\d]/g, '');
-    if (cleaned.length <= 3) return cleaned;
-    if (cleaned.length <= 7) return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
-    return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 7)}-${cleaned.slice(7, 11)}`;
+    if (!value || value.trim().length === 0) return value;
+    
+    // 空白を削除
+    const cleaned = value.trim().replace(/\s+/g, '');
+    
+    // +から始まる国際形式の場合はそのまま返す（正規化のみ）
+    if (cleaned.startsWith('+')) {
+      // +の後の数字のみを保持
+      const numberPart = cleaned.substring(1).replace(/[^\d]/g, '');
+      if (numberPart.length >= 7 && numberPart.length <= 15) {
+        return `+${numberPart}`;
+      }
+      return cleaned; // 不正な形式の場合はそのまま返す
+    }
+    
+    // 日本国内形式のフォーマット（後方互換性のため）
+    const numericOnly = cleaned.replace(/[^\d]/g, '');
+    if (numericOnly.length <= 3) return numericOnly;
+    if (numericOnly.length <= 7) return `${numericOnly.slice(0, 3)}-${numericOnly.slice(3)}`;
+    return `${numericOnly.slice(0, 3)}-${numericOnly.slice(3, 7)}-${numericOnly.slice(7, 11)}`;
   };
 
   const formatPostNumber = (value: string): string => {
@@ -2990,9 +3009,16 @@ whiteCells.forEach(cell => {
                     value={documentData.livePhoneNumber}
                     onChange={(e) => {
                       const value = e.target.value;
-                      if (validatePhoneNumber(value) || value === '') {
+                      // 入力中は検証を緩和（削除可能にするため）
+                      if (value === '' || validatePhoneNumber(value)) {
                         const formatted = formatPhoneNumber(value);
                         setDocumentData(prev => ({ ...prev, livePhoneNumber: formatted }));
+                      } else if (value.length > 0 && !value.startsWith('+')) {
+                        // +がない場合は+を自動追加（ユーザビリティ向上）
+                        const withPlus = `+${value.replace(/[^\d]/g, '')}`;
+                        if (validatePhoneNumber(withPlus)) {
+                          setDocumentData(prev => ({ ...prev, livePhoneNumber: withPlus }));
+                        }
                       }
                     }}
                     placeholder={t('documents.phoneNumberPlaceholder')}
@@ -3139,9 +3165,16 @@ whiteCells.forEach(cell => {
                         value={documentData.contactPhoneNumber}
                         onChange={(e) => {
                           const value = e.target.value;
-                          if (validatePhoneNumber(value) || value === '') {
+                          // 入力中は検証を緩和（削除可能にするため）
+                          if (value === '' || validatePhoneNumber(value)) {
                             const formatted = formatPhoneNumber(value);
                             setDocumentData(prev => ({ ...prev, contactPhoneNumber: formatted }));
+                          } else if (value.length > 0 && !value.startsWith('+')) {
+                            // +がない場合は+を自動追加（ユーザビリティ向上）
+                            const withPlus = `+${value.replace(/[^\d]/g, '')}`;
+                            if (validatePhoneNumber(withPlus)) {
+                              setDocumentData(prev => ({ ...prev, contactPhoneNumber: withPlus }));
+                            }
                           }
                         }}
                         placeholder={t('documents.contactPhonePlaceholder')}

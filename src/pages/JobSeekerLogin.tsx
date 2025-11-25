@@ -19,7 +19,10 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  phoneNumber: z.string().min(1, '電話番号を入力してください').refine(
+    (val) => /^\+[0-9]{7,15}$/.test(val.trim()),
+    '電話番号は+から始まる国際形式で入力してください'
+  ),
   password: z.string().min(6)
 });
 
@@ -55,9 +58,12 @@ export function JobSeekerLogin() {
     }
   };
 
-  // 動的バリデーションメッセージ
+  // 動的バリデーションメッセージ（電話番号ベース）
   const loginSchemaWithTranslation = z.object({
-    email: z.string().email(t('auth.validation.emailRequired')),
+    phoneNumber: z.string().min(1, '電話番号を入力してください').refine(
+      (val) => /^\+[0-9]{7,15}$/.test(val.trim()),
+      '電話番号は+から始まる国際形式で入力してください（例: +81312345678）'
+    ),
     password: z.string().min(6, t('auth.validation.passwordMin'))
   });
 
@@ -69,7 +75,7 @@ export function JobSeekerLogin() {
     setIsLoading(true);
     try {
       const success = await login(
-        data.email,
+        data.phoneNumber?.trim() || '', // 電話番号を渡す
         data.password,
         'job_seeker',
         undefined,
@@ -185,20 +191,23 @@ export function JobSeekerLogin() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="login-email" className="flex items-center gap-2">
+                        <Label htmlFor="login-phoneNumber" className="flex items-center gap-2">
                           <Mail className="h-4 w-4" />
-                          {t('auth.email')}
+                          電話番号 / Phone Number
                         </Label>
                         <Input
-                          id="login-email"
-                          type="email"
-                          {...loginForm.register('email')}
-                          placeholder={t('auth.emailPlaceholder')}
+                          id="login-phoneNumber"
+                          type="tel"
+                          {...loginForm.register('phoneNumber')}
+                          placeholder="+81312345678 または +998901234567"
                           className="pl-3"
                         />
-                        {loginForm.formState.errors.email && (
-                          <p className="text-sm text-red-500">{loginForm.formState.errors.email.message}</p>
+                        {loginForm.formState.errors.phoneNumber && (
+                          <p className="text-sm text-red-500">{loginForm.formState.errors.phoneNumber.message}</p>
                         )}
+                        <p className="text-xs text-gray-500">
+                          +から始まる国際形式で入力してください（例: +81312345678, +998901234567）
+                        </p>
                       </div>
 
                       <div className="space-y-2">
