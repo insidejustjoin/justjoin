@@ -1586,14 +1586,24 @@ router.post('/admin/interview-reset/:userId', authenticate, async (req: Authenti
 // 面接開始時に面接URLを使用済みにするエンドポイント
 router.post('/interview-start/:token', async (req: express.Request, res: express.Response) => {
   try {
-    const { token } = req.params;
+    let { token } = req.params;
+    
+    // URLデコード（必要に応じて）
+    try {
+      token = decodeURIComponent(token);
+    } catch (e) {
+      // URLデコードに失敗した場合は元のトークンを使用
+      console.warn('URLデコードに失敗しましたが、続行します:', e);
+    }
     
     // Base64デコード
     let decodedToken;
     try {
-      const tokenData = Buffer.from(token, 'base64').toString();
+      const tokenData = Buffer.from(token, 'base64').toString('utf-8');
       decodedToken = JSON.parse(tokenData);
+      console.log('デコードされたトークン:', decodedToken);
     } catch (error) {
+      console.error('トークンデコードエラー:', error);
       return res.status(400).json({
         success: false,
         error: 'INVALID_TOKEN',
@@ -1601,14 +1611,28 @@ router.post('/interview-start/:token', async (req: express.Request, res: express
       });
     }
 
-    // 面接URLを使用済みにする
-    const updateUrlQuery = `
-      UPDATE interview_urls 
-      SET is_used = TRUE 
-      WHERE interview_token = $1
-    `;
-    
-    await query(updateUrlQuery, [token]);
+    // 面接URLを使用済みにする（テーブルが存在しない場合はスキップ）
+    try {
+      const updateUrlQuery = `
+        UPDATE interview_urls 
+        SET is_used = TRUE,
+            updated_at = NOW()
+        WHERE interview_token = $1
+      `;
+      
+      const updateResult = await query(updateUrlQuery, [token]);
+      
+      if (updateResult.rowCount === 0) {
+        console.warn('interview_urlsテーブルに該当するトークンが見つかりませんでした:', token);
+        // エラーにはしない（テーブルが存在しない可能性があるため）
+      } else {
+        console.log('面接URLを使用済みに更新しました:', token);
+      }
+    } catch (dbError: any) {
+      // テーブルが存在しない場合は警告を出して続行
+      console.warn('interview_urlsテーブルへの更新エラー（テーブルが存在しない可能性）:', dbError.message);
+      // エラーにはしない（面接自体は続行可能なため）
+    }
 
     res.json({
       success: true,

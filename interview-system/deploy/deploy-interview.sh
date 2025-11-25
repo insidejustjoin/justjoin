@@ -29,10 +29,22 @@ echo "🔨 サーバーサイドをビルド中..."
 npm run build:server
 
 echo "🐳 Dockerイメージをビルド中..."
-docker build --platform linux/amd64 -t $IMAGE_NAME .
-
-echo "📤 Dockerイメージをプッシュ中..."
-docker push $IMAGE_NAME
+# Dockerが利用可能かチェック
+if docker ps >/dev/null 2>&1; then
+    echo "🐳 ローカルDockerを使用してビルド中..."
+    docker build --platform linux/amd64 -t $IMAGE_NAME .
+    echo "📤 Dockerイメージをプッシュ中..."
+    docker push $IMAGE_NAME
+else
+    echo "⚠️  Dockerデーモンが起動していません。Cloud Buildを使用します..."
+    REV=$(date +%Y%m%d%H%M%S)
+    IMAGE_TAG="$IMAGE_NAME:$REV"
+    gcloud builds submit --tag $IMAGE_TAG --timeout=1800 . || {
+        echo "❌ Cloud Buildに失敗しました"
+        exit 1
+    }
+    IMAGE_NAME=$IMAGE_TAG
+fi
 
 echo "☁️ Cloud Runにデプロイ中..."
 gcloud run deploy $SERVICE_NAME \

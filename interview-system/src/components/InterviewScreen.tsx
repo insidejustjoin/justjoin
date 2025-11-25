@@ -228,8 +228,9 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           }
         }
         
-        // 暫定結果を表示
+        // 暫定結果を表示（音声認識中であることを示す）
         if (interimTranscript) {
+          setIsListening(true);
           setTranscript(interimTranscript);
         }
         
@@ -237,6 +238,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         if (finalTranscript.trim()) {
           const finalText = finalTranscript.trim();
           console.log('音声認識最終結果:', finalText);
+          setIsListening(false);
           setTranscript(finalText);
           
           // 録音を停止してから回答を処理
@@ -578,7 +580,19 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         
         await loadVoices();
         
-        const utterance = new SpeechSynthesisUtterance(message);
+        // メッセージと質問テキストを結合して読み上げ
+        let textToSpeak = message;
+        if (currentQuestion && currentQuestion.text) {
+          // 質問テキストを追加（日本語版を使用）
+          const questionText = typeof currentQuestion.text === 'string' 
+            ? currentQuestion.text 
+            : currentQuestion.text.ja || currentQuestion.text.en || '';
+          if (questionText && !textToSpeak.includes(questionText)) {
+            textToSpeak += '\n\n' + questionText;
+          }
+        }
+        
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
         utterance.lang = 'ja-JP';
         utterance.rate = 0.85; // より遅く（聞き取りやすく）
         utterance.pitch = 1.0; // 標準ピッチ
@@ -620,7 +634,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         };
         
         // 音声再生を開始
-        console.log('音声再生開始');
+        console.log('音声再生開始:', textToSpeak.substring(0, 100));
         speechSynthesis.speak(utterance);
       } else {
         setIsPlaying(false);
@@ -662,6 +676,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     try {
       console.log('録音開始');
       setIsRecording(true);
+      setIsListening(true);
       isRecordingRef.current = true;
       setTranscript('');
       
@@ -934,14 +949,18 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
               <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-3 py-2">
                 <GlobeIcon className="h-4 w-4 text-gray-600" />
                 <button
-                  onClick={() => setDisplayLanguage(displayLanguage === 'ja' ? 'en' : 'ja')}
-                  className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                    displayLanguage === 'ja' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
+                  onClick={() => {
+                    const languages: Language[] = ['ja', 'en', 'ru', 'uz'];
+                    const currentIndex = languages.indexOf(displayLanguage);
+                    const nextIndex = (currentIndex + 1) % languages.length;
+                    setDisplayLanguage(languages[nextIndex]);
+                  }}
+                  className="px-3 py-1 rounded-md text-sm font-medium transition-all bg-blue-600 text-white hover:bg-blue-700"
+                  title="言語を切り替え"
                 >
-                  {displayLanguage === 'ja' ? '日本語' : 'English'}
+                  {displayLanguage === 'ja' ? '日本語' : 
+                   displayLanguage === 'en' ? 'English' :
+                   displayLanguage === 'ru' ? 'Русский' : 'O\'zbek'}
                 </button>
               </div>
               <button
@@ -978,13 +997,21 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                 <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg relative">
                   {!avatarError ? (
                     <img 
-                      src="https://api.dicebear.com/7.x/avataaars/svg?seed=interviewer&backgroundColor=b6e3ff&clothingColor=262e33"
+                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name || 'interviewer')}&backgroundColor=b6e3ff&clothingColor=262e33&mouth=smile&eyes=happy`}
                       alt="AI面接官"
                       className="w-full h-full object-cover"
-                      onError={() => setAvatarError(true)}
+                      onError={() => {
+                        console.error('アバター画像の読み込みに失敗');
+                        setAvatarError(true);
+                      }}
+                      onLoad={() => {
+                        console.log('アバター画像の読み込み成功');
+                      }}
                     />
                   ) : (
-                    <MessageCircleIcon className="h-8 w-8 text-white" />
+                    <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+                      <MessageCircleIcon className="h-8 w-8 text-white" />
+                    </div>
                   )}
                 </div>
               </div>
@@ -1101,13 +1128,33 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                 </button>
                 <div className="space-y-2">
                   <p className="text-gray-600 text-lg font-medium">
-                    {isPlaying ? '音声再生中...' : canStartRecording ? t.speakNow : t.thinking}
+                    {isPlaying 
+                      ? (displayLanguage === 'ja' ? '音声再生中...' : displayLanguage === 'en' ? 'Playing audio...' : displayLanguage === 'ru' ? 'Воспроизведение аудио...' : 'Audio ijro etilmoqda...')
+                      : isListening 
+                        ? (displayLanguage === 'ja' ? '音声認識中...' : displayLanguage === 'en' ? 'Listening...' : displayLanguage === 'ru' ? 'Распознавание речи...' : 'Ovozni tanib olish...')
+                        : isRecording
+                          ? (displayLanguage === 'ja' ? '録音中...' : displayLanguage === 'en' ? 'Recording...' : displayLanguage === 'ru' ? 'Запись...' : 'Yozib olinmoqda...')
+                          : canStartRecording 
+                            ? t.speakNow 
+                            : t.thinking}
                   </p>
-                  {canStartRecording && !isPlaying && (
+                  {isListening && (
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                    </div>
+                  )}
+                  {canStartRecording && !isPlaying && !isRecording && !isListening && (
                     <p className="text-sm text-gray-500">{t.clickToStart}</p>
                   )}
                   {isPlaying && (
-                    <p className="text-sm text-blue-600">問題文の読み上げが終わるまでお待ちください</p>
+                    <p className="text-sm text-blue-600">
+                      {displayLanguage === 'ja' ? '問題文の読み上げが終わるまでお待ちください' :
+                       displayLanguage === 'en' ? 'Please wait for the question to finish reading' :
+                       displayLanguage === 'ru' ? 'Пожалуйста, дождитесь окончания чтения вопроса' :
+                       'Savol o\'qilishi tugaguncha kuting'}
+                    </p>
                   )}
                 </div>
               </div>

@@ -840,6 +840,28 @@ Press "OK" to complete audio check, "Cancel" to retry.`;
             >
               English
             </button>
+            <button
+              type="button"
+              onClick={() => onLanguageChange('ru')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                language === 'ru'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+              }`}
+            >
+              Русский
+            </button>
+            <button
+              type="button"
+              onClick={() => onLanguageChange('uz')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                language === 'uz'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+              }`}
+            >
+              O'zbek
+            </button>
             <span className="text-xs text-gray-500">面接中は日本語固定</span>
           </div>
         </div>

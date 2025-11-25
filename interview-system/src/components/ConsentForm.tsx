@@ -163,6 +163,28 @@ const ConsentForm: React.FC<ConsentFormProps> = ({
                 >
                   English
                 </button>
+                <button
+                  type="button"
+                  onClick={() => onLanguageChange('ru')}
+                  className={`px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    language === 'ru'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                  }`}
+                >
+                  Русский
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onLanguageChange('uz')}
+                  className={`px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    language === 'uz'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                  }`}
+                >
+                  O'zbek
+                </button>
               </div>
             </div>
 

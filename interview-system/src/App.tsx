@@ -772,7 +772,7 @@ function App() {
     setCurrentState('preparation');
   };
 
-  // 音声認識の開始
+  // 音声認識の開始（この関数は使用されていない可能性があります - InterviewScreenで処理されています）
   const startRecording = () => {
     setIsRecording(true);
     setTranscript('');
@@ -782,7 +782,7 @@ function App() {
       const recognition = new (window as any).webkitSpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = language === 'ja' ? 'ja-JP' : 'en-US';
+      recognition.lang = 'ja-JP'; // 常に日本語で認識
       
       recognition.onresult = (event: any) => {
         let finalTranscript = '';
@@ -795,6 +795,11 @@ function App() {
       };
       
       recognition.onerror = (event: any) => {
+        // abortedエラーは正常な中断なので無視
+        if (event.error === 'aborted') {
+          console.log('音声認識が中断されました（正常）');
+          return;
+        }
         console.error('音声認識エラー:', event.error);
         setIsRecording(false);
       };
