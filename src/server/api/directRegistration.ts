@@ -419,14 +419,14 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
       const token = jwt.default.sign(
         { 
           userId: userId, 
-          email, 
+          phoneNumber: normalizedPhone, 
           role: 'job_seeker' 
         },
         process.env.JWT_SECRET || 'justjoin-jwt-secret-2024',
         { expiresIn: '7d' }
       );
 
-      // 登録完了メール送信（オプショナル - 電話番号ベースではスキップ）
+      // 登録完了処理（電話番号ベース）
       try {
         const fullName = `${lastName} ${firstName}`;
         console.log('登録完了（電話番号ベース）:', normalizedPhone);
