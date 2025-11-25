@@ -12,13 +12,13 @@ const JobSeekerRegisterType: React.FC = () => {
   
   // 前のページから渡されたデータを取得
   const {
-    email,
+    phoneNumber,
     firstName,
     lastName,
     availability
   } =
     (location.state as {
-      email?: string;
+      phoneNumber?: string;
       firstName?: string;
       lastName?: string;
       availability?: {
@@ -34,7 +34,7 @@ const JobSeekerRegisterType: React.FC = () => {
   const existingRegistrationTypes = availability?.existingRegistrationTypes || [];
 
   // データがない場合は最初のページに戻す
-  if (!email || !firstName || !lastName) {
+  if (!phoneNumber || !firstName || !lastName) {
     navigate('/jobseeker/register');
     return null;
   }
@@ -50,7 +50,7 @@ const JobSeekerRegisterType: React.FC = () => {
     }
 
     const nextState = {
-      email,
+      phoneNumber,
       firstName,
       lastName,
       availability: {

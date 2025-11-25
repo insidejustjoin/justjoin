@@ -13,7 +13,7 @@ interface JobSeekerRegisterStartProps {
 }
 
 export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ onExistingUser }) => {
-  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -27,6 +27,17 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
     setIsLoading(true);
     setMessage(null);
 
+    // 電話番号の形式を検証
+    const phonePattern = /^\+[0-9]{7,15}$/;
+    if (!phonePattern.test(phoneNumber.trim())) {
+      setMessage({
+        type: 'error',
+        text: '電話番号は+から始まる国際形式で入力してください（例: +81312345678, +998901234567）'
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch('/api/register/check', {
         method: 'POST',
@@ -34,7 +45,7 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email,
+          phoneNumber: phoneNumber.trim(),
           firstName,
           lastName,
         }),
@@ -53,7 +64,7 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
         if (!availability.canRegisterEngineer && !availability.canRegisterGeneral) {
           setMessage({
             type: 'error',
-            text: 'このメールアドレスではエンジニア・一般職の両方が登録済みです。ログインページへ移動してください。'
+            text: 'この電話番号ではエンジニア・一般職の両方が登録済みです。ログインページへ移動してください。'
           });
           if (onExistingUser) {
             onExistingUser();
@@ -65,7 +76,7 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
         }
 
         navigate('/jobseeker/register/type', {
-          state: { email, firstName, lastName, availability }
+          state: { phoneNumber: phoneNumber.trim(), firstName, lastName, availability }
         });
       } else {
         setMessage({ type: 'error', text: data.message || 'エラーが発生しました' });
@@ -85,25 +96,28 @@ export const JobSeekerRegisterStart: React.FC<JobSeekerRegisterStartProps> = ({ 
           新規登録 / New Registration
         </CardTitle>
         <CardDescription className="text-center">
-          メールアドレスとお名前を入力してください / Please enter your email and name
+          電話番号とお名前を入力してください / Please enter your phone number and name
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">
+            <Label htmlFor="phoneNumber">
               <Mail className="inline-block h-4 w-4 mr-2" />
-              メールアドレス / Email
+              電話番号 / Phone Number
             </Label>
             <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="example@email.com"
+              id="phoneNumber"
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="+81312345678 または +998901234567"
               required
               disabled={isLoading}
             />
+            <p className="text-xs text-gray-500">
+              +から始まる国際形式で入力してください（例: +81312345678, +998901234567）
+            </p>
           </div>
 
           <div className="space-y-2">
