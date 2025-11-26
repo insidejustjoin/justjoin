@@ -230,7 +230,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [isInitialized]); // userを依存配列から削除
 
   const login = async (
-    identifier: string, // 電話番号またはメールアドレス
+    email: string,
     password: string,
     userType: 'job_seeker' | 'company' | 'admin',
     recaptchaToken?: string,
@@ -238,26 +238,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     registrationType?: 'engineer' | 'general'
   ): Promise<boolean> => {
     try {
-      console.log('Login requested for:', identifier, userType);
+      console.log('Login requested for:', email, userType);
       
-      // 求職者の場合は電話番号、管理者・企業はメールアドレス
-      let isPhoneBased = false;
-      if (userType === 'job_seeker') {
-        // 電話番号の形式チェック
-        const phonePattern = /^\+[0-9]{7,15}$/;
-        if (phonePattern.test(identifier.trim())) {
-          isPhoneBased = true;
-        } else {
-          toast.error('電話番号は+から始まる国際形式で入力してください（例: +81312345678）');
-          return false;
-        }
-      } else {
-        // メールアドレスの形式チェック（管理者・企業）
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(identifier)) {
-          toast.error('有効なメールアドレスを入力してください');
-          return false;
-        }
+      // メールアドレスの形式チェック
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        toast.error('有効なメールアドレスを入力してください');
+        return false;
       }
       
       // 開発環境ではローカルAPIを使用、本番環境では本番APIを使用
@@ -266,10 +253,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // 管理者の場合は専用APIを使用（reCAPTCHAなし）
       const apiEndpoint = userType === 'admin' ? '/api/admin/login' : '/api/login';
       const requestBody: Record<string, any> = userType === 'admin'
-        ? { email: identifier, password }
-        : isPhoneBased
-          ? { phoneNumber: identifier.trim(), password, userType }
-          : { email: identifier, password, userType };
+        ? { email, password }
+        : { email, password, userType };
 
       if (recaptchaToken) {
         requestBody.recaptchaToken = recaptchaToken;

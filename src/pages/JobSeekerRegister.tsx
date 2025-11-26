@@ -1,6 +1,6 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { JobSeekerRegisterStart } from '@/components/JobSeekerRegisterStart';
+import { TemporaryRegistrationForm } from '@/components/TemporaryRegistrationForm';
 
 const JobSeekerRegister: React.FC = () => {
   return (
@@ -21,7 +21,8 @@ const JobSeekerRegister: React.FC = () => {
             </p>
           </div>
           
-          <JobSeekerRegisterStart />
+          {/* メールアドレスによる仮登録（本人確認）フロー */}
+          <TemporaryRegistrationForm />
         </div>
       </div>
     </>
