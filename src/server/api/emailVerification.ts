@@ -10,10 +10,8 @@ const ensureEmailVerificationsTable = async () => {
   if (emailVerificationsTableCreated) return;
   
   try {
-    const { query: queryFn } = await import('../../integrations/postgres/client.js');
-    
     // テーブル作成
-    await queryFn(`
+    await query(`
       CREATE TABLE IF NOT EXISTS email_verifications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email TEXT NOT NULL UNIQUE,
@@ -29,7 +27,7 @@ const ensureEmailVerificationsTable = async () => {
     
     // インデックスも作成
     try {
-      await queryFn(`
+      await query(`
         CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(email);
       `);
     } catch (idxError: any) {
@@ -40,7 +38,7 @@ const ensureEmailVerificationsTable = async () => {
     }
     
     try {
-      await queryFn(`
+      await query(`
         CREATE INDEX IF NOT EXISTS idx_email_verifications_code ON email_verifications(verification_code);
       `);
     } catch (idxError: any) {

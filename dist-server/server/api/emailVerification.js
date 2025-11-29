@@ -8,7 +8,9 @@ const ensureEmailVerificationsTable = async () => {
     if (emailVerificationsTableCreated)
         return;
     try {
-        await query(`
+        const { query: queryFn } = await import('../../integrations/postgres/client.js');
+        // テーブル作成
+        await queryFn(`
       CREATE TABLE IF NOT EXISTS email_verifications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email TEXT NOT NULL UNIQUE,
@@ -22,27 +24,48 @@ const ensureEmailVerificationsTable = async () => {
       )
     `);
         // インデックスも作成
-        await query(`
-      CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(email);
-    `);
-        await query(`
-      CREATE INDEX IF NOT EXISTS idx_email_verifications_code ON email_verifications(verification_code);
-    `);
+        try {
+            await queryFn(`
+        CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(email);
+      `);
+        }
+        catch (idxError) {
+            // インデックスが既に存在する場合は無視
+            if (!idxError.message?.includes('already exists')) {
+                console.warn('email_verifications emailインデックス作成エラー:', idxError.message);
+            }
+        }
+        try {
+            await queryFn(`
+        CREATE INDEX IF NOT EXISTS idx_email_verifications_code ON email_verifications(verification_code);
+      `);
+        }
+        catch (idxError) {
+            // インデックスが既に存在する場合は無視
+            if (!idxError.message?.includes('already exists')) {
+                console.warn('email_verifications codeインデックス作成エラー:', idxError.message);
+            }
+        }
         emailVerificationsTableCreated = true;
+        console.log('email_verifications テーブルの確認/作成が完了しました');
     }
     catch (tableError) {
-        // テーブルが既に存在する場合は無視
-        if (!tableError.message?.includes('already exists')) {
-            console.warn('email_verifications テーブル作成エラー:', tableError.message);
-        }
-        emailVerificationsTableCreated = true; // エラーでも次の試行を防ぐ
+        console.error('email_verifications テーブル作成エラー:', tableError.message || tableError);
+        // エラーが発生しても続行（テーブルが既に存在する可能性がある）
+        emailVerificationsTableCreated = true;
     }
 };
 // メール本人確認コード送信API（トークンは発行せず、確認コードのみ）
 router.post('/verify-email', async (req, res) => {
     try {
+        console.log('メール本人確認コード送信API: リクエスト受信', {
+            email: req.body?.email,
+            hasFirstName: !!req.body?.firstName,
+            hasLastName: !!req.body?.lastName
+        });
         const { email, firstName, lastName } = req.body;
         if (!email || !firstName || !lastName) {
+            console.log('バリデーションエラー: 必須フィールドが不足');
             return res.status(400).json({
                 success: false,
                 message: 'メールアドレス、名、姓は必須です'
@@ -51,18 +74,23 @@ router.post('/verify-email', async (req, res) => {
         // メールアドレスの形式チェック
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
+            console.log('メールアドレス形式エラー:', email);
             return res.status(400).json({
                 success: false,
                 message: '有効なメールアドレスを入力してください'
             });
         }
         // テーブルが存在することを確認
+        console.log('email_verifications テーブルの確認を開始...');
         await ensureEmailVerificationsTable();
+        console.log('email_verifications テーブルの確認完了');
         // 6桁の確認コードを生成
         const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5分有効
+        console.log('確認コードを生成:', { code: verificationCode, expiresAt });
         // email_verifications テーブルに保存（既存の場合は更新）
         try {
+            console.log('email_verifications テーブルに保存を開始...');
             await query(`INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
          VALUES ($1, $2, $3, $4, $5, NOW())
          ON CONFLICT (email) DO UPDATE SET
@@ -72,26 +100,40 @@ router.post('/verify-email', async (req, res) => {
            expires_at = $5,
            verified = false,
            updated_at = NOW()`, [email, firstName, lastName, verificationCode, expiresAt]);
+            console.log('email_verifications テーブルへの保存完了');
         }
         catch (dbError) {
-            console.error('email_verifications テーブルへの保存エラー:', dbError.message || dbError);
+            console.error('email_verifications テーブルへの保存エラー:', {
+                message: dbError.message,
+                code: dbError.code,
+                detail: dbError.detail,
+                stack: dbError.stack
+            });
             throw dbError;
         }
         // 確認メール送信（コードを含む）
+        console.log('確認メールの送信を開始...');
         const emailSent = await emailService.sendEmailVerificationCode(email, firstName, lastName, verificationCode);
         if (!emailSent) {
+            console.error('メール送信に失敗しました');
             return res.status(500).json({
                 success: false,
                 message: 'メール送信に失敗しました。再度お試しください。'
             });
         }
+        console.log('確認メールの送信完了');
         res.json({
             success: true,
             message: '確認メールを送信しました。メール内の6桁のコードを入力してください。'
         });
     }
     catch (error) {
-        console.error('メール本人確認コード送信エラー:', error?.message || error);
+        console.error('メール本人確認コード送信エラー:', {
+            message: error?.message,
+            code: error?.code,
+            detail: error?.detail,
+            stack: error?.stack
+        });
         res.status(500).json({
             success: false,
             message: 'メール本人確認コードの送信に失敗しました',
