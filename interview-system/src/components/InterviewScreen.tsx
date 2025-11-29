@@ -580,10 +580,10 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         
         await loadVoices();
         
-        // メッセージと質問テキストを結合して読み上げ
+        // メッセージと質問テキストを結合して読み上げ（日本語版を使用）
         let textToSpeak = message;
         if (currentQuestion && currentQuestion.text) {
-          // 質問テキストを追加（日本語版を使用）
+          // 質問テキストを追加（日本語版を使用 - 回答は日本語で行うため）
           const questionText = typeof currentQuestion.text === 'string' 
             ? currentQuestion.text 
             : currentQuestion.text.ja || currentQuestion.text.en || '';
@@ -594,47 +594,33 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         
         const utterance = new SpeechSynthesisUtterance(textToSpeak);
         
-        // 言語に応じた音声設定
-        const languageConfig = {
-          ja: { lang: 'ja-JP', voicePatterns: ['ja', 'Japanese'] },
-          en: { lang: 'en-US', voicePatterns: ['en', 'English'] },
-          ru: { lang: 'ru-RU', voicePatterns: ['ru', 'Russian'] },
-          uz: { lang: 'uz-UZ', voicePatterns: ['uz', 'Uzbek'] }
-        };
-        
-        const config = languageConfig[language] || languageConfig.ja;
-        utterance.lang = config.lang;
+        // 音声は日本語固定（回答は日本語で行うため）
+        utterance.lang = 'ja-JP';
         utterance.rate = 0.85; // より遅く（聞き取りやすく）
         utterance.pitch = 1.0; // 標準ピッチ
         utterance.volume = 1.0; // 最大音量
         
-        // 言語に応じた自然な音声を選択
+        // より自然な日本語音声を選択（優先順位: Google > Microsoft > その他の日本語音声）
         const voices = speechSynthesis.getVoices();
-        let selectedVoice = null;
-        
-        // 優先順位: Google > Microsoft > その他の該当言語音声
-        for (const pattern of config.voicePatterns) {
-          selectedVoice = voices.find(voice => 
-            voice.lang.includes(pattern) && voice.name.includes('Google')
+        let japaneseVoice = voices.find(voice => 
+          voice.lang.includes('ja') && voice.name.includes('Google')
+        );
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => 
+            voice.lang.includes('ja') && voice.name.includes('Microsoft')
           );
-          if (selectedVoice) break;
-          
-          selectedVoice = voices.find(voice => 
-            voice.lang.includes(pattern) && voice.name.includes('Microsoft')
-          );
-          if (selectedVoice) break;
-          
-          selectedVoice = voices.find(voice => 
-            voice.lang.includes(pattern)
-          );
-          if (selectedVoice) break;
         }
-        
-        if (selectedVoice) {
-          utterance.voice = selectedVoice;
-          console.log('選択された音声:', selectedVoice.name, selectedVoice.lang);
-        } else {
-          console.warn('適切な音声が見つかりませんでした。デフォルト音声を使用します。');
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => 
+            voice.lang.includes('ja') && (voice.name.includes('女性') || voice.name.includes('Female'))
+          );
+        }
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => voice.lang.includes('ja'));
+        }
+        if (japaneseVoice) {
+          utterance.voice = japaneseVoice;
+          console.log('選択された音声:', japaneseVoice.name);
         }
         
         utterance.onend = () => {
