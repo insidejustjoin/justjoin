@@ -1095,7 +1095,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
               document_data, 
               COALESCE(ud.registration_type, 'engineer') as registration_type
             FROM user_documents ud
-            WHERE ud.user_id = js.user_id
+            WHERE ud.user_id = js.user_id::text
               AND LOWER(COALESCE(ud.registration_type, 'engineer')) = LOWER(COALESCE(js.registration_type, 'engineer'))
             ORDER BY ud.updated_at DESC
             LIMIT 1
