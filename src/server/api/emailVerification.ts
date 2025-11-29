@@ -98,26 +98,45 @@ router.post('/verify-email', async (req, res) => {
 
     // email_verifications テーブルに保存（既存の場合は更新）
     try {
-      console.log('email_verifications テーブルに保存を開始...');
-      await query(
-        `INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())
-         ON CONFLICT (email) DO UPDATE SET
-           first_name = $2,
-           last_name = $3,
-           verification_code = $4,
-           expires_at = $5,
-           verified = false,
-           updated_at = NOW()`,
-        [email, firstName, lastName, verificationCode, expiresAt]
+      console.log('email_verifications テーブルに保存を開始...', { email, firstName, lastName });
+      
+      // まず既存レコードがあるかチェック
+      const existingResult = await query(
+        `SELECT id, email FROM email_verifications WHERE email = $1`,
+        [email]
       );
+      
+      if (existingResult.rows.length > 0) {
+        // 既存レコードを更新
+        console.log('既存レコードを更新します');
+        await query(
+          `UPDATE email_verifications 
+           SET first_name = $1,
+               last_name = $2,
+               verification_code = $3,
+               expires_at = $4,
+               verified = false,
+               updated_at = NOW()
+           WHERE email = $5`,
+          [firstName, lastName, verificationCode, expiresAt, email]
+        );
+      } else {
+        // 新規レコードを挿入
+        console.log('新規レコードを挿入します');
+        await query(
+          `INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())`,
+          [email, firstName, lastName, verificationCode, expiresAt]
+        );
+      }
       console.log('email_verifications テーブルへの保存完了');
     } catch (dbError: any) {
       console.error('email_verifications テーブルへの保存エラー:', {
         message: dbError.message,
         code: dbError.code,
         detail: dbError.detail,
-        stack: dbError.stack
+        stack: dbError.stack,
+        query: dbError.query
       });
       throw dbError;
     }
