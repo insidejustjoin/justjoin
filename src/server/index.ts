@@ -1090,6 +1090,16 @@ app.get('/api/admin/jobseekers', async (req, res) => {
           LEFT JOIN users u ON js.user_id = u.id
           LEFT JOIN latest ON latest.user_id = js.user_id 
             AND LOWER(COALESCE(latest.registration_type, 'engineer')) = LOWER(COALESCE(js.registration_type, 'engineer'))
+          LEFT JOIN LATERAL (
+            SELECT 
+              document_data, 
+              COALESCE(ud.registration_type, 'engineer') as registration_type
+            FROM user_documents ud
+            WHERE ud.user_id = js.user_id
+              AND LOWER(COALESCE(ud.registration_type, 'engineer')) = LOWER(COALESCE(js.registration_type, 'engineer'))
+            ORDER BY ud.updated_at DESC
+            LIMIT 1
+          ) doc ON TRUE
           ${whereClause}
           ORDER BY js.created_at DESC
         `,
@@ -1124,7 +1134,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
         completion_rate: row.completion_rate,
         registration_type: row.registration_type,
         interview_enabled: row.interview_enabled || false,
-        profile_photo: null
+        profile_photo: row.profile_photo || null
       }));
     };
 
@@ -1229,13 +1239,15 @@ app.get('/api/jobseekers/:id', async (req, res) => {
       } as any;
     }
  
-    // すべての書類データを取得してマージ
+    // すべての書類データを取得してマージ（registration_typeでフィルタリング）
     const allDocs = await query(`
-      SELECT document_type, document_data, created_at
+      SELECT document_type, document_data, created_at, registration_type
         FROM user_documents 
         WHERE user_id = $1 
+          AND registration_type IS NOT NULL
+          AND LOWER(registration_type) = LOWER($2)
       ORDER BY created_at ASC
-    `, [row.user_id]);
+    `, [row.user_id, type]);
  
     const merged: any = {
       id: row.id,
@@ -1298,8 +1310,9 @@ app.get('/api/jobseekers/:id', async (req, res) => {
         mapBasicTop(data);
       }
 
-      if (data.resume?.photoUrl) {
-        merged.profile_photo = merged.profile_photo || data.resume.photoUrl;
+      // profile_photoを優先的に設定（job_seekersから取得した値がない場合のみuser_documentsから補完）
+      if (!merged.profile_photo && data.resume?.photoUrl) {
+        merged.profile_photo = data.resume.photoUrl;
       }
       if (data.japaneseInfo?.nextJapaneseTestLevel) {
         merged.japanese_level = data.japaneseInfo.nextJapaneseTestLevel;
