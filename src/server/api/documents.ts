@@ -683,7 +683,7 @@ router.get('/', async (req: express.Request, res: express.Response): Promise<any
       const params: any[] = [userId];
       if (registrationTypeFilter) {
         params.push(registrationTypeFilter);
-        queryText += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length})`;
+        queryText += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${params.length})`;
       }
       queryText += ' ORDER BY updated_at DESC LIMIT 1';
 
@@ -740,7 +740,7 @@ router.delete('/:userId', async (req: express.Request, res: express.Response): P
       const params: any[] = [userId];
       if (typeof registrationType === 'string') {
         const normalized = normalizeRegistrationType(registrationType);
-        deleteQuery += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
+        deleteQuery += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${params.length + 1})`;
         params.push(normalized);
       }
       await query(deleteQuery, params);
@@ -927,7 +927,8 @@ router.post('/jobseekers/documents', async (req: express.Request, res: express.R
           UPDATE user_documents 
           SET document_data = $1, updated_at = NOW(), registration_type = $4
           WHERE user_id = $2 AND document_type = $3
-            AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($4)
+            AND registration_type IS NOT NULL
+            AND LOWER(registration_type) = LOWER($4)
         `,
         [JSON.stringify(documentData), userIdStr, 'jobseeker_documents', normalizedRegistrationType]
       );
@@ -982,7 +983,7 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
     let sql = 'SELECT completion_rate, registration_type FROM job_seekers WHERE user_id = $1';
     const params: any[] = [userId];
     if (registrationTypeFilter) {
-      sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
+      sql += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${params.length + 1})`;
       params.push(registrationTypeFilter);
     }
 
@@ -1005,9 +1006,10 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
     try {
       const docParams: any[] = [userId];
       let docSql = `
-        SELECT document_data, COALESCE(registration_type, 'engineer') AS registration_type
+        SELECT document_data, registration_type
         FROM user_documents
         WHERE user_id = $1
+          AND registration_type IS NOT NULL
       `;
       if (registrationTypeFilter) {
         docSql += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${docParams.length + 1})`;
@@ -1828,7 +1830,7 @@ router.get('/documents/:userId', async (req: express.Request, res: express.Respo
       params.push(documentType as string);
     }
     if (registrationType && typeof registrationType === 'string') {
-      sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
+      sql += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${params.length + 1})`;
       params.push(normalizeRegistrationType(registrationType));
     }
 
@@ -1858,7 +1860,7 @@ router.delete('/documents/:userId', async (req: express.Request, res: express.Re
       params.push(documentType as string);
     }
     if (registrationType && typeof registrationType === 'string') {
-      sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length + 1})`;
+      sql += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${params.length + 1})`;
       params.push(normalizeRegistrationType(registrationType));
     }
 
