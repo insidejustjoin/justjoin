@@ -108,43 +108,80 @@ router.post('/check', rateLimit(10, 60000), async (req, res) => {
         return res.json({ success: true, exists: false, message: '新規ユーザーです。（フォールバック）' });
     }
 });
-// エンジニア向け本登録API（電話番号ベース）
+// エンジニア向け本登録API（メールアドレスベースまたは電話番号ベース）
 router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
     try {
-        const { phoneNumber, firstName, lastName, password, documentsData } = req.body;
-        // バリデーション
-        if (!phoneNumber || !firstName || !lastName || !password) {
+        const { phoneNumber, email, firstName, lastName, password, documentsData } = req.body;
+        // バリデーション: メールアドレスまたは電話番号のいずれかが必要
+        if ((!phoneNumber && !email) || !firstName || !lastName || !password) {
             return res.status(400).json({
                 success: false,
-                message: '電話番号、姓、名、パスワードは必須です。'
+                message: 'メールアドレスまたは電話番号、姓、名、パスワードは必須です。'
             });
         }
-        // 電話番号の形式を検証
-        const phoneValidation = validatePhoneNumber(phoneNumber);
-        if (!phoneValidation.isValid) {
-            return res.status(400).json({ success: false, message: phoneValidation.error });
+        // メールアドレスベースの登録か電話番号ベースの登録かを判定
+        const isEmailBased = !!email;
+        let normalizedPhone = null;
+        if (isEmailBased) {
+            // メールアドレスの形式チェック
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({
+                    success: false,
+                    message: '有効なメールアドレスを入力してください。'
+                });
+            }
+            // メール確認済みかチェック
+            const verificationResult = await query(`SELECT verified FROM email_verifications WHERE email = $1 ORDER BY created_at DESC LIMIT 1`, [email]);
+            if (verificationResult.rows.length === 0 || !verificationResult.rows[0].verified) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'メールアドレスが確認されていません。先にメール確認を完了してください。'
+                });
+            }
         }
-        // 電話番号の実在確認（簡易版 - 形式のみ）
-        const phoneVerification = await verifyPhoneNumberExists(phoneValidation.normalized);
-        if (!phoneVerification.isValid) {
-            return res.status(400).json({ success: false, message: phoneVerification.error });
+        else {
+            // 電話番号の形式を検証
+            const phoneValidation = validatePhoneNumber(phoneNumber);
+            if (!phoneValidation.isValid) {
+                return res.status(400).json({ success: false, message: phoneValidation.error });
+            }
+            // 電話番号の実在確認（簡易版 - 形式のみ）
+            const phoneVerification = await verifyPhoneNumberExists(phoneValidation.normalized);
+            if (!phoneVerification.isValid) {
+                return res.status(400).json({ success: false, message: phoneVerification.error });
+            }
+            normalizedPhone = phoneValidation.normalized;
         }
-        const normalizedPhone = phoneValidation.normalized;
         if (password.length < 8 || !/(?=.*[a-zA-Z])(?=.*[0-9])/.test(password)) {
             return res.status(400).json({
                 success: false,
                 message: 'パスワードは8文字以上で、英数字を含む必要があります。'
             });
         }
-        // 既存ユーザーチェック（同じ電話番号で最大2つまで登録可能：エンジニアと一般職）
-        const existingUser = await query(`SELECT 
-        u.id, 
-        js.id as jobseeker_id,
-        js.registration_type,
-        u.status
-       FROM job_seekers js
-       INNER JOIN users u ON js.user_id = u.id
-       WHERE js.phone = $1 AND js.registration_type = $2`, [normalizedPhone, 'engineer']);
+        // 既存ユーザーチェック（メールアドレスベースまたは電話番号ベース）
+        let existingUser;
+        if (isEmailBased) {
+            existingUser = await query(`SELECT 
+          u.id, 
+          js.id as jobseeker_id,
+          js.registration_type,
+          u.status,
+          u.email
+         FROM job_seekers js
+         INNER JOIN users u ON js.user_id = u.id
+         WHERE u.email = $1 AND js.registration_type = $2`, [email, 'engineer']);
+        }
+        else {
+            existingUser = await query(`SELECT 
+          u.id, 
+          js.id as jobseeker_id,
+          js.registration_type,
+          u.status
+         FROM job_seekers js
+         INNER JOIN users u ON js.user_id = u.id
+         WHERE js.phone = $1 AND js.registration_type = $2`, [normalizedPhone, 'engineer']);
+        }
         let reactivating = false;
         let existingEngineerRow = null;
         let latestStatus = null;
@@ -186,30 +223,66 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
                 }
             }
             else {
-                // 新規ユーザー作成（電話番号ベース - emailはoptional、phoneから生成したダミーemailを使用）
-                // 電話番号から一意のemailを生成（phone_+81312345678@justjoin.local形式）
-                const dummyEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}@justjoin.local`;
-                try {
-                    const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [dummyEmail, passwordHash, 'job_seeker', 'active']);
-                    userId = userResult.rows[0].id;
+                // 新規ユーザー作成（メールアドレスベースまたは電話番号ベース）
+                if (isEmailBased) {
+                    // メールアドレスベースの新規ユーザー作成
+                    try {
+                        const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+               VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [email, passwordHash, 'job_seeker', 'active']);
+                        userId = userResult.rows[0].id;
+                    }
+                    catch (emailErr) {
+                        // emailがUNIQUE制約で失敗する可能性があるため、既存ユーザーを確認
+                        const existingUserByEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+                        if (existingUserByEmail.rows.length > 0) {
+                            userId = existingUserByEmail.rows[0].id;
+                            // パスワードを更新
+                            await query(`UPDATE users SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() WHERE id = $4`, [passwordHash, 'job_seeker', 'active', userId]);
+                        }
+                        else {
+                            throw emailErr;
+                        }
+                    }
                 }
-                catch {
-                    // emailがUNIQUE制約で失敗する可能性があるため、UUIDを追加
-                    const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
-                    const userResult = await query(`INSERT INTO users (email, password_hash, created_at, updated_at) 
-             VALUES ($1, $2, NOW(), NOW()) RETURNING id`, [uniqueEmail, passwordHash]);
-                    userId = userResult.rows[0].id;
+                else {
+                    // 電話番号ベース - emailはoptional、phoneから生成したダミーemailを使用
+                    const dummyEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}@justjoin.local`;
+                    try {
+                        const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+               VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [dummyEmail, passwordHash, 'job_seeker', 'active']);
+                        userId = userResult.rows[0].id;
+                    }
+                    catch {
+                        // emailがUNIQUE制約で失敗する可能性があるため、UUIDを追加
+                        const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
+                        const userResult = await query(`INSERT INTO users (email, password_hash, created_at, updated_at) 
+               VALUES ($1, $2, NOW(), NOW()) RETURNING id`, [uniqueEmail, passwordHash]);
+                        userId = userResult.rows[0].id;
+                    }
                 }
             }
             // 念のため、usersに存在しなければ作成（DB初期化レース対策）
             try {
                 const existsUser = await query('SELECT 1 FROM users WHERE id = $1', [userId]);
                 if (existsUser.rowCount === 0) {
-                    const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
-                    const reUser = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
-             VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`, [uniqueEmail, passwordHash]);
-                    userId = reUser.rows[0].id;
+                    if (isEmailBased) {
+                        // メールアドレスベースの場合は既存ユーザーを確認
+                        const existingUserByEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+                        if (existingUserByEmail.rows.length > 0) {
+                            userId = existingUserByEmail.rows[0].id;
+                        }
+                        else {
+                            const reUser = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+                 VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`, [email, passwordHash]);
+                            userId = reUser.rows[0].id;
+                        }
+                    }
+                    else {
+                        const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
+                        const reUser = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+               VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`, [uniqueEmail, passwordHash]);
+                        userId = reUser.rows[0].id;
+                    }
                 }
             }
             catch { }
@@ -218,19 +291,28 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
                 await query(`UPDATE job_seekers
            SET first_name = $2,
                last_name = $3,
-               phone = $4,
-               date_of_birth = $5,
-               gender = $6,
-               nationality = $7,
-               address = $8,
-               profile_photo = $9,
+               ${isEmailBased ? '' : 'phone = $4,'}
+               date_of_birth = ${isEmailBased ? '$4' : '$5'},
+               gender = ${isEmailBased ? '$5' : '$6'},
+               nationality = ${isEmailBased ? '$6' : '$7'},
+               address = ${isEmailBased ? '$7' : '$8'},
+               profile_photo = ${isEmailBased ? '$8' : '$9'},
                registration_type = 'engineer',
                updated_at = NOW()
-           WHERE id = $1`, [
+           WHERE id = $1`, isEmailBased ? [
                     existingEngineerRow.jobseeker_id,
                     firstName,
                     lastName,
-                    normalizedPhone, // 正規化された電話番号を使用
+                    documentsData?.birthDate || null,
+                    documentsData?.gender || null,
+                    documentsData?.nationality || null,
+                    documentsData?.liveAddress || null,
+                    documentsData?.resume?.photoUrl || null,
+                ] : [
+                    existingEngineerRow.jobseeker_id,
+                    firstName,
+                    lastName,
+                    normalizedPhone,
                     documentsData?.birthDate || null,
                     documentsData?.gender || null,
                     documentsData?.nationality || null,
@@ -241,14 +323,24 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
             else {
                 try {
                     await query(`INSERT INTO job_seekers (
-              user_id, first_name, last_name, phone, 
+              user_id, first_name, last_name${isEmailBased ? '' : ', phone'}, 
               date_of_birth, gender, nationality, address,
               profile_photo, registration_type, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`, [
+            ) VALUES ($1, $2, $3${isEmailBased ? '' : ', $4'}, ${isEmailBased ? '$4' : '$5'}, ${isEmailBased ? '$5' : '$6'}, ${isEmailBased ? '$6' : '$7'}, ${isEmailBased ? '$7' : '$8'}, ${isEmailBased ? '$8' : '$9'}, $9, NOW(), NOW())`, isEmailBased ? [
                         userId,
                         firstName,
                         lastName,
-                        normalizedPhone, // 正規化された電話番号を使用
+                        documentsData?.birthDate || null,
+                        documentsData?.gender || null,
+                        documentsData?.nationality || null,
+                        documentsData?.liveAddress || null,
+                        documentsData?.resume?.photoUrl || null,
+                        'engineer'
+                    ] : [
+                        userId,
+                        firstName,
+                        lastName,
+                        normalizedPhone,
                         documentsData?.birthDate || null,
                         documentsData?.gender || null,
                         documentsData?.nationality || null,
@@ -323,15 +415,21 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
             await query('COMMIT');
             // JWTトークン生成
             const jwt = await import('jsonwebtoken');
-            const token = jwt.default.sign({
+            const tokenPayload = {
                 userId: userId,
-                phoneNumber: normalizedPhone,
                 role: 'job_seeker'
-            }, process.env.JWT_SECRET || 'justjoin-jwt-secret-2024', { expiresIn: '7d' });
-            // 登録完了処理（電話番号ベース）
+            };
+            if (isEmailBased) {
+                tokenPayload.email = email;
+            }
+            else {
+                tokenPayload.phoneNumber = normalizedPhone;
+            }
+            const token = jwt.default.sign(tokenPayload, process.env.JWT_SECRET || 'justjoin-jwt-secret-2024', { expiresIn: '7d' });
+            // 登録完了処理
             try {
                 const fullName = `${lastName} ${firstName}`;
-                console.log('登録完了（電話番号ベース）:', normalizedPhone);
+                console.log('登録完了:', isEmailBased ? email : normalizedPhone);
             }
             catch (error) {
                 console.error('登録完了処理エラー:', error);
@@ -342,7 +440,7 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
                 token,
                 user: {
                     id: userId,
-                    phoneNumber: normalizedPhone,
+                    ...(isEmailBased ? { email } : { phoneNumber: normalizedPhone }),
                     firstName,
                     lastName
                 }
@@ -362,42 +460,80 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
         });
     }
 });
-// 一般職向け本登録API（電話番号ベース）
+// 一般職向け本登録API（メールアドレスベースまたは電話番号ベース）
 router.post('/general', rateLimit(3, 60000), async (req, res) => {
     try {
-        const { phoneNumber, firstName, lastName, password, documentsData } = req.body;
-        // バリデーション
-        if (!phoneNumber || !firstName || !lastName || !password) {
+        const { phoneNumber, email, firstName, lastName, password, documentsData } = req.body;
+        // バリデーション: メールアドレスまたは電話番号のいずれかが必要
+        if ((!phoneNumber && !email) || !firstName || !lastName || !password) {
             return res.status(400).json({
                 success: false,
-                message: '電話番号、姓、名、パスワードは必須です。'
+                message: 'メールアドレスまたは電話番号、姓、名、パスワードは必須です。'
             });
         }
-        // 電話番号の形式を検証
-        const phoneValidation = validatePhoneNumber(phoneNumber);
-        if (!phoneValidation.isValid) {
-            return res.status(400).json({ success: false, message: phoneValidation.error });
+        // メールアドレスベースの登録か電話番号ベースの登録かを判定
+        const isEmailBased = !!email;
+        let normalizedPhone = null;
+        if (isEmailBased) {
+            // メールアドレスの形式チェック
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({
+                    success: false,
+                    message: '有効なメールアドレスを入力してください。'
+                });
+            }
+            // メール確認済みかチェック
+            const verificationResult = await query(`SELECT verified FROM email_verifications WHERE email = $1 ORDER BY created_at DESC LIMIT 1`, [email]);
+            if (verificationResult.rows.length === 0 || !verificationResult.rows[0].verified) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'メールアドレスが確認されていません。先にメール確認を完了してください。'
+                });
+            }
         }
-        // 電話番号の実在確認（簡易版 - 形式のみ）
-        const phoneVerification = await verifyPhoneNumberExists(phoneValidation.normalized);
-        if (!phoneVerification.isValid) {
-            return res.status(400).json({ success: false, message: phoneVerification.error });
+        else {
+            // 電話番号の形式を検証
+            const phoneValidation = validatePhoneNumber(phoneNumber);
+            if (!phoneValidation.isValid) {
+                return res.status(400).json({ success: false, message: phoneValidation.error });
+            }
+            // 電話番号の実在確認（簡易版 - 形式のみ）
+            const phoneVerification = await verifyPhoneNumberExists(phoneValidation.normalized);
+            if (!phoneVerification.isValid) {
+                return res.status(400).json({ success: false, message: phoneVerification.error });
+            }
+            normalizedPhone = phoneValidation.normalized;
         }
-        const normalizedPhone = phoneValidation.normalized;
         if (password.length < 8 || !/(?=.*[a-zA-Z])(?=.*[0-9])/.test(password)) {
             return res.status(400).json({
                 success: false,
                 message: 'パスワードは8文字以上で、英数字を含む必要があります。'
             });
         }
-        const existingUser = await query(`SELECT 
-        u.id, 
-        js.id as jobseeker_id,
-        js.registration_type,
-        u.status
-       FROM job_seekers js
-       INNER JOIN users u ON js.user_id = u.id
-       WHERE js.phone = $1 AND js.registration_type = $2`, [normalizedPhone, 'general']);
+        // 既存ユーザーチェック（メールアドレスベースまたは電話番号ベース）
+        let existingUser;
+        if (isEmailBased) {
+            existingUser = await query(`SELECT 
+          u.id, 
+          js.id as jobseeker_id,
+          js.registration_type,
+          u.status,
+          u.email
+         FROM job_seekers js
+         INNER JOIN users u ON js.user_id = u.id
+         WHERE u.email = $1 AND js.registration_type = $2`, [email, 'general']);
+        }
+        else {
+            existingUser = await query(`SELECT 
+          u.id, 
+          js.id as jobseeker_id,
+          js.registration_type,
+          u.status
+         FROM job_seekers js
+         INNER JOIN users u ON js.user_id = u.id
+         WHERE js.phone = $1 AND js.registration_type = $2`, [normalizedPhone, 'general']);
+        }
         let reactivating = false;
         let existingGeneralRow = null;
         let latestStatus = null;
@@ -412,7 +548,9 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
                 if (!isWithdrawn) {
                     return res.status(400).json({
                         success: false,
-                        message: 'この電話番号で一般職登録は既に完了しています。'
+                        message: isEmailBased
+                            ? 'このメールアドレスで一般職登録は既に完了しています。'
+                            : 'この電話番号で一般職登録は既に完了しています。'
                     });
                 }
                 reactivating = true;
@@ -434,19 +572,42 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
            WHERE id = $4`, [passwordHash, 'job_seeker', 'active', userId]);
             }
             else {
-                // 新規ユーザー作成（電話番号ベース - emailはoptional、phoneから生成したダミーemailを使用）
-                const dummyEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}@justjoin.local`;
-                try {
-                    const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [dummyEmail, passwordHash, 'job_seeker', 'active']);
-                    userId = userResult.rows[0].id;
+                // 新規ユーザー作成（メールアドレスベースまたは電話番号ベース）
+                if (isEmailBased) {
+                    // メールアドレスベースの新規ユーザー作成
+                    try {
+                        const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+               VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [email, passwordHash, 'job_seeker', 'active']);
+                        userId = userResult.rows[0].id;
+                    }
+                    catch (emailErr) {
+                        // emailがUNIQUE制約で失敗する可能性があるため、既存ユーザーを確認
+                        const existingUserByEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+                        if (existingUserByEmail.rows.length > 0) {
+                            userId = existingUserByEmail.rows[0].id;
+                            // パスワードを更新
+                            await query(`UPDATE users SET password_hash = $1, user_type = $2, status = $3, updated_at = NOW() WHERE id = $4`, [passwordHash, 'job_seeker', 'active', userId]);
+                        }
+                        else {
+                            throw emailErr;
+                        }
+                    }
                 }
-                catch {
-                    // emailがUNIQUE制約で失敗する可能性があるため、UUIDを追加
-                    const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
-                    const userResult = await query(`INSERT INTO users (email, password_hash, created_at, updated_at) 
-             VALUES ($1, $2, NOW(), NOW()) RETURNING id`, [uniqueEmail, passwordHash]);
-                    userId = userResult.rows[0].id;
+                else {
+                    // 電話番号ベース - emailはoptional、phoneから生成したダミーemailを使用
+                    const dummyEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}@justjoin.local`;
+                    try {
+                        const userResult = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at) 
+               VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`, [dummyEmail, passwordHash, 'job_seeker', 'active']);
+                        userId = userResult.rows[0].id;
+                    }
+                    catch {
+                        // emailがUNIQUE制約で失敗する可能性があるため、UUIDを追加
+                        const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
+                        const userResult = await query(`INSERT INTO users (email, password_hash, created_at, updated_at) 
+               VALUES ($1, $2, NOW(), NOW()) RETURNING id`, [uniqueEmail, passwordHash]);
+                        userId = userResult.rows[0].id;
+                    }
                 }
             }
             // 念のため存在確認
@@ -465,19 +626,28 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
                 await query(`UPDATE job_seekers
            SET first_name = $2,
                last_name = $3,
-               phone = $4,
-               date_of_birth = $5,
-               gender = $6,
-               nationality = $7,
-               address = $8,
-               profile_photo = $9,
+               ${isEmailBased ? '' : 'phone = $4,'}
+               date_of_birth = ${isEmailBased ? '$4' : '$5'},
+               gender = ${isEmailBased ? '$5' : '$6'},
+               nationality = ${isEmailBased ? '$6' : '$7'},
+               address = ${isEmailBased ? '$7' : '$8'},
+               profile_photo = ${isEmailBased ? '$8' : '$9'},
                registration_type = 'general',
                updated_at = NOW()
-           WHERE id = $1`, [
+           WHERE id = $1`, isEmailBased ? [
                     existingGeneralRow.jobseeker_id,
                     firstName,
                     lastName,
-                    normalizedPhone, // 正規化された電話番号を使用
+                    documentsData?.birthDate || null,
+                    documentsData?.gender || null,
+                    documentsData?.nationality || null,
+                    documentsData?.liveAddress || null,
+                    documentsData?.resume?.photoUrl || null,
+                ] : [
+                    existingGeneralRow.jobseeker_id,
+                    firstName,
+                    lastName,
+                    normalizedPhone,
                     documentsData?.birthDate || null,
                     documentsData?.gender || null,
                     documentsData?.nationality || null,
@@ -488,14 +658,24 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
             else {
                 try {
                     await query(`INSERT INTO job_seekers (
-              user_id, first_name, last_name, phone, 
+              user_id, first_name, last_name${isEmailBased ? '' : ', phone'}, 
               date_of_birth, gender, nationality, address,
               profile_photo, registration_type, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`, [
+            ) VALUES ($1, $2, $3${isEmailBased ? '' : ', $4'}, ${isEmailBased ? '$4' : '$5'}, ${isEmailBased ? '$5' : '$6'}, ${isEmailBased ? '$6' : '$7'}, ${isEmailBased ? '$7' : '$8'}, ${isEmailBased ? '$8' : '$9'}, $9, NOW(), NOW())`, isEmailBased ? [
                         userId,
                         firstName,
                         lastName,
-                        normalizedPhone, // 正規化された電話番号を使用
+                        documentsData?.birthDate || null,
+                        documentsData?.gender || null,
+                        documentsData?.nationality || null,
+                        documentsData?.liveAddress || null,
+                        documentsData?.resume?.photoUrl || null,
+                        'general'
+                    ] : [
+                        userId,
+                        firstName,
+                        lastName,
+                        normalizedPhone,
                         documentsData?.birthDate || null,
                         documentsData?.gender || null,
                         documentsData?.nationality || null,
@@ -506,24 +686,42 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
                 }
                 catch (fkErr) {
                     try {
-                        // 電話番号からダミーemailを生成して検索
-                        const dummyEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}@justjoin.local`;
-                        const u = await query('SELECT id FROM users WHERE email LIKE $1 ORDER BY created_at DESC LIMIT 1', [`phone_${normalizedPhone.replace(/[^0-9]/g, '')}%`]);
-                        if (u.rows.length > 0) {
-                            userId = u.rows[0].id;
+                        if (isEmailBased) {
+                            // メールアドレスベースの場合は既存ユーザーを確認
+                            const u = await query('SELECT id FROM users WHERE email = $1', [email]);
+                            if (u.rows.length > 0) {
+                                userId = u.rows[0].id;
+                            }
+                            else {
+                                const make = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
+                   VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`, [email, passwordHash]);
+                                userId = make.rows[0].id;
+                            }
+                            await query(`INSERT INTO job_seekers (user_id, first_name, last_name, registration_type, created_at, updated_at)
+                 VALUES ($1, $2, $3, 'general', NOW(), NOW())`, [userId, firstName, lastName]);
                         }
                         else {
-                            const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
-                            const make = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
-                 VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`, [uniqueEmail, passwordHash]);
-                            userId = make.rows[0].id;
+                            // 電話番号からダミーemailを生成して検索
+                            const dummyEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}@justjoin.local`;
+                            const u = await query('SELECT id FROM users WHERE email LIKE $1 ORDER BY created_at DESC LIMIT 1', [`phone_${normalizedPhone.replace(/[^0-9]/g, '')}%`]);
+                            if (u.rows.length > 0) {
+                                userId = u.rows[0].id;
+                            }
+                            else {
+                                const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
+                                const make = await query(`INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
+                   VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`, [uniqueEmail, passwordHash]);
+                                userId = make.rows[0].id;
+                            }
+                            await query(`INSERT INTO job_seekers (user_id, first_name, last_name, phone, registration_type, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, 'general', NOW(), NOW())`, [userId, firstName, lastName, normalizedPhone]);
                         }
-                        await query(`INSERT INTO job_seekers (user_id, first_name, last_name, phone, registration_type, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, 'general', NOW(), NOW())`, [userId, firstName, lastName, normalizedPhone]);
                     }
                     catch {
-                        await query(`INSERT INTO job_seekers (user_id, first_name, last_name, phone, registration_type, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`, [userId, firstName, lastName, normalizedPhone, 'general']);
+                        await query(`INSERT INTO job_seekers (user_id, first_name, last_name${isEmailBased ? '' : ', phone'}, registration_type, created_at, updated_at)
+               VALUES ($1, $2, $3${isEmailBased ? '' : ', $4'}, $4, NOW(), NOW())`, isEmailBased
+                            ? [userId, firstName, lastName, 'general']
+                            : [userId, firstName, lastName, normalizedPhone, 'general']);
                     }
                 }
             }
@@ -570,16 +768,21 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
             await query('COMMIT');
             // JWTトークン生成
             const jwt = await import('jsonwebtoken');
-            const token = jwt.default.sign({
+            const tokenPayload = {
                 userId: userId,
-                phoneNumber: normalizedPhone,
                 role: 'job_seeker'
-            }, process.env.JWT_SECRET || 'justjoin-jwt-secret-2024', { expiresIn: '7d' });
-            // 登録完了処理（電話番号ベース）
+            };
+            if (isEmailBased) {
+                tokenPayload.email = email;
+            }
+            else {
+                tokenPayload.phoneNumber = normalizedPhone;
+            }
+            const token = jwt.default.sign(tokenPayload, process.env.JWT_SECRET || 'justjoin-jwt-secret-2024', { expiresIn: '7d' });
+            // 登録完了処理
             try {
                 const fullName = `${lastName} ${firstName}`;
-                // 登録完了ログ
-                console.log('登録完了（電話番号ベース）:', normalizedPhone);
+                console.log('登録完了:', isEmailBased ? email : normalizedPhone);
             }
             catch (emailError) {
                 console.error('メール送信エラー:', emailError);
@@ -590,7 +793,7 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
                 token,
                 user: {
                     id: userId,
-                    phoneNumber: normalizedPhone,
+                    ...(isEmailBased ? { email } : { phoneNumber: normalizedPhone }),
                     firstName,
                     lastName
                 }

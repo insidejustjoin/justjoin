@@ -471,7 +471,8 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
         FROM user_documents 
         WHERE user_id = $1 
           AND document_type = $2 
-          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
+          AND registration_type IS NOT NULL
+          AND LOWER(registration_type) = LOWER($3)
         ORDER BY created_at DESC 
         LIMIT 1
       `;
@@ -565,13 +566,14 @@ router.get('/:userId', async (req: express.Request, res: express.Response): Prom
     // すべてのドキュメントタイプを取得して統合
     const params: any[] = [userId];
     let sql = `
-      SELECT document_type, document_data, created_at, updated_at
+      SELECT document_type, document_data, created_at, updated_at, registration_type
       FROM user_documents
       WHERE user_id = $1
     `;
     if (registrationTypeFilter) {
       params.push(registrationTypeFilter);
-      sql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${params.length})`;
+      // registration_typeがNULLの場合は除外（明示的に設定されたもののみ取得）
+      sql += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${params.length})`;
     }
     sql += ' ORDER BY created_at ASC';
 
@@ -912,7 +914,8 @@ router.post('/jobseekers/documents', async (req: express.Request, res: express.R
         FROM user_documents 
         WHERE user_id = $1 
           AND document_type = $2
-          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
+          AND registration_type IS NOT NULL
+          AND LOWER(registration_type) = LOWER($3)
       `,
       [userIdStr, 'jobseeker_documents', normalizedRegistrationType]
     );
@@ -945,7 +948,8 @@ router.post('/jobseekers/documents', async (req: express.Request, res: express.R
         UPDATE job_seekers 
         SET completion_rate = $1, updated_at = NOW() 
         WHERE user_id = $2 
-          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
+          AND registration_type IS NOT NULL
+          AND LOWER(registration_type) = LOWER($3)
       `,
       [completionRate, userIdStr, normalizedRegistrationType]
     );
@@ -1006,7 +1010,7 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
         WHERE user_id = $1
       `;
       if (registrationTypeFilter) {
-        docSql += ` AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($${docParams.length + 1})`;
+        docSql += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${docParams.length + 1})`;
         docParams.push(registrationTypeFilter);
       }
       docSql += ' ORDER BY updated_at DESC LIMIT 1';
@@ -1770,7 +1774,8 @@ router.post('/', async (req: express.Request, res: express.Response) => {
         FROM user_documents 
         WHERE user_id = $1 
           AND document_type = $2 
-          AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
+          AND registration_type IS NOT NULL
+          AND LOWER(registration_type) = LOWER($3)
         ORDER BY created_at DESC 
         LIMIT 1
       `,
