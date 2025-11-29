@@ -25,6 +25,87 @@ const ensureEmailVerificationsTable = async () => {
       )
     `);
     
+    // カラムが存在しない場合は追加（マイグレーション対応）
+    try {
+      // verification_codeカラムの存在確認と追加
+      const codeColumnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'email_verifications' 
+        AND column_name = 'verification_code'
+      `);
+      
+      if (codeColumnCheck.rows.length === 0) {
+        console.log('verification_codeカラムが存在しないため追加します');
+        await query(`
+          ALTER TABLE email_verifications 
+          ADD COLUMN verification_code TEXT NOT NULL DEFAULT ''
+        `);
+        // デフォルト値を削除（NOT NULL制約を維持）
+        await query(`
+          ALTER TABLE email_verifications 
+          ALTER COLUMN verification_code DROP DEFAULT
+        `);
+      }
+      
+      // verifiedカラムの存在確認と追加
+      const verifiedColumnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'email_verifications' 
+        AND column_name = 'verified'
+      `);
+      
+      if (verifiedColumnCheck.rows.length === 0) {
+        console.log('verifiedカラムが存在しないため追加します');
+        await query(`
+          ALTER TABLE email_verifications 
+          ADD COLUMN verified BOOLEAN DEFAULT false
+        `);
+      }
+      
+      // first_name, last_nameカラムの存在確認と追加
+      const firstNameCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'email_verifications' 
+        AND column_name = 'first_name'
+      `);
+      
+      if (firstNameCheck.rows.length === 0) {
+        console.log('first_nameカラムが存在しないため追加します');
+        await query(`
+          ALTER TABLE email_verifications 
+          ADD COLUMN first_name TEXT NOT NULL DEFAULT ''
+        `);
+        await query(`
+          ALTER TABLE email_verifications 
+          ALTER COLUMN first_name DROP DEFAULT
+        `);
+      }
+      
+      const lastNameCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'email_verifications' 
+        AND column_name = 'last_name'
+      `);
+      
+      if (lastNameCheck.rows.length === 0) {
+        console.log('last_nameカラムが存在しないため追加します');
+        await query(`
+          ALTER TABLE email_verifications 
+          ADD COLUMN last_name TEXT NOT NULL DEFAULT ''
+        `);
+        await query(`
+          ALTER TABLE email_verifications 
+          ALTER COLUMN last_name DROP DEFAULT
+        `);
+      }
+    } catch (migrationError: any) {
+      console.warn('カラム追加エラー（無視して続行）:', migrationError.message);
+    }
+    
     // インデックスも作成
     try {
       await query(`
