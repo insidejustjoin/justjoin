@@ -2465,7 +2465,8 @@ app.get('/api/jobseekers/by-email/:email', async (req, res) => {
             return res.status(400).json({ success: false, message: 'メールは必須です' });
         const userRes = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [email]);
         if (userRes.rows.length === 0) {
-            return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
+            // ユーザーが存在しない場合は空のデータを返す（404ではなく200）
+            return res.json({ success: true, data: null, message: 'ユーザーが見つかりません' });
         }
         const userId = userRes.rows[0].id;
         // 既存の /api/jobseekers/:id と同じ統合ロジック（簡約版）
