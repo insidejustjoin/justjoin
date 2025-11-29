@@ -103,6 +103,77 @@ ${this.fromEmail}
         };
         return await this.sendEmail(to, template);
     }
+    // メール本人確認メール送信
+    async sendEmailVerification(to, firstName, lastName, verificationUrl) {
+        const fullName = `${lastName} ${firstName}`;
+        const template = {
+            subject: `${this.subjectPrefix}メールアドレス確認 - justjoin / Email Verification`,
+            body: `
+メールアドレス確認 / Email Verification
+
+${fullName} 様 / Dear ${fullName},
+
+justjoinへのご登録ありがとうございます。
+Thank you for registering with justjoin.
+
+以下のリンクをクリックして、メールアドレスを確認してください。
+Please click the link below to verify your email address.
+
+このリンクは24時間有効です。
+This link is valid for 24 hours.
+
+メールアドレスを確認する / Verify Email:
+${verificationUrl}
+
+リンクがクリックできない場合は、以下のURLをコピーしてブラウザに貼り付けてください：
+If the link doesn't work, please copy and paste the following URL into your browser:
+${verificationUrl}
+
+確認後、書類作成に進むことができます。
+After verification, you can proceed to document creation.
+
+--
+${this.fromName}
+${this.fromEmail}
+      `,
+            html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>メールアドレス確認 / Email Verification</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h2 style="color: #2563eb;">メールアドレス確認 / Email Verification</h2>
+    <p>${fullName} 様 / Dear ${fullName},</p>
+    <p>justjoinへのご登録ありがとうございます。<br>Thank you for registering with justjoin.</p>
+    
+    <p>以下のリンクをクリックして、メールアドレスを確認してください。<br>Please click the link below to verify your email address.</p>
+    
+    <p><strong>このリンクは24時間有効です。<br>This link is valid for 24 hours.</strong></p>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${verificationUrl}" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">メールアドレスを確認する / Verify Email</a>
+    </div>
+    
+    <p>リンクがクリックできない場合は、以下のURLをコピーしてブラウザに貼り付けてください：<br>If the link doesn't work, please copy and paste the following URL into your browser:</p>
+    <p style="background: #f8fafc; padding: 15px; border-radius: 5px; font-family: monospace; word-break: break-all;">${verificationUrl}</p>
+    
+    <p>確認後、書類作成に進むことができます。<br>After verification, you can proceed to document creation.</p>
+    
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+    <p style="font-size: 14px; color: #6b7280;">
+      ${this.fromName}<br>
+      ${this.fromEmail}
+    </p>
+  </div>
+</body>
+</html>
+      `
+        };
+        return await this.sendEmail(to, template);
+    }
     // 求職者登録時のパスワード送信メール（日本語・英語両方）
     async sendJobSeekerPassword(to, fullName, password) {
         const template = {

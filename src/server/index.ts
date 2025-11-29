@@ -8,8 +8,8 @@ import documentsRoutes from './api/documents.js';
 import notificationsRoutes from './api/notifications.js';
 import interviewAnalyticsRoutes from './api/interviewAnalytics.js';
 import interviewRoutes from './api/interview.js';
-import temporaryRegistrationRoutes from './api/temporaryRegistration.js';
 import directRegistrationRoutes from './api/directRegistration.js';
+import emailVerificationRoutes from './api/emailVerification.js';
 import jobSeekerStatusRoutes from './api/jobSeekerStatus.js';
 
 import uploadImageRoutes from './api/uploadImage.js';
@@ -40,10 +40,10 @@ app.use('/api/documents', documentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin/interview', interviewAnalyticsRoutes);
 app.use('/api/interview', interviewRoutes);
-// 新しい直接登録システム
+// 直接登録システム
 app.use('/api/register', directRegistrationRoutes);
-// 旧仮登録システム（互換性のため残す）
-app.use('/api/register/temporary', temporaryRegistrationRoutes);
+// メール本人確認システム
+app.use('/api/email-verification', emailVerificationRoutes);
 
 // リマインドAPI: 書類入力率が100%未満の求職者にメール送信（登録から指定日数経過）
 app.post('/api/reminders/incomplete-documents', async (req, res) => {
@@ -704,19 +704,27 @@ app.get('/api/jobseekers/registration-types/:userId', async (req, res) => {
     } catch (e) {
       console.warn('[registration-types] user_documents query failed:', (e as any)?.message || e);
     }
-    // temporary_registrations（仮登録でdocuments_completed/completedのもの）
+    // email_verifications（メール本人確認済みのもの）
     try {
-      const temps = await query(
-        `SELECT DISTINCT COALESCE(tr.registration_type, 'engineer') AS registration_type
-           FROM temporary_registrations tr
-           JOIN users u ON u.email = tr.email
-          WHERE u.id = $1
-            AND tr.status IN ('documents_completed','completed')`,
-        [userId]
-      );
-      temps.rows.forEach((r: any) => all.push(r.registration_type));
+      const userResult = await query('SELECT email FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length > 0) {
+        const email = userResult.rows[0].email;
+        const emailVerResult = await query(
+          `SELECT verified FROM email_verifications WHERE email = $1 AND verified = true`,
+          [email]
+        );
+        if (emailVerResult.rows.length > 0) {
+          // メール確認済みの場合は、job_seekersテーブルから登録タイプを取得
+          const jsResult = await query(
+            `SELECT DISTINCT COALESCE(registration_type, 'engineer') AS registration_type
+             FROM job_seekers WHERE user_id = $1`,
+            [userId]
+          );
+          jsResult.rows.forEach((r: any) => all.push(r.registration_type));
+        }
+      }
     } catch (e) {
-      console.warn('[registration-types] temporary_registrations query failed:', (e as any)?.message || e);
+      console.warn('[registration-types] email_verifications query failed:', (e as any)?.message || e);
     }
     const types = Array.from(
       new Set(
@@ -1540,13 +1548,14 @@ app.put('/api/jobseekers/:id', async (req, res) => {
   }
 });
 
-// --- 管理者用：求職者削除API（完全削除版） ---
+// --- 管理者用：求職者削除API（registration_type対応版） ---
 app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
   try {
-    const { id } = req.params; // users.id (数値)
+    const { id } = req.params; // users.id
+    const registrationType = req.query.registration_type as string | undefined; // 'engineer' | 'general' | undefined
     const { query } = await import('../integrations/postgres/client.js');
     
-    console.log(`削除リクエスト受信: ID=${id}, 型=${typeof id}`);
+    console.log(`削除リクエスト受信: ID=${id}, registration_type=${registrationType}`);
     
     // 1. usersテーブルからユーザー情報を取得
     const userResult = await query('SELECT id, email FROM users WHERE id = $1', [id]);
@@ -1557,17 +1566,34 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
     const userId = userResult.rows[0].id;
     const fullName = userResult.rows[0].email;
     
-    // 2. job_seekersテーブルから関連レコードを取得
-    const jobSeekerResult = await query('SELECT id FROM job_seekers WHERE user_id = $1', [id]);
-    const jobSeekerId = jobSeekerResult.rows.length > 0 ? jobSeekerResult.rows[0].id : null;
+    // 2. job_seekersテーブルから関連レコードを取得（registration_type考慮）
+    let jobSeekerQuery = 'SELECT id, registration_type FROM job_seekers WHERE user_id = $1';
+    const jobSeekerParams: any[] = [id];
     
-    console.log(`削除対象: UserID=${userId}, Name=${fullName}, JobSeekerID=${jobSeekerId}`);
+    if (registrationType) {
+      jobSeekerQuery += ' AND registration_type = $2';
+      jobSeekerParams.push(registrationType);
+    }
+    
+    const jobSeekerResult = await query(jobSeekerQuery, jobSeekerParams);
+    const jobSeekerRecords = jobSeekerResult.rows;
+    
+    if (registrationType && jobSeekerRecords.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `指定されたregistration_type (${registrationType}) の求職者データが見つかりません` 
+      });
+    }
+    
+    console.log(`削除対象: UserID=${userId}, Name=${fullName}, 削除対象レコード数=${jobSeekerRecords.length}`);
     
     // トランザクション開始
     await query('BEGIN');
     
     try {
-      const deletedRecords: { [key: string]: number } = {};
+      const deletedRecords: { [key: string]: number } = {
+        applications: 0
+      };
       
       // 3. job_seeker_status_historyテーブルから削除
       try {
@@ -1579,14 +1605,14 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
         deletedRecords.statusHistory = 0;
       }
       
-      // 4. temporary_registrationsテーブルから削除
+      // 4. email_verificationsテーブルから削除（メール本人確認データ）
       try {
-        const tempRegResult = await query('DELETE FROM temporary_registrations WHERE email = $1', [fullName]);
-        deletedRecords.temporaryRegistrations = tempRegResult.rowCount;
-        console.log(`temporary_registrations削除: ${tempRegResult.rowCount}件`);
+        const emailVerResult = await query('DELETE FROM email_verifications WHERE email = $1', [fullName]);
+        deletedRecords.emailVerifications = emailVerResult.rowCount;
+        console.log(`email_verifications削除: ${emailVerResult.rowCount}件`);
       } catch (error) {
-        console.log('temporary_registrationsテーブルは存在しないか、データがありません:', error.message);
-        deletedRecords.temporaryRegistrations = 0;
+        console.log('email_verificationsテーブルは存在しないか、データがありません:', error.message);
+        deletedRecords.emailVerifications = 0;
       }
       
       // 5. user_status_historyテーブルから削除
@@ -1651,46 +1677,77 @@ app.delete('/api/admin/jobseekers/:id', authenticate, async (req, res) => {
         deletedRecords.interviewApplicant = 0;
       }
 
-      // 6. user_documentsテーブルから削除
-      const documentsResult = await query('DELETE FROM user_documents WHERE user_id = $1', [userId]);
+      // 6. user_documentsテーブルから削除（registration_type考慮）
+      let documentsQuery = 'DELETE FROM user_documents WHERE user_id = $1';
+      const documentsParams: any[] = [userId];
+      
+      if (registrationType) {
+        documentsQuery += ' AND registration_type = $2';
+        documentsParams.push(registrationType);
+      }
+      
+      const documentsResult = await query(documentsQuery, documentsParams);
       deletedRecords.documents = documentsResult.rowCount;
       console.log(`user_documents削除: ${documentsResult.rowCount}件`);
       
       // 7. applicationsテーブルから削除（将来的に追加される場合）
-      if (jobSeekerId) {
+      // 削除対象のjob_seekersレコードのidで削除
+      for (const jobSeekerRecord of jobSeekerRecords) {
         try {
-          const applicationsResult = await query('DELETE FROM applications WHERE job_seeker_id = $1', [jobSeekerId]);
-          deletedRecords.applications = applicationsResult.rowCount;
-          console.log(`applications削除: ${applicationsResult.rowCount}件`);
+          const applicationsResult = await query('DELETE FROM applications WHERE job_seeker_id = $1', [jobSeekerRecord.id]);
+          deletedRecords.applications = (deletedRecords.applications || 0) + (applicationsResult.rowCount || 0);
+          console.log(`applications削除 (job_seeker_id=${jobSeekerRecord.id}): ${applicationsResult.rowCount}件`);
         } catch (error) {
           console.log('applicationsテーブルは存在しないか、データがありません:', error.message);
-          deletedRecords.applications = 0;
         }
       }
       
-      // 8. job_seekersテーブルから削除（存在する場合のみ）
-      if (jobSeekerId) {
-        const jobSeekersResult = await query('DELETE FROM job_seekers WHERE user_id = $1', [userId]);
-        deletedRecords.jobSeeker = jobSeekersResult.rowCount;
-        console.log(`job_seekers削除: ${jobSeekersResult.rowCount}件`);
-      } else {
-        deletedRecords.jobSeeker = 0;
-        console.log('job_seekersレコードは存在しません');
+      // 8. job_seekersテーブルから削除（registration_type考慮）
+      let jobSeekersQuery = 'DELETE FROM job_seekers WHERE user_id = $1';
+      const jobSeekersParams: any[] = [userId];
+      
+      if (registrationType) {
+        jobSeekersQuery += ' AND registration_type = $2';
+        jobSeekersParams.push(registrationType);
       }
       
-      // 9. usersテーブルから削除（最後に実行）
-      const usersResult = await query('DELETE FROM users WHERE id = $1', [userId]);
-      deletedRecords.user = usersResult.rowCount;
-      console.log(`users削除: ${usersResult.rowCount}件`);
+      const jobSeekersResult = await query(jobSeekersQuery, jobSeekersParams);
+      deletedRecords.jobSeeker = jobSeekersResult.rowCount;
+      console.log(`job_seekers削除: ${jobSeekersResult.rowCount}件`);
+      
+      // 9. usersテーブルから削除（すべてのregistration_typeが削除された場合のみ）
+      // 削除後に残るjob_seekersレコード数を確認
+      const remainingCountResult = await query(
+        'SELECT COUNT(*) as count FROM job_seekers WHERE user_id = $1',
+        [userId]
+      );
+      const remainingCount = parseInt(remainingCountResult.rows[0]?.count || '0');
+      
+      let usersDeleted = 0;
+      if (remainingCount === 0) {
+        // すべてのregistration_typeが削除された場合のみusersテーブルからも削除
+        const usersResult = await query('DELETE FROM users WHERE id = $1', [userId]);
+        usersDeleted = usersResult.rowCount;
+        deletedRecords.user = usersDeleted;
+        console.log(`users削除: ${usersDeleted}件（すべてのregistration_typeが削除されたため）`);
+      } else {
+        deletedRecords.user = 0;
+        console.log(`usersテーブルは削除しません（残りのregistration_type数: ${remainingCount}）`);
+      }
       
       // トランザクションコミット
       await query('COMMIT');
       
-      console.log(`ユーザー完全削除完了: ${fullName} (UserID: ${userId})`);
+      const actionMessage = registrationType 
+        ? `求職者「${fullName}」の${registrationType === 'engineer' ? 'エンジニア' : '一般職'}登録を削除しました`
+        : `ユーザー「${fullName}」を完全に削除しました`;
+      
+      console.log(`削除完了: ${actionMessage} (UserID: ${userId})`);
       res.json({ 
         success: true, 
-        message: `ユーザー「${fullName}」を完全に削除しました`,
-        deletedRecords: deletedRecords
+        message: actionMessage,
+        deletedRecords: deletedRecords,
+        registrationType: registrationType || 'all'
       });
     } catch (deleteError) {
       // トランザクションロールバック
@@ -1911,26 +1968,13 @@ app.get('/api/documents/:userId', async (req, res) => {
     }
     
     if (result.rows.length === 0) {
-      // フォールバック: temporary_registrations の documents_data
-      console.log('[DOCS][GET] user_documentsにデータなし、temporary_registrationsを確認');
-      const temp = await query(`
-        SELECT tr.documents_data
-        FROM temporary_registrations tr
-        JOIN users u ON u.email = tr.email
-        WHERE u.id = $1 AND tr.status IN ('pending','documents_completed','completed')
-        ORDER BY tr.updated_at DESC NULLS LAST, tr.created_at DESC NULLS LAST
-        LIMIT 1
-      `, [userId]);
-      if (temp.rows.length > 0 && temp.rows[0].documents_data) {
-        let doc = temp.rows[0].documents_data;
-        try {
-          doc = typeof doc === 'string' ? JSON.parse(doc) : doc;
-        } catch {}
-        console.log('[DOCS][GET] temporary_registrationsからデータ取得成功');
-        return res.json({ success: true, data: doc, createdAt: null, updatedAt: null });
-      }
-      console.log('[DOCS][GET] データが見つかりません（404）');
-      return res.status(404).json({ success: false, message: 'ドキュメントデータが見つかりません' });
+      // データなし
+      console.log('[DOCS][GET] user_documentsにデータなし');
+      // 空のドキュメントデータを返す
+      return res.json({
+        success: true,
+        data: {}
+      });
     }
     
     // 最新の書類データを取得（registrationTypeに一致するもの）
@@ -1994,23 +2038,13 @@ app.get('/api/documents/:userId', async (req, res) => {
       }
     }
 
-    // temporary_registrationsのフォールバック
+    // データがない場合は空オブジェクトを返す
     if (Object.keys(merged).length === 0) {
-      const temp = await query(`
-        SELECT tr.documents_data
-        FROM temporary_registrations tr
-        JOIN users u ON u.email = tr.email
-        WHERE u.id = $1 AND tr.status IN ('pending','documents_completed','completed')
-        ORDER BY tr.updated_at DESC NULLS LAST, tr.created_at DESC NULLS LAST
-        LIMIT 1
-      `, [userId]);
-      if (temp.rows.length > 0 && temp.rows[0].documents_data) {
-        let doc = temp.rows[0].documents_data;
-        try {
-          doc = typeof doc === 'string' ? JSON.parse(doc) : doc;
-        } catch {}
-        merged = doc;
-      }
+      console.log('[DOCS][GET] マージ後もデータなし、空オブジェクトを返す');
+      return res.json({
+        success: true,
+        data: {}
+      });
     }
 
     // データが存在しない場合でも成功レスポンスを返す（空オブジェクトでもOK）
@@ -2704,94 +2738,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 静的ファイルの配信
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 本番環境でのみ静的ファイルを配信
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../dist')));
-  
-  // SPAルーティング: すべてのGETリクエストをindex.htmlにリダイレクト
-  app.get('*', (req, res, next) => {
-    // APIルートは除外 -> 次のルートへ委譲（後続のAPI定義を有効にする）
-    if (req.path.startsWith('/api/')) {
-      return next();
-    }
-    
-    res.sendFile(path.join(__dirname, '../../dist/index.html'));
-  });
-} else {
-  // 開発環境ではAPIルートのみ処理
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/')) {
-      return next();
-    }
-    res.status(404).json({ error: 'Route not found' });
-  });
-}
-
-// エラーハンドリングミドルウェア
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error('サーバーエラー:', err);
-  res.status(500).json({ error: '内部サーバーエラーが発生しました' });
-});
-
-const PORT = parseInt(process.env.PORT || '8080');
-
-app.listen(PORT, '0.0.0.0', () => {
-  logger.info(`サーバーがポート${PORT}で起動しました`);
-  console.log(`🚀 サーバーがポート${PORT}で起動しました`);
-}); 
-
-// 管理者用：仮登録一覧取得API
-app.get('/api/admin/temporary-registrations', authenticate, async (req, res) => {
-  try {
-    const { query } = await import('../integrations/postgres/client.js');
-    const result = await query(`
-      SELECT id, email, first_name, last_name, verification_token, status, expires_at, created_at, updated_at
-      FROM temporary_registrations
-      ORDER BY created_at DESC
-    `);
-
-    res.json({ success: true, items: result.rows });
-  } catch (error: any) {
-    console.error('仮登録一覧取得エラー:', error?.message || error);
-    res.status(500).json({ success: false, message: '仮登録一覧の取得に失敗しました' });
-  }
-});
-
-// 管理者用：仮登録削除API
-app.delete('/api/admin/temporary-registrations/:id', authenticate, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const email = typeof req.query.email === 'string' ? req.query.email : undefined;
-    const { query } = await import('../integrations/postgres/client.js');
-
-    // id優先、email指定時はemailでも削除できる
-    let deleted = 0;
-    if (id && id !== 'by-email') {
-      const r = await query('DELETE FROM temporary_registrations WHERE id = $1', [id]);
-      deleted = r.rowCount || 0;
-    } else if (email) {
-      const r = await query('DELETE FROM temporary_registrations WHERE email = $1', [email]);
-      deleted = r.rowCount || 0;
-    } else {
-      return res.status(400).json({ success: false, message: '削除対象のidまたはemailが必要です' });
-    }
-
-    res.json({ success: true, deleted });
-  } catch (error: any) {
-    console.error('仮登録削除エラー:', error?.message || error);
-    res.status(500).json({ success: false, message: '仮登録の削除に失敗しました' });
-  }
-}); 
-
-// ... existing code ...
+// 求職者情報をメールアドレスで取得API
 app.get('/api/jobseekers/by-email/:email', async (req, res) => {
   try {
-    const { email } = req.params;
+    let { email } = req.params;
     const { query } = await import('../integrations/postgres/client.js');
+
+    // URLデコード（%40を@に変換など）
+    email = decodeURIComponent(email);
 
     if (!email) return res.status(400).json({ success: false, message: 'メールは必須です' });
 
@@ -2835,7 +2789,33 @@ app.get('/api/jobseekers/by-email/:email', async (req, res) => {
     res.status(500).json({ success: false, message: '取得中にエラーが発生しました' });
   }
 });
-// ... existing code ...
+
+// 静的ファイルの配信
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 本番環境でのみ静的ファイルを配信
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../../dist')));
+  
+  // SPAルーティング: すべてのGETリクエストをindex.htmlにリダイレクト
+  app.get('*', (req, res, next) => {
+    // APIルートは除外 -> 次のルートへ委譲（後続のAPI定義を有効にする）
+    if (req.path.startsWith('/api/')) {
+      return next();
+    }
+    
+    res.sendFile(path.join(__dirname, '../../dist/index.html'));
+  });
+} else {
+  // 開発環境ではAPIルートのみ処理
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      return next();
+    }
+    res.status(404).json({ error: 'Route not found' });
+  });
+}
 
 let jobSeekerColumnsEnsured = false;
 const ensureJobSeekerColumns = async (queryFn: (text: string, params?: any[]) => Promise<any>) => {
@@ -2867,3 +2847,16 @@ const ensureJobSeekerColumns = async (queryFn: (text: string, params?: any[]) =>
     jobSeekerColumnsEnsured = true;
   }
 };
+
+// エラーハンドリングミドルウェア
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  logger.error('サーバーエラー:', err);
+  res.status(500).json({ error: '内部サーバーエラーが発生しました' });
+});
+
+const PORT = parseInt(process.env.PORT || '8080');
+
+app.listen(PORT, '0.0.0.0', () => {
+  logger.info(`サーバーがポート${PORT}で起動しました`);
+  console.log(`🚀 サーバーがポート${PORT}で起動しました`);
+});
