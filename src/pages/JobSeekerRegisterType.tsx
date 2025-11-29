@@ -13,12 +13,15 @@ const JobSeekerRegisterType: React.FC = () => {
   // 前のページから渡されたデータを取得
   const {
     phoneNumber,
+    email,
     firstName,
     lastName,
-    availability
+    availability,
+    emailVerified
   } =
     (location.state as {
       phoneNumber?: string;
+      email?: string;
       firstName?: string;
       lastName?: string;
       availability?: {
@@ -27,14 +30,21 @@ const JobSeekerRegisterType: React.FC = () => {
         existingRegistrationTypes?: string[];
         userExists?: boolean;
       };
+      emailVerified?: boolean;
     }) || {};
 
   const canRegisterEngineer = availability?.canRegisterEngineer !== false;
   const canRegisterGeneral = availability?.canRegisterGeneral !== false;
   const existingRegistrationTypes = availability?.existingRegistrationTypes || [];
 
-  // データがない場合は最初のページに戻す
-  if (!phoneNumber || !firstName || !lastName) {
+  // データがない場合は最初のページに戻す（メールアドレスベースまたは電話番号ベースのどちらか）
+  if ((!email && !phoneNumber) || !firstName || !lastName) {
+    navigate('/jobseeker/register');
+    return null;
+  }
+
+  // メール認証が必要な場合は、認証済みかチェック
+  if (email && !emailVerified) {
     navigate('/jobseeker/register');
     return null;
   }
@@ -50,9 +60,10 @@ const JobSeekerRegisterType: React.FC = () => {
     }
 
     const nextState = {
-      phoneNumber,
+      ...(email ? { email } : { phoneNumber }),
       firstName,
       lastName,
+      ...(emailVerified !== undefined ? { emailVerified } : {}),
       availability: {
         canRegisterEngineer,
         canRegisterGeneral,

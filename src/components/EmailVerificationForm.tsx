@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Mail, User, CheckCircle, AlertCircle } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { EmailVerificationCodeForm } from './EmailVerificationCodeForm';
 
 const emailVerificationSchema = z.object({
   email: z.string().email('有効なメールアドレスを入力してください'),
@@ -26,6 +27,10 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
   const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [userFirstName, setUserFirstName] = useState('');
+  const [userLastName, setUserLastName] = useState('');
 
   const form = useForm<EmailVerificationFormData>({
     resolver: zodResolver(emailVerificationSchema)
@@ -52,7 +57,10 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
 
       if (result.success) {
         setMessage({ type: 'success', text: result.message });
-        form.reset();
+        setEmailSent(true);
+        setUserEmail(data.email.trim());
+        setUserFirstName(data.firstName.trim());
+        setUserLastName(data.lastName.trim());
         if (onSuccess) {
           onSuccess();
         }
@@ -69,6 +77,23 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
       setIsLoading(false);
     }
   };
+
+  const handleResendCode = () => {
+    setEmailSent(false);
+    setMessage(null);
+    form.reset();
+  };
+
+  if (emailSent) {
+    return (
+      <EmailVerificationCodeForm
+        email={userEmail}
+        firstName={userFirstName}
+        lastName={userLastName}
+        onResend={handleResendCode}
+      />
+    );
+  }
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -161,7 +186,7 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
           </Button>
 
           <p className="text-xs text-gray-500 text-center">
-            ※ 確認メールは24時間有効です
+            ※ 確認メールは5分間有効です
           </p>
         </form>
       </CardContent>
