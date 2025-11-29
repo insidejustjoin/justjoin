@@ -432,12 +432,12 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
         } catch (fkErr) {
           try {
             // 電話番号からダミーemailを生成して検索
-            const dummyEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}@justjoin.local`;
-            const u = await query('SELECT id FROM users WHERE email LIKE $1 ORDER BY created_at DESC LIMIT 1', [`phone_${normalizedPhone.replace(/[^0-9]/g, '')}%`]);
+            const dummyEmail = `phone_${normalizedPhone!.replace(/[^0-9]/g, '')}@justjoin.local`;
+            const u = await query('SELECT id FROM users WHERE email LIKE $1 ORDER BY created_at DESC LIMIT 1', [`phone_${normalizedPhone!.replace(/[^0-9]/g, '')}%`]);
             if (u.rows.length > 0) {
               userId = u.rows[0].id;
             } else {
-              const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
+              const uniqueEmail = `phone_${normalizedPhone!.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
               const make = await query(
                 `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
                  VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
@@ -765,7 +765,7 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
       try {
         const existsUser = await query('SELECT 1 FROM users WHERE id = $1', [userId]);
         if (existsUser.rowCount === 0) {
-          const uniqueEmail = `phone_${normalizedPhone.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
+          const uniqueEmail = `phone_${normalizedPhone!.replace(/[^0-9]/g, '')}_${Date.now()}@justjoin.local`;
           const reUser = await query(
             `INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
              VALUES ($1, $2, 'job_seeker', 'active', NOW(), NOW()) RETURNING id`,
