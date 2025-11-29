@@ -593,32 +593,48 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         }
         
         const utterance = new SpeechSynthesisUtterance(textToSpeak);
-        utterance.lang = 'ja-JP';
+        
+        // 言語に応じた音声設定
+        const languageConfig = {
+          ja: { lang: 'ja-JP', voicePatterns: ['ja', 'Japanese'] },
+          en: { lang: 'en-US', voicePatterns: ['en', 'English'] },
+          ru: { lang: 'ru-RU', voicePatterns: ['ru', 'Russian'] },
+          uz: { lang: 'uz-UZ', voicePatterns: ['uz', 'Uzbek'] }
+        };
+        
+        const config = languageConfig[language] || languageConfig.ja;
+        utterance.lang = config.lang;
         utterance.rate = 0.85; // より遅く（聞き取りやすく）
         utterance.pitch = 1.0; // 標準ピッチ
         utterance.volume = 1.0; // 最大音量
         
-        // より自然な音声を選択（優先順位: Google > Microsoft > その他の日本語音声）
+        // 言語に応じた自然な音声を選択
         const voices = speechSynthesis.getVoices();
-        let japaneseVoice = voices.find(voice => 
-          voice.lang.includes('ja') && voice.name.includes('Google')
-        );
-        if (!japaneseVoice) {
-          japaneseVoice = voices.find(voice => 
-            voice.lang.includes('ja') && voice.name.includes('Microsoft')
+        let selectedVoice = null;
+        
+        // 優先順位: Google > Microsoft > その他の該当言語音声
+        for (const pattern of config.voicePatterns) {
+          selectedVoice = voices.find(voice => 
+            voice.lang.includes(pattern) && voice.name.includes('Google')
           );
-        }
-        if (!japaneseVoice) {
-          japaneseVoice = voices.find(voice => 
-            voice.lang.includes('ja') && (voice.name.includes('女性') || voice.name.includes('Female'))
+          if (selectedVoice) break;
+          
+          selectedVoice = voices.find(voice => 
+            voice.lang.includes(pattern) && voice.name.includes('Microsoft')
           );
+          if (selectedVoice) break;
+          
+          selectedVoice = voices.find(voice => 
+            voice.lang.includes(pattern)
+          );
+          if (selectedVoice) break;
         }
-        if (!japaneseVoice) {
-          japaneseVoice = voices.find(voice => voice.lang.includes('ja'));
-        }
-        if (japaneseVoice) {
-          utterance.voice = japaneseVoice;
-          console.log('選択された音声:', japaneseVoice.name);
+        
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
+          console.log('選択された音声:', selectedVoice.name, selectedVoice.lang);
+        } else {
+          console.warn('適切な音声が見つかりませんでした。デフォルト音声を使用します。');
         }
         
         utterance.onend = () => {
@@ -1037,23 +1053,38 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   <div className="flex items-center space-x-2">
                     <GlobeIcon className="h-4 w-4 text-yellow-600" />
                     <button
-                      onClick={() => setDisplayLanguage(displayLanguage === 'ja' ? 'en' : 'ja')}
+                      onClick={() => {
+                        const languages: Language[] = ['ja', 'en', 'ru', 'uz'];
+                        const currentIndex = languages.indexOf(displayLanguage);
+                        const nextIndex = (currentIndex + 1) % languages.length;
+                        setDisplayLanguage(languages[nextIndex]);
+                      }}
                       className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                         displayLanguage === 'ja' 
                           ? 'bg-yellow-600 text-white' 
                           : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
                       }`}
                     >
-                      {displayLanguage === 'ja' ? '日本語' : 'English'}
+                      {displayLanguage === 'ja' ? '日本語' : 
+                       displayLanguage === 'en' ? 'English' :
+                       displayLanguage === 'ru' ? 'Русский' : 'O\'zbek'}
                     </button>
                   </div>
                 </div>
                 <p className="text-yellow-700 text-lg leading-relaxed mb-3">
-                  {displayLanguage === 'ja' ? currentQuestion.text.ja : (currentQuestion.text.en || currentQuestion.text.ja)}
+                  {typeof currentQuestion.text === 'string' 
+                    ? currentQuestion.text
+                    : currentQuestion.text[displayLanguage] || currentQuestion.text.ja || currentQuestion.text.en || ''}
                 </p>
                 <div className="mt-4 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
                   <p className="text-sm text-yellow-800 font-medium">
-                    {displayLanguage === 'ja' ? '※回答は日本語でお願いします' : '※Please answer in Japanese'}
+                    {displayLanguage === 'ja' 
+                      ? '※回答は日本語でお願いします' 
+                      : displayLanguage === 'en'
+                      ? '※Please answer in Japanese'
+                      : displayLanguage === 'ru'
+                      ? '※Пожалуйста, отвечайте на японском языке'
+                      : '※Iltimos, yapon tilida javob bering'}
                   </p>
                 </div>
               </div>
@@ -1166,7 +1197,11 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         <div className="mt-4 text-center text-xs text-gray-500">
           {displayLanguage === 'ja' 
             ? 'この面接ではカメラ映像は保存されず、音声のみが録音されます。回答は日本語でお願いします。'
-            : 'Only audio is recorded in this interview, not video. Please answer in Japanese.'}
+            : displayLanguage === 'en'
+            ? 'Only audio is recorded in this interview, not video. Please answer in Japanese.'
+            : displayLanguage === 'ru'
+            ? 'В этом собеседовании записывается только аудио, не видео. Пожалуйста, отвечайте на японском языке.'
+            : 'Ushbu intervyuda faqat audio yoziladi, video emas. Iltimos, yapon tilida javob bering.'}
         </div>
       </div>
     </div>
