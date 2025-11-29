@@ -256,4 +256,21 @@ CREATE TRIGGER update_blog_tags_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 
 -- 年齢カラム追加（2025-07-15）
-ALTER TABLE job_seekers ADD COLUMN IF NOT EXISTS age INTEGER; 
+ALTER TABLE job_seekers ADD COLUMN IF NOT EXISTS age INTEGER;
+
+-- メール本人確認テーブル
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  verification_code TEXT NOT NULL,
+  verified BOOLEAN DEFAULT false,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- インデックス作成
+CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(email);
+CREATE INDEX IF NOT EXISTS idx_email_verifications_code ON email_verifications(verification_code); 
