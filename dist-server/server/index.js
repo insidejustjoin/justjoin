@@ -2444,13 +2444,23 @@ app.get('/api/health', (req, res) => {
         routes: ['/api/spreadsheet', '/api/generate-documents', '/api/test']
     });
 });
-// 求職者情報をメールアドレスで取得API
+// 求職者情報をメールアドレスで取得API（静的ファイル配信の前に定義）
 app.get('/api/jobseekers/by-email/:email', async (req, res) => {
     try {
         let { email } = req.params;
         const { query } = await import('../integrations/postgres/client.js');
-        // URLデコード（%40を@に変換など）
-        email = decodeURIComponent(email);
+        // URLデコード（%40を@に変換など）- ダブルデコードも考慮
+        try {
+            email = decodeURIComponent(email);
+            // ダブルエンコードされた場合の処理
+            if (email.includes('%')) {
+                email = decodeURIComponent(email);
+            }
+        }
+        catch (decodeError) {
+            // デコードエラーが発生した場合はそのまま使用
+            console.warn('Email decode warning:', decodeError);
+        }
         if (!email)
             return res.status(400).json({ success: false, message: 'メールは必須です' });
         const userRes = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [email]);

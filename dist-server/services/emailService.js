@@ -103,31 +103,27 @@ ${this.fromEmail}
         };
         return await this.sendEmail(to, template);
     }
-    // メール本人確認メール送信
-    async sendEmailVerification(to, firstName, lastName, verificationUrl) {
+    // メール本人確認コード送信メール
+    async sendEmailVerificationCode(to, firstName, lastName, verificationCode) {
         const fullName = `${lastName} ${firstName}`;
         const template = {
-            subject: `${this.subjectPrefix}メールアドレス確認 - justjoin / Email Verification`,
+            subject: `${this.subjectPrefix}メールアドレス確認コード - justjoin / Email Verification Code`,
             body: `
-メールアドレス確認 / Email Verification
+メールアドレス確認コード / Email Verification Code
 
 ${fullName} 様 / Dear ${fullName},
 
 justjoinへのご登録ありがとうございます。
 Thank you for registering with justjoin.
 
-以下のリンクをクリックして、メールアドレスを確認してください。
-Please click the link below to verify your email address.
+以下の6桁の確認コードを入力してください。
+Please enter the following 6-digit verification code.
 
-このリンクは24時間有効です。
-This link is valid for 24 hours.
+確認コード / Verification Code:
+${verificationCode}
 
-メールアドレスを確認する / Verify Email:
-${verificationUrl}
-
-リンクがクリックできない場合は、以下のURLをコピーしてブラウザに貼り付けてください：
-If the link doesn't work, please copy and paste the following URL into your browser:
-${verificationUrl}
+このコードは5分間有効です。
+This code is valid for 5 minutes.
 
 確認後、書類作成に進むことができます。
 After verification, you can proceed to document creation.
@@ -141,24 +137,22 @@ ${this.fromEmail}
 <html>
 <head>
   <meta charset="utf-8">
-  <title>メールアドレス確認 / Email Verification</title>
+  <title>メールアドレス確認コード / Email Verification Code</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-    <h2 style="color: #2563eb;">メールアドレス確認 / Email Verification</h2>
+    <h2 style="color: #2563eb;">メールアドレス確認コード / Email Verification Code</h2>
     <p>${fullName} 様 / Dear ${fullName},</p>
     <p>justjoinへのご登録ありがとうございます。<br>Thank you for registering with justjoin.</p>
     
-    <p>以下のリンクをクリックして、メールアドレスを確認してください。<br>Please click the link below to verify your email address.</p>
+    <p>以下の6桁の確認コードを入力してください。<br>Please enter the following 6-digit verification code.</p>
     
-    <p><strong>このリンクは24時間有効です。<br>This link is valid for 24 hours.</strong></p>
-    
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${verificationUrl}" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">メールアドレスを確認する / Verify Email</a>
+    <div style="text-align: center; margin: 30px 0; padding: 20px; background: #f8fafc; border-radius: 8px; border: 2px solid #2563eb;">
+      <p style="font-size: 14px; color: #6b7280; margin: 0 0 10px 0;">確認コード / Verification Code</p>
+      <p style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #2563eb; margin: 0;">${verificationCode}</p>
     </div>
     
-    <p>リンクがクリックできない場合は、以下のURLをコピーしてブラウザに貼り付けてください：<br>If the link doesn't work, please copy and paste the following URL into your browser:</p>
-    <p style="background: #f8fafc; padding: 15px; border-radius: 5px; font-family: monospace; word-break: break-all;">${verificationUrl}</p>
+    <p style="color: #dc2626; font-size: 14px;"><strong>このコードは5分間有効です。<br>This code is valid for 5 minutes.</strong></p>
     
     <p>確認後、書類作成に進むことができます。<br>After verification, you can proceed to document creation.</p>
     

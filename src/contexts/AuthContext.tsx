@@ -159,15 +159,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
               const r = await fetch(`${apiUrl}/api/jobseekers/by-email/${encodeURIComponent(initialUser.email)}`);
               if (r.ok) {
                 const j = await r.json();
-                const resolvedId = j?.data?.userId ? String(j.data.userId) : null;
-                if (resolvedId && resolvedId !== userId) {
-                  const updatedUser = { ...initialUser, id: resolvedId } as any;
-                  setUser(updatedUser);
-                  localStorage.setItem('auth_user', JSON.stringify({ ...updatedUser, id: resolvedId }));
-                  console.log('AuthContext: userIdを自己修復:', userId, '→', resolvedId);
+                // ユーザーが見つからない場合はdataがnullの可能性がある
+                if (j?.success && j?.data?.userId) {
+                  const resolvedId = String(j.data.userId);
+                  if (resolvedId && resolvedId !== userId) {
+                    const updatedUser = { ...initialUser, id: resolvedId } as any;
+                    setUser(updatedUser);
+                    localStorage.setItem('auth_user', JSON.stringify({ ...updatedUser, id: resolvedId }));
+                    console.log('AuthContext: userIdを自己修復:', userId, '→', resolvedId);
+                  }
                 }
               }
-            } catch {}
+            } catch (fetchError) {
+              // 404エラーなどは無視（ユーザーが存在しない場合）
+              console.log('AuthContext: ユーザー情報の取得をスキップ（ユーザーが存在しない可能性）');
+            }
           } catch (parseError) {
             console.error('AuthContext: ユーザー情報のパースエラー:', parseError);
             localStorage.removeItem('auth_token');

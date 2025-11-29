@@ -1,11 +1,46 @@
 import express from 'express';
 import { query } from '../../integrations/postgres/client.js';
 import { emailService } from '../../services/emailService.js';
-import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
-// メール本人確認トークン発行API
+// テーブル作成のヘルパー関数
+let emailVerificationsTableCreated = false;
+const ensureEmailVerificationsTable = async () => {
+  if (emailVerificationsTableCreated) return;
+  
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS email_verifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL UNIQUE,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        verification_code TEXT NOT NULL,
+        verified BOOLEAN DEFAULT false,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    // インデックスも作成
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(email);
+    `);
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_email_verifications_code ON email_verifications(verification_code);
+    `);
+    emailVerificationsTableCreated = true;
+  } catch (tableError: any) {
+    // テーブルが既に存在する場合は無視
+    if (!tableError.message?.includes('already exists')) {
+      console.warn('email_verifications テーブル作成エラー:', tableError.message);
+    }
+    emailVerificationsTableCreated = true; // エラーでも次の試行を防ぐ
+  }
+};
+
+// メール本人確認コード送信API（トークンは発行せず、確認コードのみ）
 router.post('/verify-email', async (req, res) => {
   try {
     const { email, firstName, lastName } = req.body;
@@ -26,11 +61,14 @@ router.post('/verify-email', async (req, res) => {
       });
     }
 
+    // テーブルが存在することを確認
+    await ensureEmailVerificationsTable();
+
     // 6桁の確認コードを生成
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5分有効
 
-    // email_verifications テーブルに保存（テーブルが存在しない場合は作成が必要）
+    // email_verifications テーブルに保存（既存の場合は更新）
     try {
       await query(
         `INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
@@ -45,30 +83,8 @@ router.post('/verify-email', async (req, res) => {
         [email, firstName, lastName, verificationCode, expiresAt]
       );
     } catch (dbError: any) {
-      // テーブルが存在しない場合は作成
-      if (dbError.message?.includes('does not exist')) {
-        console.log('email_verifications テーブルを作成します...');
-        await query(`
-          CREATE TABLE IF NOT EXISTS email_verifications (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            email TEXT NOT NULL UNIQUE,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            verification_code TEXT NOT NULL,
-            verified BOOLEAN DEFAULT false,
-            expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          )
-        `);
-        await query(
-          `INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [email, firstName, lastName, verificationCode, expiresAt]
-        );
-      } else {
-        throw dbError;
-      }
+      console.error('email_verifications テーブルへの保存エラー:', dbError.message || dbError);
+      throw dbError;
     }
 
     // 確認メール送信（コードを含む）
@@ -86,10 +102,11 @@ router.post('/verify-email', async (req, res) => {
       message: '確認メールを送信しました。メール内の6桁のコードを入力してください。'
     });
   } catch (error: any) {
-    console.error('メール本人確認トークン発行エラー:', error);
+    console.error('メール本人確認コード送信エラー:', error?.message || error);
     res.status(500).json({
       success: false,
-      message: 'メール本人確認トークンの発行に失敗しました'
+      message: 'メール本人確認コードの送信に失敗しました',
+      error: process.env.NODE_ENV === 'development' ? error?.message : undefined
     });
   }
 });
