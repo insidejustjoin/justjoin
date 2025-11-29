@@ -140,16 +140,22 @@ router.post('/verify-email', async (req, res) => {
       message: '確認メールを送信しました。メール内の6桁のコードを入力してください。'
     });
   } catch (error: any) {
-    console.error('メール本人確認コード送信エラー:', {
+    const errorDetails = {
       message: error?.message,
       code: error?.code,
       detail: error?.detail,
-      stack: error?.stack
-    });
+      stack: error?.stack,
+      name: error?.name
+    };
+    console.error('メール本人確認コード送信エラー:', errorDetails);
+    
+    // デバッグ用に一時的にエラー詳細を返す
     res.status(500).json({
       success: false,
       message: 'メール本人確認コードの送信に失敗しました',
-      error: process.env.NODE_ENV === 'development' ? error?.message : undefined
+      error: error?.message || 'Unknown error',
+      code: error?.code || 'UNKNOWN',
+      detail: error?.detail || null
     });
   }
 });
