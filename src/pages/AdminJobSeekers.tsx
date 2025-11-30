@@ -218,24 +218,37 @@ export function AdminJobSeekers() {
   const fetchInterviewStatus = async (userId: string | number) => {
     try {
       const token = localStorage.getItem('auth_token');
-      if (!token) return null;
+      if (!token) {
+        console.warn('認証トークンが見つかりません');
+        return null;
+      }
 
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
       
       const response = await fetch(`${apiUrl}/api/documents/admin/interview-status/${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
       if (response.ok) {
         const data = await response.json();
         return data.data;
+      } else if (response.status === 401) {
+        // 401エラーの場合はログに記録するが、エラーをスローしない
+        console.warn(`面接状態取得で認証エラー (userId: ${userId}): 認証トークンが無効または期限切れの可能性があります`);
+        // 401エラーの場合はnullを返して、エラーを表示しない
+        return null;
+      } else {
+        console.warn(`面接状態取得エラー (userId: ${userId}): HTTP ${response.status}`);
+        return null;
       }
     } catch (error) {
-      console.error('面接状態取得エラー:', error);
+      // ネットワークエラーなどの場合も、エラーを表示せずにnullを返す
+      console.warn('面接状態取得エラー:', error);
+      return null;
     }
-    return null;
   };
 
   // 面接状態を一括取得する関数

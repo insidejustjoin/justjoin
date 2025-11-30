@@ -955,14 +955,18 @@ function App() {
                 {t.error.title}
               </h3>
               <button
-                onClick={() => setLanguage(language === 'ja' ? 'en' : 'ja')}
+                onClick={toggleLanguage}
                 className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                   language === 'ja' 
                     ? 'bg-red-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : language === 'en'
+                    ? 'bg-blue-600 text-white'
+                    : language === 'ru'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-green-600 text-white'
                 }`}
               >
-                {language === 'ja' ? '日本語' : 'English'}
+                {getLanguageName(language)}
               </button>
             </div>
             <p className="text-gray-600 mb-6 leading-relaxed">
@@ -1049,14 +1053,18 @@ function App() {
               <div className="flex items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold text-gray-900">{t.preparation.title}</h1>
                 <button
-                  onClick={() => setLanguage(language === 'ja' ? 'en' : 'ja')}
+                  onClick={toggleLanguage}
                   className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                     language === 'ja' 
                       ? 'bg-green-600 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : language === 'en'
+                      ? 'bg-blue-600 text-white'
+                      : language === 'ru'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-orange-600 text-white'
                   }`}
                 >
-                  {language === 'ja' ? '日本語' : 'English'}
+                  {getLanguageName(language)}
                 </button>
               </div>
               <p className="text-gray-600 mb-6">
@@ -1092,14 +1100,18 @@ function App() {
               <div className="flex items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold text-gray-900 text-center flex-1">{t.checks.title}</h1>
                 <button
-                  onClick={() => setLanguage(language === 'ja' ? 'en' : 'ja')}
+                  onClick={toggleLanguage}
                   className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                     language === 'ja' 
                       ? 'bg-purple-600 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : language === 'en'
+                      ? 'bg-blue-600 text-white'
+                      : language === 'ru'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-teal-600 text-white'
                   }`}
                 >
-                  {language === 'ja' ? '日本語' : 'English'}
+                  {getLanguageName(language)}
                 </button>
               </div>
               <p className="text-gray-600 mb-6 text-center">{t.checks.description}</p>
@@ -1169,14 +1181,18 @@ function App() {
                   <div className="flex items-center gap-3">
                     <h1 className="text-2xl font-bold text-gray-900">{t.interview.title}</h1>
                     <button
-                      onClick={() => setLanguage(language === 'ja' ? 'en' : 'ja')}
+                      onClick={toggleLanguage}
                       className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                         language === 'ja' 
                           ? 'bg-purple-600 text-white' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          : language === 'en'
+                          ? 'bg-blue-600 text-white'
+                          : language === 'ru'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-teal-600 text-white'
                       }`}
                     >
-                      {language === 'ja' ? '日本語' : 'English'}
+                      {getLanguageName(language)}
                     </button>
                   </div>
                   <p className="text-gray-600">{t.interview.question} {currentQuestionIndex + 1} / {questions.length}</p>
@@ -1374,14 +1390,18 @@ function App() {
                     </svg>
                   </div>
                   <button
-                    onClick={() => setLanguage(language === 'ja' ? 'en' : 'ja')}
+                    onClick={toggleLanguage}
                     className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                       language === 'ja' 
                         ? 'bg-green-600 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : language === 'en'
+                        ? 'bg-blue-600 text-white'
+                        : language === 'ru'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-orange-600 text-white'
                     }`}
                   >
-                    {language === 'ja' ? '日本語' : 'English'}
+                    {getLanguageName(language)}
                   </button>
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">{t.completed.title}</h1>

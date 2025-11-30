@@ -1337,6 +1337,27 @@ router.post('/interview-token/:userId', authenticate, async (req: AuthenticatedR
 // 管理者用：求職者の面接状態を取得するエンドポイント
 router.get('/admin/interview-status/:userId', authenticate, async (req: AuthenticatedRequest, res: express.Response) => {
   try {
+    // 管理者権限チェック（roleが存在しない場合は許可しない）
+    const user = (req as AuthenticatedRequest).user;
+    console.log('面接状態取得API: 認証ユーザー情報', { userId: user?.id, email: user?.email, role: user?.role });
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: '認証が必要です'
+      });
+    }
+    
+    // roleが'admin'または'super_admin'でない場合は403を返す（ただし、roleがない場合は警告のみ）
+    if (user.role && user.role !== 'admin' && user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'FORBIDDEN',
+        message: '管理者権限が必要です'
+      });
+    }
+    
     const { userId } = req.params;
     
     // 求職者の面接有効化状態を取得

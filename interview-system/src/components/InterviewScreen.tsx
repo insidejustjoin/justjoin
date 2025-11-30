@@ -666,37 +666,59 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         utterance.pitch = 1.05; // 少し高めのピッチでより自然に
         utterance.volume = 1.0; // 最大音量
         
-        // より自然な日本語音声を選択（優先順位: Google女性 > Google男性 > Microsoft > その他）
+        // より自然な日本語女性音声を選択（優先順位: 女性音声を最優先）
         const voices = speechSynthesis.getVoices();
+        
+        // 日本語の女性音声を探す（様々なパターンで）
+        const femaleVoicePatterns = [
+          'Kyoko', 'Sayaka', 'Female', '女性', '女', 'Woman', 'Woman\'s', 
+          'Hanako', 'Yuki', 'Aoi', 'Sakura', 'Mai', 'Rin', 'Yui'
+        ];
+        
+        // 優先順位1: Google日本語女性音声
         let japaneseVoice = voices.find(voice => 
           voice.lang.includes('ja') && 
           (voice.name.includes('Google') || voice.name.includes('google')) &&
-          (voice.name.includes('Female') || voice.name.includes('女性') || voice.name.includes('Kyoko') || voice.name.includes('Sayaka'))
+          femaleVoicePatterns.some(pattern => 
+            voice.name.includes(pattern) || voice.name.toLowerCase().includes(pattern.toLowerCase())
+          )
         );
+        
+        // 優先順位2: その他の日本語女性音声（Google以外）
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => 
+            voice.lang.includes('ja') && 
+            femaleVoicePatterns.some(pattern => 
+              voice.name.includes(pattern) || voice.name.toLowerCase().includes(pattern.toLowerCase())
+            )
+          );
+        }
+        
+        // 優先順位3: Microsoft日本語女性音声
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => 
+            voice.lang.includes('ja') && 
+            (voice.name.includes('Microsoft') || voice.name.includes('Microsoft')) &&
+            (voice.name.includes('Female') || voice.name.includes('女性'))
+          );
+        }
+        
+        // 優先順位4: Google日本語音声（性別不明）
         if (!japaneseVoice) {
           japaneseVoice = voices.find(voice => 
             voice.lang.includes('ja') && 
             (voice.name.includes('Google') || voice.name.includes('google'))
           );
         }
-        if (!japaneseVoice) {
-          japaneseVoice = voices.find(voice => 
-            voice.lang.includes('ja') && 
-            (voice.name.includes('Microsoft') || voice.name.includes('Microsoft'))
-          );
-        }
-        if (!japaneseVoice) {
-          japaneseVoice = voices.find(voice => 
-            voice.lang.includes('ja') && 
-            (voice.name.includes('女性') || voice.name.includes('Female') || voice.name.includes('Kyoko') || voice.name.includes('Sayaka'))
-          );
-        }
+        
+        // 優先順位5: 日本語音声（性別不明）
         if (!japaneseVoice) {
           japaneseVoice = voices.find(voice => voice.lang.includes('ja'));
         }
+        
         if (japaneseVoice) {
           utterance.voice = japaneseVoice;
-          console.log('選択された音声:', japaneseVoice.name, japaneseVoice.lang);
+          console.log('選択された音声:', japaneseVoice.name, japaneseVoice.lang, '（女性音声優先）');
         } else {
           console.warn('日本語音声が見つかりませんでした。デフォルト音声を使用します。');
         }
