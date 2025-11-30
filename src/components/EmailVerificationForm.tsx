@@ -11,6 +11,29 @@ import { Mail, User, CheckCircle, AlertCircle } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { EmailVerificationCodeForm } from './EmailVerificationCodeForm';
 
+// HubSpot型定義
+declare global {
+  interface Window {
+    hsConversationsAPI?: {
+      addUserProperties: (properties: {
+        email: string;
+        firstName: string;
+        lastName: string;
+        fullName?: string;
+      }) => void;
+    };
+    HubSpotConversations?: {
+      widget: {
+        load: (options: {
+          email: string;
+          firstName: string;
+          lastName: string;
+        }) => void;
+      };
+    };
+  }
+}
+
 const emailVerificationSchema = z.object({
   email: z.string().email('有効なメールアドレスを入力してください'),
   firstName: z.string().min(1, '名を入力してください'),
@@ -41,6 +64,30 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
     setMessage(null);
 
     try {
+      // HubSpotにデータを送信
+      if (window.hsConversationsAPI) {
+        try {
+          window.hsConversationsAPI.addUserProperties({
+            email: data.email.trim(),
+            firstName: data.firstName.trim(),
+            lastName: data.lastName.trim(),
+            fullName: `${data.lastName.trim()} ${data.firstName.trim()}`,
+          });
+        } catch (hubspotError) {
+          console.warn('HubSpotデータ送信エラー:', hubspotError);
+        }
+      } else if ((window as any).HubSpotConversations) {
+        try {
+          (window as any).HubSpotConversations.widget.load({
+            email: data.email.trim(),
+            firstName: data.firstName.trim(),
+            lastName: data.lastName.trim(),
+          });
+        } catch (hubspotError) {
+          console.warn('HubSpotデータ送信エラー:', hubspotError);
+        }
+      }
+
       const response = await fetch('/api/email-verification/verify-email', {
         method: 'POST',
         headers: {

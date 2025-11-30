@@ -1,8 +1,34 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { EmailVerificationForm } from '@/components/EmailVerificationForm';
 
 const JobSeekerRegister: React.FC = () => {
+  // HubSpotコードを埋め込み
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.id = 'hs-script-loader';
+    script.async = true;
+    script.defer = true;
+    script.src = '//js-na2.hs-scripts.com/244488087.js';
+    
+    // 既存のスクリプトがあれば削除
+    const existingScript = document.getElementById('hs-script-loader');
+    if (existingScript) {
+      existingScript.remove();
+    }
+    
+    document.body.appendChild(script);
+    
+    return () => {
+      // クリーンアップ時にスクリプトを削除
+      const scriptToRemove = document.getElementById('hs-script-loader');
+      if (scriptToRemove) {
+        scriptToRemove.remove();
+      }
+    };
+  }, []);
+
   return (
     <>
       <Helmet>

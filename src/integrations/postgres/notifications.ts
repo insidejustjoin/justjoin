@@ -20,6 +20,7 @@ export interface CreateNotificationData {
   title: string;
   message: string;
   type?: 'info' | 'success' | 'warning' | 'error';
+  registration_type?: 'engineer' | 'general' | null;
 }
 
 // 通知履歴テーブルを作成
@@ -34,6 +35,7 @@ export async function createNotificationHistoryTables() {
         title VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
         type VARCHAR(20) DEFAULT 'info' CHECK (type IN ('info', 'success', 'warning', 'error')),
+        registration_type VARCHAR(20),
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -42,7 +44,25 @@ export async function createNotificationHistoryTables() {
       CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
       CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
       CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+      CREATE INDEX IF NOT EXISTS idx_notifications_registration_type ON notifications(registration_type);
     `);
+    
+    // registration_typeカラムを追加（既存テーブル用）
+    try {
+      await client.query(`
+        ALTER TABLE notifications 
+        ADD COLUMN IF NOT EXISTS registration_type VARCHAR(20);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_notifications_registration_type 
+        ON notifications(registration_type);
+      `);
+    } catch (error: any) {
+      // 既に存在する場合は無視
+      if (!error.message?.includes('already exists') && !error.message?.includes('duplicate')) {
+        console.warn('notifications registration_typeカラム追加エラー:', error.message);
+      }
+    }
 
     // スポット通知履歴テーブル
     await client.query(`
@@ -98,10 +118,10 @@ export async function createNotification(data: CreateNotificationData): Promise<
   const client = await pool.connect();
   try {
     const result = await client.query(`
-      INSERT INTO notifications (user_id, title, message, type)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO notifications (user_id, title, message, type, registration_type)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *
-    `, [data.user_id, data.title, data.message, data.type || 'info']);
+    `, [data.user_id, data.title, data.message, data.type || 'info', data.registration_type || null]);
     
     return result.rows[0];
   } catch (error) {
@@ -113,14 +133,29 @@ export async function createNotification(data: CreateNotificationData): Promise<
 }
 
 // ユーザーの通知一覧を取得
-export async function getNotificationsByUserId(userId: string): Promise<Notification[]> {
+export async function getNotificationsByUserId(userId: string, registrationType?: 'engineer' | 'general' | null): Promise<Notification[]> {
   const client = await pool.connect();
   try {
-    const result = await client.query(`
+    let query = `
       SELECT * FROM notifications 
       WHERE user_id = $1 
-      ORDER BY created_at DESC
-    `, [userId]);
+    `;
+    const params: any[] = [userId];
+    
+    // registration_typeでフィルタリング（指定がある場合）
+    if (registrationType !== undefined) {
+      if (registrationType === null) {
+        // registration_typeがnullのもののみ
+        query += ` AND registration_type IS NULL`;
+      } else {
+        query += ` AND registration_type = $${params.length + 1}`;
+        params.push(registrationType);
+      }
+    }
+    
+    query += ` ORDER BY created_at DESC`;
+    
+    const result = await client.query(query, params);
     
     return result.rows;
   } catch (error) {
@@ -220,13 +255,46 @@ export async function getAllNotifications(): Promise<Notification[]> {
 }
 
 // 管理者用：特定のユーザーに通知を送信
-export async function sendNotificationToUser(userId: string, title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): Promise<Notification> {
-  return createNotification({
-    user_id: userId,
-    title,
-    message,
-    type
-  });
+export async function sendNotificationToUser(
+  userId: string, 
+  title: string, 
+  message: string, 
+  type: 'info' | 'success' | 'warning' | 'error' = 'info',
+  registrationType?: 'engineer' | 'general' | null,
+  preventDuplicate?: { checkTitle: string; withinSeconds?: number }
+): Promise<Notification | null> {
+  const client = await pool.connect();
+  
+  try {
+    // 重複チェック
+    if (preventDuplicate) {
+      const { checkTitle, withinSeconds = 3600 } = preventDuplicate;
+      const duplicateCheckQuery = `
+        SELECT id FROM notifications 
+        WHERE user_id = $1 
+          AND title = $2
+          AND created_at > NOW() - INTERVAL '${withinSeconds} seconds'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      const duplicateResult = await client.query(duplicateCheckQuery, [userId, checkTitle]);
+      
+      if (duplicateResult.rows.length > 0) {
+        console.log(`重複通知をスキップ: userId=${userId}, title=${checkTitle}`);
+        return null; // 重複している場合はnullを返す
+      }
+    }
+    
+    return await createNotification({
+      user_id: userId,
+      title,
+      message,
+      type,
+      registration_type: registrationType
+    });
+  } finally {
+    client.release();
+  }
 }
 
 // 管理者用：全ユーザーに通知を送信
