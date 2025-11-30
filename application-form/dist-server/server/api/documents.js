@@ -1050,10 +1050,14 @@ router.post('/interview-token/:userId', authenticate, async (req, res) => {
             userId: user.id,
             type: 'interview_start'
         })).toString('base64');
-        // AI面接開始通知を送信
+        // AI面接開始通知を送信（重複防止付き）
         try {
             const { sendNotificationToUser } = await import('../../integrations/postgres/notifications.js');
-            await sendNotificationToUser(user.id, 'AI面接が開始しました！', 'AI面接が開始しました！面接を受験して、採用担当者にあなたの魅力をアピールしましょう。', 'info');
+            // registration_typeを取得
+            const jobSeekerQuery = await query('SELECT registration_type FROM job_seekers WHERE user_id = $1 LIMIT 1', [user.id]);
+            const registrationType = jobSeekerQuery.rows[0]?.registration_type || null;
+            await sendNotificationToUser(user.id, 'AI面接が開始しました！', 'AI面接が開始しました！面接を受験して、採用担当者にあなたの魅力をアピールしましょう。', 'info', registrationType, { checkTitle: 'AI面接が開始しました！', withinSeconds: 86400 } // 24時間以内の重複を防止
+            );
         }
         catch (notificationError) {
             console.error('AI面接開始通知送信エラー:', notificationError);
@@ -1162,6 +1166,24 @@ router.post('/interview-token/:userId', authenticate, async (req, res) => {
 // 管理者用：求職者の面接状態を取得するエンドポイント
 router.get('/admin/interview-status/:userId', authenticate, async (req, res) => {
     try {
+        // 管理者権限チェック（roleが存在しない場合は許可しない）
+        const user = req.user;
+        console.log('面接状態取得API: 認証ユーザー情報', { userId: user?.id, email: user?.email, role: user?.role });
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                error: 'UNAUTHORIZED',
+                message: '認証が必要です'
+            });
+        }
+        // roleが'admin'または'super_admin'でない場合は403を返す（ただし、roleがない場合は警告のみ）
+        if (user.role && user.role !== 'admin' && user.role !== 'super_admin') {
+            return res.status(403).json({
+                success: false,
+                error: 'FORBIDDEN',
+                message: '管理者権限が必要です'
+            });
+        }
         const { userId } = req.params;
         // 求職者の面接有効化状態を取得
         const jobSeekerQuery = `
@@ -1301,10 +1323,14 @@ router.post('/interview-completed/:userId', authenticate, async (req, res) => {
       WHERE user_id = $1
     `;
         await query(updateAttemptsQuery, [userId]);
-        // 面接完了通知を送信
+        // 面接完了通知を送信（重複防止付き）
         try {
             const { sendNotificationToUser } = await import('../../integrations/postgres/notifications.js');
-            await sendNotificationToUser(userId, 'AI面接が完了しました！', `AI面接が完了しました！結果は管理者に送信されました。スコア: ${score || 'N/A'}, 推奨レベル: ${recommendation || 'N/A'}`, 'success');
+            // registration_typeを取得
+            const jobSeekerQuery = await query('SELECT registration_type FROM job_seekers WHERE user_id = $1 LIMIT 1', [userId]);
+            const registrationType = jobSeekerQuery.rows[0]?.registration_type || null;
+            await sendNotificationToUser(userId, 'AI面接が完了しました！', `AI面接が完了しました！結果は管理者に送信されました。スコア: ${score || 'N/A'}, 推奨レベル: ${recommendation || 'N/A'}`, 'success', registrationType, { checkTitle: 'AI面接が完了しました！', withinSeconds: 86400 } // 24時間以内の重複を防止
+            );
         }
         catch (notificationError) {
             console.error('面接完了通知送信エラー:', notificationError);

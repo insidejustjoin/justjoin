@@ -8,7 +8,9 @@ createNotificationHistoryTables().catch(console.error);
 router.get('/user/:userId', authenticate, async (req, res) => {
     try {
         const { userId } = req.params;
-        const notifications = await getNotificationsByUserId(userId);
+        const { registrationType } = req.query;
+        const normalizedType = registrationType === 'general' ? 'general' : registrationType === 'engineer' ? 'engineer' : undefined;
+        const notifications = await getNotificationsByUserId(userId, normalizedType);
         res.json({
             success: true,
             data: notifications
