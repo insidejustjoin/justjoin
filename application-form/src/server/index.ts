@@ -2843,17 +2843,41 @@ const __dirname = path.dirname(__filename);
 
 // 本番環境でのみ静的ファイルを配信
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../dist')));
+  // ルートパス（/）はapplication-siteで処理されるため、最優先で404を返す
+  app.get('/', (req, res) => {
+    res.status(404).json({ 
+      error: 'Not found',
+      message: 'This route is handled by the static site. Please access /jobseeker/* or other application routes.'
+    });
+  });
+  
+  // ルートパスを除外するミドルウェア（静的ファイル配信の前）
+  app.use((req, res, next) => {
+    // ルートパスは除外（既に上で処理済みだが念のため）
+    if (req.path === '/' || req.path === '') {
+      return res.status(404).json({ 
+        error: 'Not found',
+        message: 'This route is handled by the static site.'
+      });
+    }
+    next();
+  });
+  
+  // 静的ファイルの配信（ルートパスは除外済み）
+  // index: false を設定して、index.htmlを自動的に返さないようにする
+  app.use(express.static(path.join(__dirname, '../../dist'), {
+    index: false
+  }));
   
   // SPAルーティング: すべてのGETリクエストをindex.htmlにリダイレクト
-  // ただし、ルートパス（/）はapplication-siteで処理されるため除外
+  // ただし、ルートパス（/）は除外済み
   app.get('*', (req, res, next) => {
     // APIルートは除外 -> 次のルートへ委譲（後続のAPI定義を有効にする）
     if (req.path.startsWith('/api/')) {
       return next();
     }
     
-    // ルートパス（/）はapplication-siteで処理されるため404を返す
+    // ルートパス（/）はapplication-siteで処理されるため404を返す（念のため）
     if (req.path === '/' || req.path === '') {
       return res.status(404).json({ 
         error: 'Not found',

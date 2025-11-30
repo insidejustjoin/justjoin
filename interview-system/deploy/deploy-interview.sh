@@ -32,9 +32,9 @@ echo "🐳 Dockerイメージをビルド中..."
 # Dockerが利用可能かチェック
 if docker ps >/dev/null 2>&1; then
     echo "🐳 ローカルDockerを使用してビルド中..."
-    docker build --platform linux/amd64 -t $IMAGE_NAME .
-    echo "📤 Dockerイメージをプッシュ中..."
-    docker push $IMAGE_NAME
+docker build --platform linux/amd64 -t $IMAGE_NAME .
+echo "📤 Dockerイメージをプッシュ中..."
+docker push $IMAGE_NAME
 else
     echo "⚠️  Dockerデーモンが起動していません。Cloud Buildを使用します..."
     REV=$(date +%Y%m%d%H%M%S)

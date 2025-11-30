@@ -387,24 +387,24 @@ function App() {
       uz: 'Nutq sintezini tekshirish'
     };
     return [
-      {
-        id: 'audio',
+    {
+      id: 'audio',
         title: currentT.checks.audioCheck,
         description: descriptions[language] || descriptions.ja,
-        status: 'pending'
-      },
-      {
-        id: 'video',
+      status: 'pending'
+    },
+    {
+      id: 'video',
         title: currentT.checks.videoCheck,
         description: videoDescriptions[language] || videoDescriptions.ja,
-        status: 'pending'
-      },
-      {
-        id: 'speech',
+      status: 'pending'
+    },
+    {
+      id: 'speech',
         title: currentT.checks.speechCheck,
         description: speechDescriptions[language] || speechDescriptions.ja,
-        status: 'pending'
-      }
+      status: 'pending'
+    }
     ];
   }, [language]);
   
@@ -448,18 +448,18 @@ function App() {
     const initializeApp = async () => {
       setIsInitializing(true);
       try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token');
-        const lang = urlParams.get('lang') || 'ja';
-        
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const lang = urlParams.get('lang') || 'ja';
+    
         // 言語を検証（ja, en, ru, uzのみ許可）
         const validLang = (lang === 'ja' || lang === 'en' || lang === 'ru' || lang === 'uz') ? lang : 'ja';
         setLanguage(validLang as Language);
         
         // 少し待機してスムーズな遷移を実現
         await new Promise(resolve => setTimeout(resolve, 500));
-        
-        if (token) {
+    
+    if (token) {
           await verifyToken(token);
         } else {
           // トークンがない場合は同意画面に進む（テスト用にも対応）
@@ -953,7 +953,7 @@ function App() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-900">
                 {t.error.title}
-              </h3>
+            </h3>
               <button
                 onClick={toggleLanguage}
                 className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
@@ -979,15 +979,15 @@ function App() {
               >
                 {t.error.backHome}
               </button>
-              <button
-                onClick={() => {
-                  setError('');
-                  setCurrentState('consent');
-                }}
-                className="flex-1 bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium"
-              >
+                <button
+                  onClick={() => {
+                    setError('');
+                    setCurrentState('consent');
+                  }}
+                  className="flex-1 bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium"
+                >
                 {t.error.retry}
-              </button>
+                </button>
             </div>
           </div>
         </div>
@@ -1385,10 +1385,10 @@ function App() {
               <div className="text-center mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100">
-                    <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
+                  <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
                   <button
                     onClick={toggleLanguage}
                     className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${

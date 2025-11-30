@@ -7,7 +7,7 @@ import { LanguageProvider } from './contexts/LanguageContext.tsx'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LanguageProvider>
-      <App />
+    <App />
     </LanguageProvider>
   </StrictMode>,
 )

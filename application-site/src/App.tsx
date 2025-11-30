@@ -14,7 +14,7 @@ function App() {
         <SupportCases />
       </main>
       <Footer />
-    </div>
+      </div>
   );
 }
 
