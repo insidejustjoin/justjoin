@@ -662,23 +662,33 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         
         // 音声は日本語固定（回答は日本語で行うため）
         utterance.lang = 'ja-JP';
-        utterance.rate = 0.85; // より遅く（聞き取りやすく）
-        utterance.pitch = 1.0; // 標準ピッチ
+        utterance.rate = 0.9; // 聞き取りやすい速度（0.85より少し速く）
+        utterance.pitch = 1.05; // 少し高めのピッチでより自然に
         utterance.volume = 1.0; // 最大音量
         
-        // より自然な日本語音声を選択（優先順位: Google > Microsoft > その他の日本語音声）
+        // より自然な日本語音声を選択（優先順位: Google女性 > Google男性 > Microsoft > その他）
         const voices = speechSynthesis.getVoices();
         let japaneseVoice = voices.find(voice => 
-          voice.lang.includes('ja') && voice.name.includes('Google')
+          voice.lang.includes('ja') && 
+          (voice.name.includes('Google') || voice.name.includes('google')) &&
+          (voice.name.includes('Female') || voice.name.includes('女性') || voice.name.includes('Kyoko') || voice.name.includes('Sayaka'))
         );
         if (!japaneseVoice) {
           japaneseVoice = voices.find(voice => 
-            voice.lang.includes('ja') && voice.name.includes('Microsoft')
+            voice.lang.includes('ja') && 
+            (voice.name.includes('Google') || voice.name.includes('google'))
           );
         }
         if (!japaneseVoice) {
           japaneseVoice = voices.find(voice => 
-            voice.lang.includes('ja') && (voice.name.includes('女性') || voice.name.includes('Female'))
+            voice.lang.includes('ja') && 
+            (voice.name.includes('Microsoft') || voice.name.includes('Microsoft'))
+          );
+        }
+        if (!japaneseVoice) {
+          japaneseVoice = voices.find(voice => 
+            voice.lang.includes('ja') && 
+            (voice.name.includes('女性') || voice.name.includes('Female') || voice.name.includes('Kyoko') || voice.name.includes('Sayaka'))
           );
         }
         if (!japaneseVoice) {
@@ -686,7 +696,9 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         }
         if (japaneseVoice) {
           utterance.voice = japaneseVoice;
-          console.log('選択された音声:', japaneseVoice.name);
+          console.log('選択された音声:', japaneseVoice.name, japaneseVoice.lang);
+        } else {
+          console.warn('日本語音声が見つかりませんでした。デフォルト音声を使用します。');
         }
         
         utterance.onend = () => {
@@ -1260,4 +1272,5 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   );
 };
 
+export default InterviewScreen; 
 export default InterviewScreen; 
