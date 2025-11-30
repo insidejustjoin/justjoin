@@ -1273,4 +1273,3 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 };
 
 export default InterviewScreen; 
-export default InterviewScreen; 

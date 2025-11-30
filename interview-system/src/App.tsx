@@ -440,23 +440,42 @@ function App() {
     }
   }, []);
 
+  // 初期ローディング状態
+  const [isInitializing, setIsInitializing] = useState(true);
+
   // URLパラメータからトークンを取得
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const lang = urlParams.get('lang') || 'ja';
+    const initializeApp = async () => {
+      setIsInitializing(true);
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        const lang = urlParams.get('lang') || 'ja';
+        
+        // 言語を検証（ja, en, ru, uzのみ許可）
+        const validLang = (lang === 'ja' || lang === 'en' || lang === 'ru' || lang === 'uz') ? lang : 'ja';
+        setLanguage(validLang as Language);
+        
+        // 少し待機してスムーズな遷移を実現
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (token) {
+          await verifyToken(token);
+        } else {
+          // トークンがない場合は同意画面に進む（テスト用にも対応）
+          console.log('トークンなし: 同意画面に進みます');
+          setCurrentState('consent');
+        }
+      } catch (error) {
+        console.error('初期化エラー:', error);
+        setError('初期化中にエラーが発生しました。ページをリロードしてください。');
+        setCurrentState('error');
+      } finally {
+        setIsInitializing(false);
+      }
+    };
     
-    // 言語を検証（ja, en, ru, uzのみ許可）
-    const validLang = (lang === 'ja' || lang === 'en' || lang === 'ru' || lang === 'uz') ? lang : 'ja';
-    setLanguage(validLang as Language);
-    
-    if (token) {
-      verifyToken(token);
-    } else {
-      // トークンがない場合は同意画面に進む（テスト用にも対応）
-      console.log('トークンなし: 同意画面に進みます');
-      setCurrentState('consent');
-    }
+    initializeApp();
   }, []);
 
   // トークン検証（修正版）
@@ -967,6 +986,24 @@ function App() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 初期ローディング画面
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+        <div className="text-center">
+          <div className="relative">
+            <div className="w-20 h-20 mx-auto mb-6">
+              <div className="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">AI面接システム</h2>
+          <p className="text-gray-600 animate-pulse">準備中...</p>
         </div>
       </div>
     );
