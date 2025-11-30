@@ -114,11 +114,11 @@ export function JobSeekerDetailModal({ jobSeeker, isOpen, onClose }: JobSeekerDe
   if (!isOpen || !jobSeeker) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+        <div className="sticky top-0 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 p-6 flex justify-between items-center z-10">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-md ring-2 ring-white">
               {jobSeeker.profile_photo ? (
                 <img
                   src={jobSeeker.profile_photo}
@@ -133,43 +133,74 @@ export function JobSeekerDetailModal({ jobSeeker, isOpen, onClose }: JobSeekerDe
               <h2 className="text-2xl font-bold text-gray-900">
                 {jobSeeker.full_name || '名前未設定'}
               </h2>
-              <p className="text-gray-600">
-                {jobSeeker.email || jobSeeker.user_email || 'メール未設定'}
-              </p>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-gray-600 text-sm">
+                  {jobSeeker.email || jobSeeker.user_email || 'メール未設定'}
+                </p>
+                {jobSeeker.interviewEnabled && (
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                    面接有効
+                  </Badge>
+                )}
+                {(jobSeeker as any).has_interview_audio && (
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs flex items-center gap-1">
+                    <Video className="h-3 w-3" />
+                    音声あり
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
-          <Button onClick={onClose} variant="outline" size="sm">
+          <Button onClick={onClose} variant="outline" size="sm" className="hover:bg-gray-100">
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-1">
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="basic" className="flex items-center gap-2">
+            <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-lg">
+              <TabsTrigger 
+                value="basic" 
+                className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all"
+              >
                 <User className="h-4 w-4" />
                 基本情報
               </TabsTrigger>
-              <TabsTrigger value="resume" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="resume" 
+                className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all"
+              >
                 <FileText className="h-4 w-4" />
                 履歴書
               </TabsTrigger>
-              <TabsTrigger value="skills" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="skills" 
+                className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all"
+              >
                 <Award className="h-4 w-4" />
                 スキルシート
               </TabsTrigger>
-              <TabsTrigger value="work" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="work" 
+                className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all"
+              >
                 <Briefcase className="h-4 w-4" />
                 職務経歴
               </TabsTrigger>
-              <TabsTrigger value="interview" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="interview" 
+                className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all"
+              >
                 <Video className="h-4 w-4" />
                 面接録画
+                {(jobSeeker as any).has_interview_audio && (
+                  <span className="ml-1 w-2 h-2 bg-blue-500 rounded-full"></span>
+                )}
               </TabsTrigger>
             </TabsList>
 
             {/* 基本情報タブ */}
-            <TabsContent value="basic" className="mt-6">
+            <TabsContent value="basic" className="mt-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
@@ -268,21 +299,46 @@ export function JobSeekerDetailModal({ jobSeeker, isOpen, onClose }: JobSeekerDe
                       システム情報
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">登録日:</span>
-                      <span>{new Date(jobSeeker.created_at).toLocaleDateString('ja-JP')}</span>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-700">登録日:</span>
+                      <span className="text-gray-900">{new Date(jobSeeker.created_at).toLocaleDateString('ja-JP', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                      })}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">最終更新:</span>
-                      <span>{new Date(jobSeeker.updated_at).toLocaleDateString('ja-JP')}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-700">最終更新:</span>
+                      <span className="text-gray-900">{new Date(jobSeeker.updated_at).toLocaleDateString('ja-JP', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                      })}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">面接状態:</span>
-                      <Badge variant={jobSeeker.interviewEnabled ? "default" : "secondary"}>
-                        {jobSeeker.interviewEnabled ? "有効" : "無効"}
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-700">面接状態:</span>
+                      <Badge 
+                        variant={jobSeeker.interviewEnabled ? "default" : "secondary"}
+                        className={jobSeeker.interviewEnabled 
+                          ? "bg-green-100 text-green-800 hover:bg-green-200" 
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }
+                      >
+                        {jobSeeker.interviewEnabled ? "✓ 有効" : "✗ 無効"}
                       </Badge>
                     </div>
+                    {(jobSeeker as any).has_interview_audio && (
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="font-medium text-gray-700 flex items-center gap-2">
+                          <Video className="h-4 w-4" />
+                          面接音声:
+                        </span>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          保存済み
+                        </Badge>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>

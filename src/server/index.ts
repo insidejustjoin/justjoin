@@ -907,7 +907,19 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             latest.reason,
             latest.notes,
             -- 最新の音声録音があるかどうか（テーブルが存在しない場合はfalse）
-            false as has_interview_audio,
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'interview_recordings'
+              ) THEN (
+                SELECT COUNT(*) > 0
+                FROM interview_recordings ir
+                WHERE ir.user_id = u.id::text
+                  AND ir.recording_type = 'audio'
+                LIMIT 1
+              )
+              ELSE false
+            END as has_interview_audio,
             COALESCE(js.completion_rate, 0)::int as completion_rate,
             COALESCE(js.registration_type, 'engineer') as registration_type,
             COALESCE(js.interview_enabled, false) as interview_enabled,
@@ -1085,7 +1097,19 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             latest.reason,
             latest.notes,
             -- 最新の音声録音があるかどうか（テーブルが存在しない場合はfalse）
-            false as has_interview_audio
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'interview_recordings'
+              ) THEN (
+                SELECT COUNT(*) > 0
+                FROM interview_recordings ir
+                WHERE ir.user_id = js.user_id::text
+                  AND ir.recording_type = 'audio'
+                LIMIT 1
+              )
+              ELSE false
+            END as has_interview_audio
           FROM job_seekers js
           LEFT JOIN users u ON js.user_id = u.id
           LEFT JOIN latest ON latest.user_id = js.user_id 
