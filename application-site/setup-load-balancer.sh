@@ -38,8 +38,7 @@ if gcloud compute backend-buckets describe "${BACKEND_BUCKET_NAME}" --global &>/
 else
   echo "📦 バックエンドバケットを作成中..."
   gcloud compute backend-buckets create "${BACKEND_BUCKET_NAME}" \
-    --gcs-bucket-name="${BUCKET_NAME}" \
-    --global
+    --gcs-bucket-name="${BUCKET_NAME}"
   echo "✅ バックエンドバケットを作成しました"
 fi
 
