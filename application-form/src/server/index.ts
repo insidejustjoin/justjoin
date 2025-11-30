@@ -2846,10 +2846,19 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../dist')));
   
   // SPAルーティング: すべてのGETリクエストをindex.htmlにリダイレクト
+  // ただし、ルートパス（/）はapplication-siteで処理されるため除外
   app.get('*', (req, res, next) => {
     // APIルートは除外 -> 次のルートへ委譲（後続のAPI定義を有効にする）
     if (req.path.startsWith('/api/')) {
       return next();
+    }
+    
+    // ルートパス（/）はapplication-siteで処理されるため404を返す
+    if (req.path === '/' || req.path === '') {
+      return res.status(404).json({ 
+        error: 'Not found',
+        message: 'This route is handled by the static site. Please access /jobseeker/* or other application routes.'
+      });
     }
     
     res.sendFile(path.join(__dirname, '../../dist/index.html'));

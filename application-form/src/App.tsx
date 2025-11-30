@@ -80,7 +80,7 @@ function App() {
             <div className="min-h-screen bg-background">
             <Routes>
               {/* パブリックルート */}
-              <Route path="/" element={<RedirectToJobSeekerMyPage />} />
+              {/* ルートパス（/）はapplication-siteで処理されるため削除 */}
               <Route path="/index" element={<Index />} />
               <Route path="/deploy-test" element={<DeployTest />} />
               
