@@ -66,6 +66,7 @@ gcloud builds submit --tag $IMAGE_TAG --timeout=1800 -f Dockerfile.voicevox . ||
 }
 
 echo "☁️ Cloud Runにデプロイ中..."
+echo "💰 コスト削減のため、min-instances=0（オンデマンド起動）でデプロイします"
 gcloud run deploy $SERVICE_NAME \
     --image $IMAGE_TAG \
     --platform managed \
@@ -73,12 +74,12 @@ gcloud run deploy $SERVICE_NAME \
     --project $PROJECT_ID \
     --allow-unauthenticated \
     --port 50021 \
-    --memory 2Gi \
-    --cpu 2 \
-    --min-instances 1 \
-    --max-instances 3 \
+    --memory 1Gi \
+    --cpu 1 \
+    --min-instances 0 \
+    --max-instances 2 \
     --timeout 3600 \
-    --concurrency 5
+    --concurrency 3
 
 # サービスURLを取得
 SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
@@ -100,11 +101,14 @@ echo "     --region=$REGION \\"
 echo "     --update-env-vars=\"VOICEVOX_URL=$SERVICE_URL\" \\"
 echo "     --project=$PROJECT_ID"
 echo ""
-echo "💰 課金見積もり:"
-echo "   - 最小インスタンス: 1（常時起動）"
-echo "   - メモリ: 2Gi"
-echo "   - CPU: 2"
-echo "   - 月額: 約 $50-80 USD（リージョンと使用量により変動）"
+echo "💰 課金見積もり（オンデマンド起動）:"
+echo "   - 最小インスタンス: 0（使用時のみ起動）"
+echo "   - メモリ: 1Gi"
+echo "   - CPU: 1"
+echo "   - 月額: 使用量に応じて変動（面接10回/日で約 $5-10 USD/月）"
+echo ""
+echo "💡 コスト削減のため、OpenAI TTSを優先使用する設定に変更しました"
+echo "   OpenAI TTS: 約 $15/100万文字（面接10回/日で約 $2-5 USD/月）"
 
 # 一時ファイルを削除
 rm -f Dockerfile.voicevox

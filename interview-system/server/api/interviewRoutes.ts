@@ -54,46 +54,34 @@ router.post('/synthesize-speech', async (req, res) => {
     }
 
     let audioBase64: string | null = null;
-    let audioFormat = 'wav';
+    let audioFormat = 'mp3';
 
-    // VOICEVOXを常に優先使用（設定されている場合）
-    const voicevoxUrl = process.env.VOICEVOX_URL;
-    if (voicevoxUrl && voicevoxUrl !== 'http://localhost:50021') {
-      // 本番環境ではVOICEVOXを常に使用
-      console.log('Using VOICEVOX for speech synthesis (production mode)...');
-      try {
-        const speakerId = await voicevoxService.getBestSpeakerId();
-        audioBase64 = await voicevoxService.synthesizeSpeechAsBase64(text, speakerId);
-        audioFormat = 'wav';
-        
-        if (!audioBase64) {
-          console.warn('VOICEVOX synthesis returned null, retrying with fallback...');
-        }
-      } catch (error) {
-        console.error('VOICEVOX synthesis error:', error);
-      }
-    } else {
-      // ローカル開発時は利用可能性をチェック
-      const isVoicevoxAvailable = await voicevoxService.isAvailable();
-      if (isVoicevoxAvailable) {
-        console.log('Using VOICEVOX for speech synthesis (local mode)...');
-        const speakerId = await voicevoxService.getBestSpeakerId();
-        audioBase64 = await voicevoxService.synthesizeSpeechAsBase64(text, speakerId);
-        audioFormat = 'wav';
-      }
-    }
+    // コスト削減のため、OpenAI TTSを優先使用（使用量ベースで安い）
+    // 1. まずOpenAI TTS APIを試す（高品質で使用量ベース）
+    console.log('Using OpenAI TTS for speech synthesis (cost-effective)...');
+    audioBase64 = await openaiTtsService.synthesizeSpeechAsBase64(text, languageCode);
+    audioFormat = 'mp3';
 
-    // フォールバック: VOICEVOXが失敗した場合のみ他のサービスを使用
-    if (!audioBase64) {
-      console.log('VOICEVOX unavailable, trying OpenAI TTS...');
-      audioBase64 = await openaiTtsService.synthesizeSpeechAsBase64(text, languageCode);
-      audioFormat = 'mp3';
-    }
-
+    // 2. OpenAI TTSが失敗した場合、Google Cloud TTSを試す（無料枠あり）
     if (!audioBase64) {
       console.log('OpenAI TTS failed, trying Google Cloud TTS...');
       audioBase64 = await textToSpeechService.synthesizeSpeechAsBase64(text, 'ja-JP');
       audioFormat = 'mp3';
+    }
+
+    // 3. ローカル開発時のみVOICEVOXを使用（本番では使用しない）
+    if (!audioBase64) {
+      const voicevoxUrl = process.env.VOICEVOX_URL;
+      if (voicevoxUrl === 'http://localhost:50021') {
+        // ローカル開発時のみVOICEVOXを使用
+        const isVoicevoxAvailable = await voicevoxService.isAvailable();
+        if (isVoicevoxAvailable) {
+          console.log('Using VOICEVOX for speech synthesis (local development only)...');
+          const speakerId = await voicevoxService.getBestSpeakerId();
+          audioBase64 = await voicevoxService.synthesizeSpeechAsBase64(text, speakerId);
+          audioFormat = 'wav';
+        }
+      }
     }
 
     if (audioBase64) {
