@@ -1005,18 +1005,18 @@ function App() {
     <div>
       {/* メインコンテンツ */}
       {currentState === 'consent' && !isTokenAuth && (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-          <div className="max-w-md w-full mx-4">
-            <div className="bg-white rounded-xl shadow-xl p-8">
-              <div className="flex items-center justify-between mb-4">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md w-full">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-gray-900">{t.consent.title}</h1>
                 <LanguageToggle language={language} onLanguageChange={setLanguage} />
               </div>
-              <p className="text-gray-600 mb-6">{t.consent.description}</p>
+              <p className="text-gray-600 mb-8 leading-relaxed">{t.consent.description}</p>
               
               <button
                 onClick={handleConsentSubmit}
-                className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 font-medium"
+                className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors font-semibold"
               >
                 {t.consent.startButton}
               </button>
@@ -1026,31 +1026,40 @@ function App() {
       )}
 
       {currentState === 'preparation' && (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100">
-          <div className="max-w-md w-full mx-4">
-            <div className="bg-white rounded-xl shadow-xl p-8">
-              <div className="flex items-center justify-between mb-4">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md w-full">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-gray-900">{t.preparation.title}</h1>
                 <LanguageToggle language={language} onLanguageChange={setLanguage} />
               </div>
-              <p className="text-gray-600 mb-6">
-                {t.preparation.jobSeeker}: {jobSeekerInfo?.name || t.preparation.jobSeeker}<br/>
-                {t.preparation.email}: {jobSeekerInfo?.email || 'demo@example.com'}<br/>
-                {t.preparation.position}: {jobSeekerInfo?.position || t.preparation.notSet}
-              </p>
+              <div className="mb-6 p-4 bg-gray-50 rounded-xl">
+                <p className="text-gray-700 mb-2">
+                  <span className="font-semibold">{t.preparation.jobSeeker}:</span> {jobSeekerInfo?.name || t.preparation.jobSeeker}
+                </p>
+                <p className="text-gray-700 mb-2">
+                  <span className="font-semibold">{t.preparation.email}:</span> {jobSeekerInfo?.email || 'demo@example.com'}
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-semibold">{t.preparation.position}:</span> {jobSeekerInfo?.position || t.preparation.notSet}
+                </p>
+              </div>
               
-              <div className="mb-6 p-4 bg-yellow-50 rounded-lg">
-                <h3 className="font-semibold text-yellow-800 mb-2">{t.preparation.flowTitle}</h3>
-                <ul className="text-sm text-yellow-700 space-y-1">
+              <div className="mb-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                <h3 className="font-semibold text-gray-900 mb-3">{t.preparation.flowTitle}</h3>
+                <ul className="text-sm text-gray-700 space-y-2">
                   {t.preparation.flowItems.map((item, index) => (
-                    <li key={index}>• {item}</li>
+                    <li key={index} className="flex items-start gap-2">
+                      <span className="text-yellow-600">•</span>
+                      <span>{item}</span>
+                    </li>
                   ))}
                 </ul>
               </div>
               
               <button
                 onClick={runChecks}
-                className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-all duration-200 font-medium"
+                className="w-full bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 transition-colors font-semibold"
               >
                 {t.preparation.startCheckButton}
               </button>
@@ -1060,36 +1069,36 @@ function App() {
       )}
 
       {currentState === 'checks' && (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-violet-100">
-          <div className="max-w-md w-full mx-4">
-            <div className="bg-white rounded-xl shadow-xl p-8">
-              <div className="flex items-center justify-between mb-4">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md w-full">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-gray-900 text-center flex-1">{t.checks.title}</h1>
                 <LanguageToggle language={language} onLanguageChange={setLanguage} />
               </div>
               <p className="text-gray-600 mb-6 text-center">{t.checks.description}</p>
               
-              <div className="space-y-4">
+              <div className="space-y-3 mb-6">
                 {checkItems.map((item) => (
-                  <div key={item.id} className="border rounded-lg p-4">
+                  <div key={item.id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="font-semibold text-gray-900">{item.title}</h3>
                       <div className="flex items-center">
                         {item.status === 'pending' && (
-                          <div className="w-4 h-4 bg-gray-300 rounded-full"></div>
+                          <div className="w-5 h-5 bg-gray-300 rounded-full"></div>
                         )}
                         {item.status === 'checking' && (
-                          <div className="w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
+                          <div className="w-5 h-5 bg-blue-500 rounded-full animate-pulse"></div>
                         )}
                         {item.status === 'success' && (
-                          <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                          <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
                             <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           </div>
                         )}
                         {item.status === 'failed' && (
-                          <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                          <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
                             <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                             </svg>
@@ -1097,7 +1106,7 @@ function App() {
                         )}
                       </div>
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">{item.description}</p>
+                    <p className="text-sm text-gray-600 mb-1">{item.description}</p>
                     {item.message && (
                       <p className={`text-sm ${
                         item.status === 'success' ? 'text-green-600' : 
@@ -1110,13 +1119,13 @@ function App() {
                 ))}
               </div>
               
-              <div className="mt-6 text-center">
-                <div className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-800 rounded-lg">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <div className="text-center">
+                <div className="inline-flex items-center px-4 py-2 bg-blue-50 text-blue-800 rounded-lg">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  {t.checks.autoStart}
+                  <span className="text-sm">{t.checks.autoStart}</span>
                 </div>
               </div>
             </div>
@@ -1319,33 +1328,33 @@ function App() {
       )}
 
       {currentState === 'completed' && (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-yellow-50 to-orange-100">
-          <div className="max-w-md w-full mx-4">
-            <div className="bg-white rounded-xl shadow-xl p-8">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md w-full">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
               <div className="text-center mb-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100">
-                  <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
+                  <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-500">
+                    <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
                   <LanguageToggle language={language} onLanguageChange={setLanguage} />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">{t.completed.title}</h1>
                 <p className="text-gray-600">{t.completed.message}</p>
               </div>
               
-              <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                <h3 className="font-semibold text-gray-900 mb-2">{t.completed.summary}</h3>
-                <div className="space-y-2 text-sm text-gray-600">
+              <div className="bg-gray-50 p-4 rounded-xl mb-4">
+                <h3 className="font-semibold text-gray-900 mb-3">{t.completed.summary}</h3>
+                <div className="space-y-2 text-sm text-gray-700">
                   <p>• {t.completed.answered}: {answers.filter(a => a && a.trim()).length} / {questions.length}</p>
                   <p>• {t.completed.duration}: {interviewStartTime ? Math.floor((Date.now() - interviewStartTime.getTime()) / 1000 / 60) : 0}{language === 'ja' ? '分' : ' min'}</p>
-                  <p>• {t.completed.sessionId}: {sessionId}</p>
+                  <p>• {t.completed.sessionId}: <span className="font-mono text-xs">{sessionId}</span></p>
                 </div>
               </div>
               
-              <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                <h3 className="font-semibold text-blue-900 mb-2">{t.completed.nextSteps}</h3>
+              <div className="bg-blue-50 p-4 rounded-xl mb-6 border border-blue-200">
+                <h3 className="font-semibold text-blue-900 mb-3">{t.completed.nextSteps}</h3>
                 <ul className="text-sm text-blue-800 space-y-1">
                   {t.completed.nextStepsItems.map((item, index) => (
                     <li key={index}>• {item}</li>
@@ -1356,13 +1365,13 @@ function App() {
               <div className="flex gap-3">
                 <button
                   onClick={handleBackToHome}
-                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 font-medium shadow-sm"
+                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors font-semibold"
                 >
                   {t.completed.backHome}
                 </button>
                 <button
                   onClick={handleStartNewInterview}
-                  className="flex-1 bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium shadow-sm"
+                  className="flex-1 bg-gray-600 text-white px-6 py-3 rounded-xl hover:bg-gray-700 transition-colors font-semibold"
                 >
                   {t.completed.newInterview}
                 </button>

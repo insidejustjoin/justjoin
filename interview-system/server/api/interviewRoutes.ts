@@ -2,6 +2,9 @@ import express from 'express';
 import databaseService from '../services/databaseService.js';
 import { AIInterviewerService } from '../services/aiInterviewerService.js';
 import { QuestionService } from '../services/questionService.js';
+import textToSpeechService from '../services/textToSpeechService.js';
+import openaiTtsService from '../services/openaiTtsService.js';
+import voicevoxService from '../services/voicevoxService.js';
 import { Language, InterviewStatus } from '../../src/types/interview.js';
 import multer from 'multer';
 import path from 'path';
@@ -36,6 +39,87 @@ const upload = multer({
 });
 
 const router = express.Router();
+
+// テキストを音声に変換するエンドポイント（VOICEVOX優先）
+router.post('/synthesize-speech', async (req, res) => {
+  try {
+    const { text, languageCode = 'ja' } = req.body;
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_TEXT',
+        message: 'テキストが必要です'
+      });
+    }
+
+    let audioBase64: string | null = null;
+    let audioFormat = 'wav';
+
+    // VOICEVOXを常に優先使用（設定されている場合）
+    const voicevoxUrl = process.env.VOICEVOX_URL;
+    if (voicevoxUrl && voicevoxUrl !== 'http://localhost:50021') {
+      // 本番環境ではVOICEVOXを常に使用
+      console.log('Using VOICEVOX for speech synthesis (production mode)...');
+      try {
+        const speakerId = await voicevoxService.getBestSpeakerId();
+        audioBase64 = await voicevoxService.synthesizeSpeechAsBase64(text, speakerId);
+        audioFormat = 'wav';
+        
+        if (!audioBase64) {
+          console.warn('VOICEVOX synthesis returned null, retrying with fallback...');
+        }
+      } catch (error) {
+        console.error('VOICEVOX synthesis error:', error);
+      }
+    } else {
+      // ローカル開発時は利用可能性をチェック
+      const isVoicevoxAvailable = await voicevoxService.isAvailable();
+      if (isVoicevoxAvailable) {
+        console.log('Using VOICEVOX for speech synthesis (local mode)...');
+        const speakerId = await voicevoxService.getBestSpeakerId();
+        audioBase64 = await voicevoxService.synthesizeSpeechAsBase64(text, speakerId);
+        audioFormat = 'wav';
+      }
+    }
+
+    // フォールバック: VOICEVOXが失敗した場合のみ他のサービスを使用
+    if (!audioBase64) {
+      console.log('VOICEVOX unavailable, trying OpenAI TTS...');
+      audioBase64 = await openaiTtsService.synthesizeSpeechAsBase64(text, languageCode);
+      audioFormat = 'mp3';
+    }
+
+    if (!audioBase64) {
+      console.log('OpenAI TTS failed, trying Google Cloud TTS...');
+      audioBase64 = await textToSpeechService.synthesizeSpeechAsBase64(text, 'ja-JP');
+      audioFormat = 'mp3';
+    }
+
+    if (audioBase64) {
+      res.json({
+        success: true,
+        audio: audioBase64,
+        format: audioFormat
+      });
+    } else {
+      // フォールバック: クライアント側でWeb Speech APIを使用
+      res.json({
+        success: false,
+        fallback: true,
+        message: 'Text-to-Speech service unavailable, please use browser speech synthesis'
+      });
+    }
+  } catch (error) {
+    console.error('Text-to-Speech synthesis error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'SYNTHESIS_ERROR',
+      message: '音声合成に失敗しました',
+      fallback: true
+    });
+  }
+});
 
 // 録音アップロードエンドポイント
 router.post('/upload-recording', upload.single('file'), async (req, res) => {
