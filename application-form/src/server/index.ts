@@ -911,11 +911,31 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             CASE 
               WHEN EXISTS (
                 SELECT 1 FROM information_schema.tables 
-                WHERE table_name = 'interview_recordings'
+                WHERE table_schema = 'public' AND table_name = 'interview_recordings'
+              ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'interview_recordings' 
+                AND column_name = 'user_id'
               ) THEN (
                 SELECT COUNT(*) > 0
                 FROM interview_recordings ir
                 WHERE ir.user_id = u.id::text
+                  AND ir.recording_type = 'audio'
+                LIMIT 1
+              )
+              WHEN EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = 'interview_recordings'
+              ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'interview_recordings' 
+                AND column_name = 'applicant_id'
+              ) THEN (
+                SELECT COUNT(*) > 0
+                FROM interview_recordings ir
+                INNER JOIN interview_sessions isess ON ir.session_id = isess.id
+                INNER JOIN interview_applicants ia ON isess.applicant_id = ia.id
+                WHERE ia.email = u.email
                   AND ir.recording_type = 'audio'
                 LIMIT 1
               )
@@ -1101,10 +1121,10 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             CASE 
               WHEN EXISTS (
                 SELECT 1 FROM information_schema.tables 
-                WHERE table_name = 'interview_recordings'
+                WHERE table_schema = 'public' AND table_name = 'interview_recordings'
               ) AND EXISTS (
                 SELECT 1 FROM information_schema.columns 
-                WHERE table_name = 'interview_recordings' 
+                WHERE table_schema = 'public' AND table_name = 'interview_recordings' 
                 AND column_name = 'user_id'
               ) THEN (
                 SELECT COUNT(*) > 0
@@ -1115,10 +1135,10 @@ app.get('/api/admin/jobseekers', async (req, res) => {
               )
               WHEN EXISTS (
                 SELECT 1 FROM information_schema.tables 
-                WHERE table_name = 'interview_recordings'
+                WHERE table_schema = 'public' AND table_name = 'interview_recordings'
               ) AND EXISTS (
                 SELECT 1 FROM information_schema.columns 
-                WHERE table_name = 'interview_recordings' 
+                WHERE table_schema = 'public' AND table_name = 'interview_recordings' 
                 AND column_name = 'applicant_id'
               ) THEN (
                 SELECT COUNT(*) > 0

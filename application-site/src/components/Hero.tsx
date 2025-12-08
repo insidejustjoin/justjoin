@@ -50,7 +50,7 @@ export const Hero: React.FC = () => {
 
 
   return (
-    <section className="relative min-h-screen flex items-center overflow-hidden bg-white">
+    <section className="relative min-h-screen flex items-start lg:items-center overflow-hidden bg-white">
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-[0.02]">
         <div className="absolute inset-0" style={{
@@ -59,18 +59,18 @@ export const Hero: React.FC = () => {
         }} />
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-20 lg:py-32">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-24 pb-8 lg:py-32">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Right Column - Photo Slider (Mobile: First, Desktop: Second) */}
           <motion.div
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="relative order-1 lg:order-2"
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="relative order-1 lg:order-2 w-full"
           >
             <div className="relative">
               {/* Photo Slider - 横長レイアウト（スマホ） */}
-              <div className="relative rounded-2xl overflow-hidden shadow-2xl h-[300px] sm:h-[400px] lg:h-[600px]">
+              <div className="relative rounded-2xl overflow-hidden shadow-2xl h-[250px] sm:h-[350px] lg:h-[600px] w-full">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentImageIndex}
@@ -143,8 +143,8 @@ export const Hero: React.FC = () => {
           <motion.div
             initial={{ opacity: 0, x: -50 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-            className="order-2 lg:order-1"
+            transition={{ duration: 0.8, delay: 0.4 }}
+            className="order-2 lg:order-1 w-full"
           >
 
             {/* Main Heading */}

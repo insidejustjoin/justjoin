@@ -128,7 +128,7 @@ export const Header: React.FC = () => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="md:hidden mt-4 pb-4 border-t border-gray-200"
+            className="md:hidden mt-4 pb-4 border-t border-gray-200 bg-white"
           >
             <div className="flex flex-col gap-4 pt-4">
               {/* Language Selector */}

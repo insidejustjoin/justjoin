@@ -662,8 +662,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         
         // 音声は日本語固定（回答は日本語で行うため）
         utterance.lang = 'ja-JP';
-        utterance.rate = 0.9; // 聞き取りやすい速度（0.85より少し速く）
-        utterance.pitch = 1.05; // 少し高めのピッチでより自然に
+        utterance.rate = 0.85; // より聞き取りやすい速度に調整
+        utterance.pitch = 1.0; // 自然なピッチ
         utterance.volume = 1.0; // 最大音量
         
         // より自然な日本語女性音声を選択（優先順位: 女性音声を最優先）
@@ -1005,56 +1005,37 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* ヘッダー */}
-      <div className="bg-white shadow-lg border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      {/* シンプルなヘッダー */}
+      <div className="bg-white/90 backdrop-blur-sm shadow-sm border-b border-gray-200 sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
                   <MessageCircleIcon className="h-5 w-5 text-white" />
                 </div>
-                <span className="font-semibold text-gray-900 text-lg">{t.aiInterviewer}</span>
+                <span className="font-semibold text-gray-900">{t.aiInterviewer}</span>
               </div>
-              <div className="flex items-center space-x-4 text-sm">
-                <div className="flex items-center space-x-2 text-gray-600">
+              <div className="hidden sm:flex items-center gap-4 text-sm text-gray-600">
+                <div className="flex items-center gap-1.5">
                   <ClockIcon className="h-4 w-4" />
-                  <span className="font-medium">{formatTime(elapsedTime)}</span>
+                  <span>{formatTime(elapsedTime)}</span>
                 </div>
-                <div className="flex items-center space-x-2 text-gray-600">
+                <div className="flex items-center gap-1.5">
                   <BarChart3Icon className="h-4 w-4" />
-                  <span className="font-medium">{progress.current}/{progress.total} ({progress.percentage}%)</span>
-                </div>
-                {/* 録音品質インジケーター */}
-                {/* 面接品質インジケーター */}
-                <div className="flex items-center space-x-3 ml-4">
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${
-                      networkStatus === 'good' ? 'bg-green-500' : 
-                      networkStatus === 'fair' ? 'bg-yellow-500' : 'bg-red-500'
-                    }`} />
-                    <span className="text-xs text-gray-500">ネット</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${
-                      recordingQuality === 'high' ? 'bg-green-500' : 
-                      recordingQuality === 'medium' ? 'bg-yellow-500' : 'bg-red-500'
-                    }`} />
-                    <span className="text-xs text-gray-500">品質</span>
-                  </div>
+                  <span>{progress.current}/{progress.total}</span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
-              {/* 言語切り替えボタン（ヘッダー） */}
+            <div className="flex items-center gap-2">
               <LanguageToggle 
                 language={displayLanguage} 
                 onLanguageChange={setDisplayLanguage}
               />
               <button
                 onClick={toggleMute}
-                className={`p-3 rounded-full transition-all duration-200 ${
+                className={`p-2 rounded-lg transition-colors ${
                   isMuted 
                     ? 'bg-red-100 text-red-600 hover:bg-red-200' 
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1063,194 +1044,179 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
               >
                 {isMuted ? <VolumeXIcon className="h-5 w-5" /> : <Volume2Icon className="h-5 w-5" />}
               </button>
-              <button
-                onClick={endInterview}
-                className="p-3 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-all duration-200"
-                title={t.endInterview}
-              >
-                <XIcon className="h-5 w-5" />
-              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* メインコンテンツ */}
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="bg-white rounded-xl shadow-xl p-8 mb-8">
-          {/* AI面接官のメッセージ */}
-          <div className="mb-8">
-            <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0">
-                {/* アバター画像 */}
-                <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg relative">
-                  {!avatarError ? (
-                    <img 
-                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name || 'interviewer')}&backgroundColor=b6e3ff&clothingColor=262e33&mouth=smile&eyes=happy`}
-                      alt="AI面接官"
-                      className="w-full h-full object-cover"
-                      onError={() => {
-                        console.error('アバター画像の読み込みに失敗');
-                        setAvatarError(true);
-                      }}
-                      onLoad={() => {
-                        console.log('アバター画像の読み込み成功');
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
-                      <MessageCircleIcon className="h-8 w-8 text-white" />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex-1">
-                <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200">
-                  <p className="text-gray-800 whitespace-pre-wrap text-lg leading-relaxed">
-                    {displayLanguage === 'ja' ? aiMessage : aiMessage}
-                  </p>
-                </div>
-              </div>
-            </div>
+      {/* メインコンテンツ - シンプルで使いやすいレイアウト */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* 進捗バー */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+            <span>{t.progress}</span>
+            <span>{progress.current}/{progress.total} ({progress.percentage}%)</span>
           </div>
-
-          {/* 現在の質問 */}
-          {currentQuestion && (
-            <div className="mb-8">
-              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-yellow-400 p-6 rounded-r-2xl">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-yellow-800 text-lg">
-                    {displayLanguage === 'ja' ? '質問:' : 'Question:'}
-                  </h3>
-                  {/* 言語切り替えボタン */}
-                  <LanguageToggle 
-                    language={displayLanguage} 
-                    onLanguageChange={setDisplayLanguage}
-                  />
-                </div>
-                <p className="text-yellow-700 text-lg leading-relaxed mb-3">
-                  {typeof currentQuestion.text === 'string' 
-                    ? currentQuestion.text
-                    : currentQuestion.text[displayLanguage] || currentQuestion.text.ja || currentQuestion.text.en || ''}
-                </p>
-                <div className="mt-4 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
-                  <p className="text-sm text-yellow-800 font-medium">
-                    {displayLanguage === 'ja' 
-                      ? '※回答は日本語でお願いします' 
-                      : displayLanguage === 'en'
-                      ? '※Please answer in Japanese'
-                      : displayLanguage === 'ru'
-                      ? '※Пожалуйста, отвечайте на японском языке'
-                      : '※Iltimos, yapon tilida javob bering'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 録音エリア */}
-          <div className="text-center">
-            {isPlaying ? (
-              <div className="space-y-6">
-                <div className="flex justify-center">
-                  <div className="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center animate-pulse shadow-lg">
-                    <Volume2Icon className="h-12 w-12 text-white" />
-                  </div>
-                </div>
-                <p className="text-gray-600 text-lg font-medium">{t.thinking}</p>
-              </div>
-            ) : isSubmitting ? (
-              <div className="space-y-6">
-                <div className="flex justify-center">
-                  <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
-                </div>
-                <p className="text-gray-600 text-lg font-medium">{t.processing}</p>
-              </div>
-            ) : isRecording ? (
-              <div className="space-y-6">
-                <div className="flex justify-center">
-                  <button
-                    onClick={toggleRecording}
-                    className="w-24 h-24 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-all duration-200 shadow-lg animate-pulse"
-                  >
-                    <MicOffIcon className="h-12 w-12 text-white" />
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-red-600 text-lg font-medium">{t.recordingInProgress}</p>
-                  <p className="text-gray-500">{formatTime(recordingTime)}</p>
-                  <p className="text-sm text-gray-600">{t.clickToStop}</p>
-                </div>
-                {transcript && (
-                  <div className="bg-gray-50 rounded-xl p-4 max-w-2xl mx-auto space-y-3">
-                    <p className="text-sm text-gray-700">{transcript}</p>
-                    <button
-                      onClick={() => {
-                        if (transcript.trim()) {
-                          stopRecording();
-                          setTimeout(() => {
-                            handleVoiceAnswer(transcript.trim());
-                          }, 300);
-                        }
-                      }}
-                      disabled={isSubmitting || !transcript.trim()}
-                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isSubmitting ? t.processing : (displayLanguage === 'ja' ? '回答を送信' : 'Submit Answer')}
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <button
-                  onClick={toggleRecording}
-                  disabled={!canStartRecording || isSubmitting || isPlaying}
-                  className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg ${
-                    canStartRecording && !isSubmitting && !isPlaying
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
-                      : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                  }`}
-                >
-                  <MicIcon className="h-12 w-12" />
-                </button>
-                <div className="space-y-2">
-                  <p className="text-gray-600 text-lg font-medium">
-                    {isPlaying 
-                      ? (displayLanguage === 'ja' ? '音声再生中...' : displayLanguage === 'en' ? 'Playing audio...' : displayLanguage === 'ru' ? 'Воспроизведение аудио...' : 'Audio ijro etilmoqda...')
-                      : isListening 
-                        ? (displayLanguage === 'ja' ? '音声認識中...' : displayLanguage === 'en' ? 'Listening...' : displayLanguage === 'ru' ? 'Распознавание речи...' : 'Ovozni tanib olish...')
-                        : isRecording
-                          ? (displayLanguage === 'ja' ? '録音中...' : displayLanguage === 'en' ? 'Recording...' : displayLanguage === 'ru' ? 'Запись...' : 'Yozib olinmoqda...')
-                          : canStartRecording 
-                            ? t.speakNow 
-                            : t.thinking}
-                  </p>
-                  {isListening && (
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                    </div>
-                  )}
-                  {canStartRecording && !isPlaying && !isRecording && !isListening && (
-                    <p className="text-sm text-gray-500">{t.clickToStart}</p>
-                  )}
-                  {isPlaying && (
-                    <p className="text-sm text-blue-600">
-                      {displayLanguage === 'ja' ? '問題文の読み上げが終わるまでお待ちください' :
-                       displayLanguage === 'en' ? 'Please wait for the question to finish reading' :
-                       displayLanguage === 'ru' ? 'Пожалуйста, дождитесь окончания чтения вопроса' :
-                       'Savol o\'qilishi tugaguncha kuting'}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+          <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+            <div 
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2.5 rounded-full transition-all duration-500"
+              style={{ width: `${progress.percentage}%` }}
+            />
           </div>
         </div>
 
-        {/* 録音に関する注意表示（カメラは使用しない） */}
+        {/* 質問カード - 大きく目立つ */}
+        {currentQuestion && (
+          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 mb-6 border border-gray-100">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                  {progress.current}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {displayLanguage === 'ja' ? '質問' : displayLanguage === 'en' ? 'Question' : displayLanguage === 'ru' ? 'Вопрос' : 'Savol'} {progress.current}
+                  </h2>
+                  <p className="text-sm text-gray-500">{displayLanguage === 'ja' ? '全' : ''}{progress.total}{displayLanguage === 'ja' ? '問中' : ''}</p>
+                </div>
+              </div>
+              {!isPlaying && (
+                <button
+                  onClick={() => {
+                    if (currentQuestion) {
+                      const questionText = typeof currentQuestion.text === 'string' 
+                        ? currentQuestion.text 
+                        : currentQuestion.text.ja || currentQuestion.text.en || '';
+                      playAIMessage(questionText);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                >
+                  <Volume2Icon className="h-4 w-4" />
+                  {displayLanguage === 'ja' ? '質問を再生' : displayLanguage === 'en' ? 'Play Question' : displayLanguage === 'ru' ? 'Воспроизвести вопрос' : 'Savolni ijro etish'}
+                </button>
+              )}
+            </div>
+            
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border-l-4 border-blue-500 mb-4">
+              <p className="text-xl text-gray-800 leading-relaxed">
+                {typeof currentQuestion.text === 'string' 
+                  ? currentQuestion.text
+                  : currentQuestion.text[displayLanguage] || currentQuestion.text.ja || currentQuestion.text.en || ''}
+              </p>
+            </div>
+
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800 font-medium flex items-center gap-2">
+                <span>⚠️</span>
+                {displayLanguage === 'ja' 
+                  ? '回答は日本語でお願いします' 
+                  : displayLanguage === 'en'
+                  ? 'Please answer in Japanese'
+                  : displayLanguage === 'ru'
+                  ? 'Пожалуйста, отвечайте на японском языке'
+                  : 'Iltimos, yapon tilida javob bering'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 録音エリア - 大きくて分かりやすい */}
+        <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-gray-100">
+          {isPlaying ? (
+            <div className="text-center py-12">
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <Volume2Icon className="h-10 w-10 text-blue-600" />
+              </div>
+              <p className="text-gray-600 font-medium text-lg">{t.thinking}</p>
+              <p className="text-sm text-gray-500 mt-2">
+                {displayLanguage === 'ja' ? '質問の読み上げが終わるまでお待ちください' :
+                 displayLanguage === 'en' ? 'Please wait for the question to finish reading' :
+                 displayLanguage === 'ru' ? 'Пожалуйста, дождитесь окончания чтения вопроса' :
+                 'Savol o\'qilishi tugaguncha kuting'}
+              </p>
+            </div>
+          ) : isSubmitting ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
+              <p className="text-gray-600 font-medium text-lg">{t.processing}</p>
+            </div>
+          ) : isRecording ? (
+            <div className="text-center py-8">
+              <button
+                onClick={toggleRecording}
+                className="w-32 h-32 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl hover:bg-red-600 transition-all duration-200 animate-pulse"
+              >
+                <MicOffIcon className="h-16 w-16 text-white" />
+              </button>
+              <div className="space-y-2">
+                <p className="text-xl font-bold text-red-600">{t.recordingInProgress}</p>
+                <p className="text-3xl font-mono text-gray-700 font-bold">{formatTime(recordingTime)}</p>
+                <p className="text-sm text-gray-500">{t.clickToStop}</p>
+              </div>
+              {transcript && (
+                <div className="mt-6 bg-gray-50 rounded-xl p-6 max-w-2xl mx-auto">
+                  <p className="text-gray-700 text-left mb-4 leading-relaxed text-base">{transcript}</p>
+                  <button
+                    onClick={() => {
+                      if (transcript.trim()) {
+                        stopRecording();
+                        setTimeout(() => {
+                          handleVoiceAnswer(transcript.trim());
+                        }, 300);
+                      }
+                    }}
+                    disabled={isSubmitting || !transcript.trim()}
+                    className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                  >
+                    {isSubmitting ? t.processing : (displayLanguage === 'ja' ? '回答を送信' : 'Submit Answer')}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <button
+                onClick={toggleRecording}
+                disabled={!canStartRecording || isSubmitting || isPlaying}
+                className={`w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl transition-all duration-200 ${
+                  canStartRecording && !isSubmitting && !isPlaying
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 active:scale-95'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <MicIcon className="h-16 w-16" />
+              </button>
+              <div className="space-y-2">
+                <p className="text-lg font-semibold text-gray-700">
+                  {canStartRecording ? t.speakNow : t.thinking}
+                </p>
+                {canStartRecording && (
+                  <p className="text-sm text-gray-500">{t.clickToStart}</p>
+                )}
+              </div>
+              {isListening && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse"></div>
+                  <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 終了ボタン */}
+        <div className="mt-6 text-center">
+          <button
+            onClick={endInterview}
+            className="px-6 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+          >
+            {t.endInterview}
+          </button>
+        </div>
+
+        {/* 録音に関する注意表示 */}
         <div className="mt-4 text-center text-xs text-gray-500">
           {displayLanguage === 'ja' 
             ? 'この面接ではカメラ映像は保存されず、音声のみが録音されます。回答は日本語でお願いします。'
