@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS interview_recordings (
     id SERIAL PRIMARY KEY,
     session_id VARCHAR(36) REFERENCES interview_sessions(id) ON DELETE CASCADE,
     applicant_id VARCHAR(36) REFERENCES interview_applicants(id) ON DELETE CASCADE,
+    user_id INTEGER, -- 求職者システムのuser_id（オプション、後方互換性のため）
     recording_url TEXT NOT NULL,
     recording_type VARCHAR(20) DEFAULT 'video', -- video, audio
     file_size BIGINT, -- ファイルサイズ（バイト）
@@ -124,6 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_interview_attempts_attempt_count ON interview_att
 
 CREATE INDEX IF NOT EXISTS idx_interview_recordings_session_id ON interview_recordings(session_id);
 CREATE INDEX IF NOT EXISTS idx_interview_recordings_applicant_id ON interview_recordings(applicant_id);
+CREATE INDEX IF NOT EXISTS idx_interview_recordings_user_id ON interview_recordings(user_id);
 
 -- トリガーの作成（updated_at自動更新）
 CREATE OR REPLACE FUNCTION update_updated_at_column()

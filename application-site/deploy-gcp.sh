@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # GCP静的ホスティングデプロイスクリプト - justjoin.jp用
-# Cloud Storage + Cloud CDNを使用
+# Cloud Storage + Cloud Load Balancer + Cloud CDNを使用
 
 set -e
 
@@ -28,9 +28,11 @@ if [ ! -d "dist" ]; then
   exit 1
 fi
 
-# バケット名
+# バケット名とLoad Balancer設定
 BUCKET_NAME="justjoin-static-site"
 BUCKET_URL="gs://${BUCKET_NAME}"
+BACKEND_BUCKET_NAME="justjoin-static-backend"
+URL_MAP_NAME="justjoin-static-url-map"
 
 # バケットの存在確認と作成
 echo "🪣 バケット確認中..."
@@ -52,13 +54,41 @@ echo "📤 ファイルをアップロード中..."
 cp public/favicon.svg dist/ 2>/dev/null || true
 gsutil -m rsync -r -d dist/ "${BUCKET_URL}/"
 
-# Cloud CDNの設定（オプション）
-echo "🌐 Cloud CDNの設定を確認中..."
-# CDNの設定は手動で行う必要がある場合があります
+# Cloud Load Balancerのバックエンドバケット設定
+echo "🌐 Cloud Load Balancerの設定を確認中..."
+if gcloud compute backend-buckets describe "${BACKEND_BUCKET_NAME}" --global &>/dev/null; then
+  echo "✅ バックエンドバケットは既に存在します"
+else
+  echo "📦 バックエンドバケットを作成中..."
+  gcloud compute backend-buckets create "${BACKEND_BUCKET_NAME}" \
+    --gcs-bucket-name="${BUCKET_NAME}" 2>/dev/null || echo "⚠️  バックエンドバケットの作成に失敗しました（既に存在する可能性があります）"
+  echo "✅ バックエンドバケットの設定を完了しました"
+fi
+
+# URLマップの確認と更新
+if gcloud compute url-maps describe "${URL_MAP_NAME}" --global &>/dev/null; then
+  echo "🔄 URLマップを更新中..."
+  gcloud compute url-maps set-default-service "${URL_MAP_NAME}" \
+    --default-backend-bucket="${BACKEND_BUCKET_NAME}" \
+    --global
+else
+  echo "📦 URLマップを作成中..."
+  gcloud compute url-maps create "${URL_MAP_NAME}" \
+    --default-backend-bucket="${BACKEND_BUCKET_NAME}" \
+    --global
+  echo "✅ URLマップを作成しました"
+fi
+
+# CDNキャッシュの無効化
+echo "🔄 CDNキャッシュを無効化中..."
+gcloud compute url-maps invalidate-cdn-cache "${URL_MAP_NAME}" \
+  --path="/*" \
+  --global 2>/dev/null || echo "ℹ️  キャッシュ無効化はスキップされました（初回デプロイ時は正常）"
 
 echo "✅ デプロイ完了！"
 echo "🌐 サイトURL: https://justjoin.jp"
 echo "📊 バケット: ${BUCKET_URL}"
+echo "📊 バックエンドバケット: ${BACKEND_BUCKET_NAME}"
 echo ""
-echo "⚠️  注意: ドメイン設定とCloud CDNの設定が完了していることを確認してください"
+echo "⚠️  注意: DNS設定で 'justjoin.jp' が正しく設定されていることを確認してください"
 

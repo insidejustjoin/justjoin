@@ -74,10 +74,32 @@ export const Footer: React.FC = () => {
           </div>
         </div>
 
-        <div className="border-t border-gray-800 pt-8 text-center">
-          <p className="text-gray-400 text-sm">
-            © {new Date().getFullYear()} {t('footer.company')}. {t('footer.rights')}
-          </p>
+        <div className="border-t border-gray-800 pt-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex flex-wrap gap-6 text-sm text-gray-400">
+              <a
+                href="https://justjoin.jp/privacy-policy"
+                className="hover:text-white transition-colors"
+              >
+                プライバシーポリシー
+              </a>
+              <a
+                href="https://justjoin.jp/terms-of-service"
+                className="hover:text-white transition-colors"
+              >
+                利用規約
+              </a>
+              <a
+                href="https://justjoin.jp/commercial-transaction"
+                className="hover:text-white transition-colors"
+              >
+                特定商取引法に基づく表記
+              </a>
+            </div>
+            <p className="text-gray-400 text-sm">
+              © {new Date().getFullYear()} {t('footer.company')}. {t('footer.rights')}
+            </p>
+          </div>
         </div>
       </div>
     </footer>

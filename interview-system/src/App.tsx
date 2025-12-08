@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Language } from './types/interview';
+import { LanguageToggle } from './components/LanguageToggle';
 import './App.css';
 
 type AppState = 'consent' | 'preparation' | 'checks' | 'interview' | 'completed' | 'error';
@@ -954,20 +955,7 @@ function App() {
               <h3 className="text-xl font-semibold text-gray-900">
                 {t.error.title}
             </h3>
-              <button
-                onClick={toggleLanguage}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                  language === 'ja' 
-                    ? 'bg-red-600 text-white' 
-                    : language === 'en'
-                    ? 'bg-blue-600 text-white'
-                    : language === 'ru'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-green-600 text-white'
-                }`}
-              >
-                {getLanguageName(language)}
-              </button>
+              <LanguageToggle language={language} onLanguageChange={setLanguage} />
             </div>
             <p className="text-gray-600 mb-6 leading-relaxed">
               {error}
@@ -1022,16 +1010,7 @@ function App() {
             <div className="bg-white rounded-xl shadow-xl p-8">
               <div className="flex items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold text-gray-900">{t.consent.title}</h1>
-                <button
-                  onClick={toggleLanguage}
-                  className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                    language === 'ja' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {getLanguageName(language)}
-                </button>
+                <LanguageToggle language={language} onLanguageChange={setLanguage} />
               </div>
               <p className="text-gray-600 mb-6">{t.consent.description}</p>
               
@@ -1052,20 +1031,7 @@ function App() {
             <div className="bg-white rounded-xl shadow-xl p-8">
               <div className="flex items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold text-gray-900">{t.preparation.title}</h1>
-                <button
-                  onClick={toggleLanguage}
-                  className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                    language === 'ja' 
-                      ? 'bg-green-600 text-white' 
-                      : language === 'en'
-                      ? 'bg-blue-600 text-white'
-                      : language === 'ru'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-orange-600 text-white'
-                  }`}
-                >
-                  {getLanguageName(language)}
-                </button>
+                <LanguageToggle language={language} onLanguageChange={setLanguage} />
               </div>
               <p className="text-gray-600 mb-6">
                 {t.preparation.jobSeeker}: {jobSeekerInfo?.name || t.preparation.jobSeeker}<br/>
@@ -1099,20 +1065,7 @@ function App() {
             <div className="bg-white rounded-xl shadow-xl p-8">
               <div className="flex items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold text-gray-900 text-center flex-1">{t.checks.title}</h1>
-                <button
-                  onClick={toggleLanguage}
-                  className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                    language === 'ja' 
-                      ? 'bg-purple-600 text-white' 
-                      : language === 'en'
-                      ? 'bg-blue-600 text-white'
-                      : language === 'ru'
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-teal-600 text-white'
-                  }`}
-                >
-                  {getLanguageName(language)}
-                </button>
+                <LanguageToggle language={language} onLanguageChange={setLanguage} />
               </div>
               <p className="text-gray-600 mb-6 text-center">{t.checks.description}</p>
               
@@ -1180,20 +1133,7 @@ function App() {
                 <div>
                   <div className="flex items-center gap-3">
                     <h1 className="text-2xl font-bold text-gray-900">{t.interview.title}</h1>
-                    <button
-                      onClick={toggleLanguage}
-                      className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                        language === 'ja' 
-                          ? 'bg-purple-600 text-white' 
-                          : language === 'en'
-                          ? 'bg-blue-600 text-white'
-                          : language === 'ru'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-teal-600 text-white'
-                      }`}
-                    >
-                      {getLanguageName(language)}
-                    </button>
+                    <LanguageToggle language={language} onLanguageChange={setLanguage} />
                   </div>
                   <p className="text-gray-600">{t.interview.question} {currentQuestionIndex + 1} / {questions.length}</p>
                 </div>
@@ -1389,20 +1329,7 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                  <button
-                    onClick={toggleLanguage}
-                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                      language === 'ja' 
-                        ? 'bg-green-600 text-white' 
-                        : language === 'en'
-                        ? 'bg-blue-600 text-white'
-                        : language === 'ru'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-orange-600 text-white'
-                    }`}
-                  >
-                    {getLanguageName(language)}
-                  </button>
+                  <LanguageToggle language={language} onLanguageChange={setLanguage} />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">{t.completed.title}</h1>
                 <p className="text-gray-600">{t.completed.message}</p>

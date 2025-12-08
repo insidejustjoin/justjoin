@@ -34,13 +34,12 @@ declare global {
   }
 }
 
-const emailVerificationSchema = z.object({
-  email: z.string().email('有効なメールアドレスを入力してください'),
-  firstName: z.string().min(1, '名を入力してください'),
-  lastName: z.string().min(1, '姓を入力してください')
-});
-
-type EmailVerificationFormData = z.infer<typeof emailVerificationSchema>;
+// EmailVerificationFormData の型定義
+type EmailVerificationFormData = {
+  email: string;
+  firstName: string;
+  lastName: string;
+};
 
 interface EmailVerificationFormProps {
   onSuccess?: () => void;
@@ -54,6 +53,13 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
   const [userEmail, setUserEmail] = useState('');
   const [userFirstName, setUserFirstName] = useState('');
   const [userLastName, setUserLastName] = useState('');
+
+  // 翻訳を使用したスキーマを動的に生成
+  const emailVerificationSchema = z.object({
+    email: z.string().email(t('register.emailVerification.validation.email')),
+    firstName: z.string().min(1, t('register.emailVerification.validation.firstName')),
+    lastName: z.string().min(1, t('register.emailVerification.validation.lastName'))
+  });
 
   const form = useForm<EmailVerificationFormData>({
     resolver: zodResolver(emailVerificationSchema)
@@ -112,13 +118,13 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
           onSuccess();
         }
       } else {
-        setMessage({ type: 'error', text: result.message || 'エラーが発生しました' });
+        setMessage({ type: 'error', text: result.message || t('register.emailVerification.error') });
       }
     } catch (error) {
       console.error('メール本人確認エラー:', error);
       setMessage({
         type: 'error',
-        text: 'メール送信中にエラーが発生しました。しばらく時間をおいて再度お試しください。'
+        text: t('register.emailVerification.sendError')
       });
     } finally {
       setIsLoading(false);
@@ -149,10 +155,10 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
           <Mail className="w-6 h-6 text-blue-600" />
         </div>
         <CardTitle className="text-2xl font-bold">
-          メールアドレス確認
+          {t('register.emailVerification.title')}
         </CardTitle>
         <CardDescription>
-          メールアドレスとお名前を入力してください。確認メールを送信します。
+          {t('register.emailVerification.description')}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -160,13 +166,13 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
           <div className="space-y-2">
             <Label htmlFor="email">
               <Mail className="inline-block h-4 w-4 mr-2" />
-              メールアドレス / Email Address *
+              {t('register.emailVerification.email')} *
             </Label>
             <Input
               id="email"
               type="email"
               {...form.register('email')}
-              placeholder="example@email.com"
+              placeholder={t('register.emailVerification.emailPlaceholder')}
               required
               disabled={isLoading}
             />
@@ -178,13 +184,13 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
           <div className="space-y-2">
             <Label htmlFor="firstName">
               <User className="inline-block h-4 w-4 mr-2" />
-              名 / First Name *
+              {t('register.emailVerification.firstName')} *
             </Label>
             <Input
               id="firstName"
               type="text"
               {...form.register('firstName')}
-              placeholder="太郎"
+              placeholder={t('register.emailVerification.firstNamePlaceholder')}
               required
               disabled={isLoading}
             />
@@ -196,13 +202,13 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
           <div className="space-y-2">
             <Label htmlFor="lastName">
               <User className="inline-block h-4 w-4 mr-2" />
-              姓 / Last Name *
+              {t('register.emailVerification.lastName')} *
             </Label>
             <Input
               id="lastName"
               type="text"
               {...form.register('lastName')}
-              placeholder="田中"
+              placeholder={t('register.emailVerification.lastNamePlaceholder')}
               required
               disabled={isLoading}
             />
@@ -229,11 +235,11 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
             className="w-full"
             disabled={isLoading}
           >
-            {isLoading ? '送信中...' : '確認メールを送信'}
+            {isLoading ? t('register.emailVerification.sending') : t('register.emailVerification.sendButton')}
           </Button>
 
           <p className="text-xs text-gray-500 text-center">
-            ※ 確認メールは5分間有効です
+            {t('register.emailVerification.note')}
           </p>
         </form>
       </CardContent>

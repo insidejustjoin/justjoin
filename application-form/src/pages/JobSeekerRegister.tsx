@@ -1,8 +1,13 @@
 import React, { useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { EmailVerificationForm } from '@/components/EmailVerificationForm';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { Link } from 'react-router-dom';
 
 const JobSeekerRegister: React.FC = () => {
+  const { t } = useLanguage();
+  
   // HubSpotコードを埋め込み
   useEffect(() => {
     const script = document.createElement('script');
@@ -32,18 +37,38 @@ const JobSeekerRegister: React.FC = () => {
   return (
     <>
       <Helmet>
-        <title>求職者登録 - JustJoin</title>
-        <meta name="description" content="JustJoinで求職者として登録を行い、キャリアの次のステップを始めましょう。" />
+        <title>{t('register.title')} - JustJoin</title>
+        <meta name="description" content={t('register.description')} />
       </Helmet>
+      
+      {/* ヘッダー */}
+      <header className="bg-white shadow-sm border-b sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <Link to="/" className="flex items-center">
+              <span className="text-xl font-bold text-blue-600">justjoin</span>
+            </Link>
+            <div className="flex items-center space-x-4">
+              <Link 
+                to="/jobseeker" 
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                {t('common.login')}
+              </Link>
+              <LanguageToggle />
+            </div>
+          </div>
+        </div>
+      </header>
       
       <div className="min-h-screen bg-gray-50 py-12 px-4">
         <div className="max-w-md mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              求職者新規登録 / Job Seeker Registration
+              {t('register.title')}
             </h1>
             <p className="text-gray-600">
-              メールアドレスとお名前を入力して登録を開始してください
+              {t('register.description')}
             </p>
           </div>
           

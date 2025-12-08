@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useLanguage, type Language } from '../contexts/LanguageContext';
-import { Menu, X, Globe } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { language, setLanguage, t } = useLanguage();
@@ -17,11 +17,11 @@ export const Header: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const languages: { code: Language; name: string }[] = [
-    { code: 'ja', name: '日本語' },
-    { code: 'en', name: 'English' },
-    { code: 'ru', name: 'Русский' },
-    { code: 'uz', name: "O'zbek" },
+  const languages: { code: Language; name: string; flag: string }[] = [
+    { code: 'ja', name: '日本語', flag: '🇯🇵' },
+    { code: 'en', name: 'English', flag: '🇺🇸' },
+    { code: 'ru', name: 'Русский', flag: '🇷🇺' },
+    { code: 'uz', name: "O'zbek", flag: '🇺🇿' },
   ];
 
 
@@ -31,7 +31,7 @@ export const Header: React.FC = () => {
       animate={{ y: 0 }}
       transition={{ duration: 0.5 }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled
+        isScrolled || isMobileMenuOpen
           ? 'bg-white shadow-md py-3'
           : 'bg-transparent py-6'
       }`}
@@ -48,7 +48,7 @@ export const Header: React.FC = () => {
             <img
               src="/logo.svg"
               alt="justjoin"
-              className="h-10 sm:h-12"
+              className="h-7 sm:h-10 md:h-12"
             />
           </motion.a>
 
@@ -60,7 +60,9 @@ export const Header: React.FC = () => {
                 onClick={() => setIsLanguageMenuOpen(!isLanguageMenuOpen)}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                <Globe className="h-4 w-4" />
+                <span className="text-lg">
+                  {languages.find(l => l.code === language)?.flag}
+                </span>
                 <span className="text-sm font-medium">
                   {languages.find(l => l.code === language)?.name}
                 </span>
@@ -74,11 +76,12 @@ export const Header: React.FC = () => {
                         setLanguage(lang.code);
                         setIsLanguageMenuOpen(false);
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition-colors ${
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition-colors flex items-center gap-2 ${
                         language === lang.code ? 'bg-primary text-white hover:bg-primary-sub' : ''
                       }`}
                     >
-                      {lang.name}
+                      <span className="text-base">{lang.flag}</span>
+                      <span>{lang.name}</span>
                     </button>
                   ))}
                 </div>
@@ -138,13 +141,14 @@ export const Header: React.FC = () => {
                       onClick={() => {
                         setLanguage(lang.code);
                       }}
-                      className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                      className={`px-4 py-2 text-sm rounded-lg transition-colors flex items-center justify-center gap-2 ${
                         language === lang.code
                           ? 'bg-primary text-white'
                           : 'bg-gray-100 text-black hover:bg-gray-200'
                       }`}
                     >
-                      {lang.name}
+                      <span className="text-base">{lang.flag}</span>
+                      <span>{lang.name}</span>
                     </button>
                   ))}
                 </div>

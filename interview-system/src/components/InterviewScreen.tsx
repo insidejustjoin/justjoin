@@ -7,10 +7,10 @@ import {
   XIcon,
   MessageCircleIcon,
   Volume2Icon,
-  VolumeXIcon,
-  GlobeIcon
+  VolumeXIcon
 } from 'lucide-react';
 import { Language, Question } from '@/types/interview';
+import { LanguageToggle } from './LanguageToggle';
 
 // SpeechRecognitionの型定義
 declare global {
@@ -1048,23 +1048,10 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
             </div>
             <div className="flex items-center space-x-3">
               {/* 言語切り替えボタン（ヘッダー） */}
-              <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-3 py-2">
-                <GlobeIcon className="h-4 w-4 text-gray-600" />
-                <button
-                  onClick={() => {
-                    const languages: Language[] = ['ja', 'en', 'ru', 'uz'];
-                    const currentIndex = languages.indexOf(displayLanguage);
-                    const nextIndex = (currentIndex + 1) % languages.length;
-                    setDisplayLanguage(languages[nextIndex]);
-                  }}
-                  className="px-3 py-1 rounded-md text-sm font-medium transition-all bg-blue-600 text-white hover:bg-blue-700"
-                  title="言語を切り替え"
-                >
-                  {displayLanguage === 'ja' ? '日本語' : 
-                   displayLanguage === 'en' ? 'English' :
-                   displayLanguage === 'ru' ? 'Русский' : 'O\'zbek'}
-                </button>
-              </div>
+              <LanguageToggle 
+                language={displayLanguage} 
+                onLanguageChange={setDisplayLanguage}
+              />
               <button
                 onClick={toggleMute}
                 className={`p-3 rounded-full transition-all duration-200 ${
@@ -1136,26 +1123,10 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                     {displayLanguage === 'ja' ? '質問:' : 'Question:'}
                   </h3>
                   {/* 言語切り替えボタン */}
-                  <div className="flex items-center space-x-2">
-                    <GlobeIcon className="h-4 w-4 text-yellow-600" />
-                    <button
-                      onClick={() => {
-                        const languages: Language[] = ['ja', 'en', 'ru', 'uz'];
-                        const currentIndex = languages.indexOf(displayLanguage);
-                        const nextIndex = (currentIndex + 1) % languages.length;
-                        setDisplayLanguage(languages[nextIndex]);
-                      }}
-                      className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
-                        displayLanguage === 'ja' 
-                          ? 'bg-yellow-600 text-white' 
-                          : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                      }`}
-                    >
-                      {displayLanguage === 'ja' ? '日本語' : 
-                       displayLanguage === 'en' ? 'English' :
-                       displayLanguage === 'ru' ? 'Русский' : 'O\'zbek'}
-                    </button>
-                  </div>
+                  <LanguageToggle 
+                    language={displayLanguage} 
+                    onLanguageChange={setDisplayLanguage}
+                  />
                 </div>
                 <p className="text-yellow-700 text-lg leading-relaxed mb-3">
                   {typeof currentQuestion.text === 'string' 

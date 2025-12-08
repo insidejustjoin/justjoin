@@ -310,9 +310,12 @@ class DatabaseService {
             if (!this.pool) {
                 throw new Error('Pool not initialized');
             }
-            // セッションIDから応募者IDを取得
+            // セッションIDから応募者IDとemailを取得
             const sessionQuery = `
-        SELECT applicant_id FROM interview_sessions WHERE id = $1
+        SELECT s.applicant_id, a.email
+        FROM interview_sessions s
+        LEFT JOIN interview_applicants a ON s.applicant_id = a.id
+        WHERE s.id = $1
       `;
             const sessionResult = await this.pool.query(sessionQuery, [recordingInfo.sessionId]);
             if (sessionResult.rows.length === 0) {
@@ -320,16 +323,39 @@ class DatabaseService {
                 return;
             }
             const applicantId = sessionResult.rows[0].applicant_id;
+            const email = sessionResult.rows[0].email;
             const recordingUrl = `/uploads/recordings/${recordingInfo.filename}`;
-            // 録音情報を保存（新しいスキーマに合わせて修正）
+            // emailからuser_idを取得（メインプラットフォームのusersテーブルから）
+            let userId = null;
+            if (email) {
+                try {
+                    const userQuery = `
+            SELECT id FROM users WHERE email = $1 AND user_type = 'job_seeker' LIMIT 1
+          `;
+                    const userResult = await this.pool.query(userQuery, [email]);
+                    if (userResult.rows.length > 0) {
+                        userId = userResult.rows[0].id;
+                        console.log('✅ Found user_id:', userId, 'for email:', email);
+                    }
+                    else {
+                        console.warn('⚠️ User not found for email:', email);
+                    }
+                }
+                catch (userError) {
+                    console.warn('⚠️ Could not fetch user_id:', userError);
+                    // user_idの取得に失敗しても録音情報は保存する
+                }
+            }
+            // 録音情報を保存（user_idも含める）
             const insertQuery = `
         INSERT INTO interview_recordings (
-          session_id, applicant_id, recording_url, recording_type, file_size, storage_path
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+          session_id, applicant_id, user_id, recording_url, recording_type, file_size, storage_path
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       `;
             await this.pool.query(insertQuery, [
                 recordingInfo.sessionId,
                 applicantId,
+                userId,
                 recordingUrl,
                 recordingInfo.type,
                 recordingInfo.filesize,

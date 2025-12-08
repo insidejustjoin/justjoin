@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { Storage } from '@google-cloud/storage';
 import { logger } from '../services/logger.js';
 import spreadsheetRoutes from './api/spreadsheet.js';
 import documentsRoutes from './api/documents.js';
@@ -1101,10 +1102,30 @@ app.get('/api/admin/jobseekers', async (req, res) => {
               WHEN EXISTS (
                 SELECT 1 FROM information_schema.tables 
                 WHERE table_name = 'interview_recordings'
+              ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'interview_recordings' 
+                AND column_name = 'user_id'
               ) THEN (
                 SELECT COUNT(*) > 0
                 FROM interview_recordings ir
                 WHERE ir.user_id = js.user_id::text
+                  AND ir.recording_type = 'audio'
+                LIMIT 1
+              )
+              WHEN EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'interview_recordings'
+              ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'interview_recordings' 
+                AND column_name = 'applicant_id'
+              ) THEN (
+                SELECT COUNT(*) > 0
+                FROM interview_recordings ir
+                INNER JOIN interview_sessions isess ON ir.session_id = isess.id
+                INNER JOIN interview_applicants ia ON isess.applicant_id = ia.id
+                WHERE ia.email = u.email
                   AND ir.recording_type = 'audio'
                 LIMIT 1
               )
@@ -2843,25 +2864,93 @@ const __dirname = path.dirname(__filename);
 
 // 本番環境でのみ静的ファイルを配信
 if (process.env.NODE_ENV === 'production') {
-  // ルートパス（/）はapplication-siteで処理されるため、最優先で404を返す
-  app.get('/', (req, res) => {
-    res.status(404).json({ 
-      error: 'Not found',
-      message: 'This route is handled by the static site. Please access /jobseeker/* or other application routes.'
-    });
+  // 静的サイトのファイルをCloud Storageから取得するヘルパー関数
+  const serveStaticFile = async (filePath: string, res: express.Response) => {
+    // Cloud Run環境ではデフォルトのサービスアカウントが自動的に使用される
+    // GOOGLE_APPLICATION_CREDENTIALS環境変数を一時的に無効化
+    const originalCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    
+    try {
+      const staticSiteBucket = 'justjoin-static-site';
+      const storage = new Storage({
+        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+      });
+      const bucket = storage.bucket(staticSiteBucket);
+      const file = bucket.file(filePath);
+      
+      // ファイルの存在確認
+      const [exists] = await file.exists();
+      if (!exists) {
+        return false;
+      }
+      
+      // メタデータを取得
+      const [metadata] = await file.getMetadata();
+      
+      // ファイルを取得して返す
+      const [content] = await file.download();
+      const contentType = metadata.contentType || getContentType(filePath);
+      
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1年間キャッシュ
+      res.send(content);
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('静的ファイルの取得エラー:', {
+        filePath,
+        error: errorMessage,
+        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+      });
+      return false;
+    } finally {
+      // 環境変数を復元
+      if (originalCredentials) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = originalCredentials;
+      }
+    }
+  };
+  
+  // Content-Typeを決定するヘルパー関数
+  const getContentType = (filePath: string): string => {
+    const ext = path.extname(filePath).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.svg': 'image/svg+xml',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.ico': 'image/x-icon',
+      '.json': 'application/json',
+    };
+    return contentTypes[ext] || 'application/octet-stream';
+  };
+  
+  // 静的サイトのアセットファイル（/assets/*、/favicon.svgなど）を処理
+  app.get(/^\/(assets|favicon\.svg|logo\.svg|vite\.svg)/, async (req, res, next) => {
+    const filePath = req.path.substring(1); // 先頭の/を削除
+    const served = await serveStaticFile(filePath, res);
+    if (!served) {
+      return next(); // ファイルが見つからない場合は次のルートへ
+    }
   });
   
-  // ルートパスを除外するミドルウェア（静的ファイル配信の前）
-  app.use((req, res, next) => {
-    // ルートパスは除外（既に上で処理済みだが念のため）
-    if (req.path === '/' || req.path === '') {
-      return res.status(404).json({ 
+  // ルートパス（/）は静的サイトのバケットから取得して返す
+  app.get('/', async (req, res) => {
+    const served = await serveStaticFile('index.html', res);
+    if (!served) {
+      res.status(404).json({ 
         error: 'Not found',
-        message: 'This route is handled by the static site.'
+        message: 'Static site index.html not found'
       });
     }
-    next();
   });
+  
+  // ルートパスは既に上で処理済み
   
   // 静的ファイルの配信（ルートパスは除外済み）
   // index: false を設定して、index.htmlを自動的に返さないようにする
@@ -2877,13 +2966,7 @@ if (process.env.NODE_ENV === 'production') {
       return next();
     }
     
-    // ルートパス（/）はapplication-siteで処理されるため404を返す（念のため）
-    if (req.path === '/' || req.path === '') {
-      return res.status(404).json({ 
-        error: 'Not found',
-        message: 'This route is handled by the static site. Please access /jobseeker/* or other application routes.'
-      });
-    }
+    // ルートパス（/）は既に上で処理済み
     
     res.sendFile(path.join(__dirname, '../../dist/index.html'));
   });
