@@ -7,6 +7,9 @@ const express_1 = __importDefault(require("express"));
 const databaseService_js_1 = __importDefault(require("../services/databaseService.js"));
 const aiInterviewerService_js_1 = require("../services/aiInterviewerService.js");
 const questionService_js_1 = require("../services/questionService.js");
+const textToSpeechService_js_1 = __importDefault(require("../services/textToSpeechService.js"));
+const openaiTtsService_js_1 = __importDefault(require("../services/openaiTtsService.js"));
+const voicevoxService_js_1 = __importDefault(require("../services/voicevoxService.js"));
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -36,6 +39,70 @@ const upload = (0, multer_1.default)({
     }
 });
 const router = express_1.default.Router();
+// テキストを音声に変換するエンドポイント（VOICEVOX優先）
+router.post('/synthesize-speech', async (req, res) => {
+    try {
+        const { text, languageCode = 'ja' } = req.body;
+        if (!text || typeof text !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'INVALID_TEXT',
+                message: 'テキストが必要です'
+            });
+        }
+        let audioBase64 = null;
+        let audioFormat = 'mp3';
+        // コスト削減のため、OpenAI TTSを優先使用（使用量ベースで安い）
+        // 1. まずOpenAI TTS APIを試す（高品質で使用量ベース）
+        console.log('Using OpenAI TTS for speech synthesis (cost-effective)...');
+        audioBase64 = await openaiTtsService_js_1.default.synthesizeSpeechAsBase64(text, languageCode);
+        audioFormat = 'mp3';
+        // 2. OpenAI TTSが失敗した場合、Google Cloud TTSを試す（無料枠あり）
+        if (!audioBase64) {
+            console.log('OpenAI TTS failed, trying Google Cloud TTS...');
+            audioBase64 = await textToSpeechService_js_1.default.synthesizeSpeechAsBase64(text, 'ja-JP');
+            audioFormat = 'mp3';
+        }
+        // 3. ローカル開発時のみVOICEVOXを使用（本番では使用しない）
+        if (!audioBase64) {
+            const voicevoxUrl = process.env.VOICEVOX_URL;
+            if (voicevoxUrl === 'http://localhost:50021') {
+                // ローカル開発時のみVOICEVOXを使用
+                const isVoicevoxAvailable = await voicevoxService_js_1.default.isAvailable();
+                if (isVoicevoxAvailable) {
+                    console.log('Using VOICEVOX for speech synthesis (local development only)...');
+                    const speakerId = await voicevoxService_js_1.default.getBestSpeakerId();
+                    audioBase64 = await voicevoxService_js_1.default.synthesizeSpeechAsBase64(text, speakerId);
+                    audioFormat = 'wav';
+                }
+            }
+        }
+        if (audioBase64) {
+            res.json({
+                success: true,
+                audio: audioBase64,
+                format: audioFormat
+            });
+        }
+        else {
+            // フォールバック: クライアント側でWeb Speech APIを使用
+            res.json({
+                success: false,
+                fallback: true,
+                message: 'Text-to-Speech service unavailable, please use browser speech synthesis'
+            });
+        }
+    }
+    catch (error) {
+        console.error('Text-to-Speech synthesis error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'SYNTHESIS_ERROR',
+            message: '音声合成に失敗しました',
+            fallback: true
+        });
+    }
+});
 // 録音アップロードエンドポイント
 router.post('/upload-recording', upload.single('file'), async (req, res) => {
     try {
