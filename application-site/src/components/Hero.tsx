@@ -59,9 +59,9 @@ export const Hero: React.FC = () => {
         }} />
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-24 pb-8 lg:py-32">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-16 pb-8 lg:pt-24 lg:py-32">
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-          {/* Right Column - Photo Slider (Mobile: First, Desktop: Second) */}
+          {/* Right Column - Photo Slider (Always First on Mobile, Second on Desktop) */}
           <motion.div
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
