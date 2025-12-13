@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "./contexts/AuthContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { CacheProvider } from "./contexts/CacheContext";
 import { Toaster } from "sonner";
+import { initGA } from "./utils/gtag";
+import { GoogleAnalytics } from "./components/GoogleAnalytics";
 
 // 基本的なページコンポーネント
 import Home from "./pages/Home";
@@ -77,6 +79,7 @@ function App() {
         <AuthProvider>
           <CacheProvider>
             <Router>
+            <GoogleAnalytics />
             <div className="min-h-screen bg-background">
             <Routes>
               {/* パブリックルート */}

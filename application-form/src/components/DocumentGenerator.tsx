@@ -2350,15 +2350,11 @@ l25Cell.value = ' 配偶者の扶養義務';
 l25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 l25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
+resumeSheet.mergeCells('M25:N26');
 const m25Cell = resumeSheet.getCell('M25');
-m25Cell.value = '希望職種';
+m25Cell.value = '日本の在留資格';
 m25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 m25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
-
-const n25Cell = resumeSheet.getCell('N25');
-n25Cell.value = '日本の在留資格';
-n25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-n25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 resumeSheet.mergeCells('J26:K26');
 const j26Cell = resumeSheet.getCell('J26');
@@ -2371,13 +2367,6 @@ l26Cell.value = documentData.spouseSupport;
 l26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 l26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-const m26Cell = resumeSheet.getCell('M26');
-// 希望職種は配列を「、」で結合（日本語表記のみを使用）
-m26Cell.value = documentData.desiredJobTypes && documentData.desiredJobTypes.length > 0 
-  ? documentData.desiredJobTypes.join('、') 
-  : '';
-m26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-m26Cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 
 const n26Cell = resumeSheet.getCell('N26');
 n26Cell.value = documentData.residencyStatus || '';
@@ -2391,7 +2380,6 @@ j27Cell.value = '技能実習の業種';
 j27Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 j27Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-resumeSheet.mergeCells('L27:N27');
 const l27Cell = resumeSheet.getCell('L27');
 l27Cell.value = documentData.residencyStatus === '技能実習' 
   ? (documentData.technicalTrainingIndustry || '') 
@@ -2400,20 +2388,33 @@ l27Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 l27Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 // 技能実習の職種（常に表示、技能実習でない場合は「-」を表示）
+const m27Cell = resumeSheet.getCell('M27');
+m27Cell.value = '技能実習の職種';
+m27Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+m27Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+const n27Cell = resumeSheet.getCell('N27');
+n27Cell.value = documentData.residencyStatus === '技能実習' 
+  ? (documentData.technicalTrainingJobType || '') 
+  : '-';
+  n27Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+  n27Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+
 resumeSheet.mergeCells('J28:K28');
 const j28Cell = resumeSheet.getCell('J28');
-j28Cell.value = '技能実習の職種';
+j28Cell.value = '希望職種';
 j28Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 j28Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 resumeSheet.mergeCells('L28:N28');
 const l28Cell = resumeSheet.getCell('L28');
-l28Cell.value = documentData.residencyStatus === '技能実習' 
-  ? (documentData.technicalTrainingJobType || '') 
-  : '-';
+// 希望職種は配列を「、」で結合（日本語表記のみを使用）
+l28Cell.value = documentData.desiredJobTypes && documentData.desiredJobTypes.length > 0 
+  ? documentData.desiredJobTypes.join('、') 
+  : '';
 l28Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-l28Cell.alignment = { horizontal: 'center', vertical: 'middle' };
-
+l28Cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 // 本人希望記入欄
 resumeSheet.mergeCells('J29:N29');
 const j29Cell = resumeSheet.getCell('J29');

@@ -6,10 +6,12 @@ import { SupportCases } from './components/SupportCases';
 import { Process } from './components/Process';
 import { FAQ } from './components/FAQ';
 import { Footer } from './components/Footer';
+import { GoogleAnalytics } from './components/GoogleAnalytics';
 
 function App() {
   return (
     <div className="min-h-screen">
+      <GoogleAnalytics />
       <Header />
       <main>
         <Hero />
