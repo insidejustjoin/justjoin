@@ -3,7 +3,8 @@ import { Helmet } from 'react-helmet-async';
 import { EmailVerificationForm } from '@/components/EmailVerificationForm';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { LanguageToggle } from '@/components/LanguageToggle';
-import { Link } from 'react-router-dom';
+import { BetaNotice } from '@/components/BetaNotice';
+import { Briefcase } from 'lucide-react';
 
 const JobSeekerRegister: React.FC = () => {
   const { t } = useLanguage();
@@ -41,39 +42,38 @@ const JobSeekerRegister: React.FC = () => {
         <meta name="description" content={t('register.description')} />
       </Helmet>
       
-      {/* ヘッダー */}
-      <header className="bg-white shadow-sm border-b sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link to="/" className="flex items-center">
-              <span className="text-xl font-bold text-blue-600">justjoin</span>
-            </Link>
-            <div className="flex items-center space-x-4">
-              <Link 
-                to="/jobseeker" 
-                className="text-sm text-gray-600 hover:text-gray-900"
-              >
-                {t('common.login')}
-              </Link>
-              <LanguageToggle />
+      {/* メインコンテナ - ログイン画面と同じスタイル */}
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* 言語切り替えボタン - ログイン画面と同じ位置 */}
+          <div className="absolute top-6 right-6 z-50">
+            <LanguageToggle />
+          </div>
+
+          <div className="w-full space-y-8">
+            {/* タイトルセクション - ログイン画面と同じスタイル */}
+            <div className="text-center">
+              <div className="flex justify-center mb-6">
+                <div className="bg-blue-100 p-3 rounded-full">
+                  <Briefcase className="h-8 w-8 text-blue-600" />
+                </div>
+              </div>
+              <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+                {t('register.title')}
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                {t('register.description')}
+              </p>
+            </div>
+          
+            {/* メール本人確認フロー */}
+            <EmailVerificationForm />
+            
+            {/* β版表記 - ログイン画面と同じ */}
+            <div className="mt-6">
+              <BetaNotice />
             </div>
           </div>
-        </div>
-      </header>
-      
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
-        <div className="max-w-md mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {t('register.title')}
-            </h1>
-            <p className="text-gray-600">
-              {t('register.description')}
-            </p>
-          </div>
-          
-          {/* メール本人確認フロー */}
-          <EmailVerificationForm />
         </div>
       </div>
     </>

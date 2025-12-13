@@ -149,12 +149,10 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card>
       <CardHeader className="text-center">
-        <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-          <Mail className="w-6 h-6 text-blue-600" />
-        </div>
-        <CardTitle className="text-2xl font-bold">
+        <CardTitle className="flex items-center justify-center gap-2">
+          <Mail className="h-5 w-5 text-blue-600" />
           {t('register.emailVerification.title')}
         </CardTitle>
         <CardDescription>
