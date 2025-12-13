@@ -14,7 +14,7 @@ import { LoginGuidance } from '@/components/LoginGuidance';
 import { BetaNotice } from '@/components/BetaNotice';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { User, Mail, Lock, UserPlus, ArrowLeft, Briefcase, Key } from 'lucide-react';
+import { User, Mail, Lock, UserPlus, ArrowLeft, Briefcase, Key, Home } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -271,6 +271,26 @@ export function JobSeekerLogin() {
             {/* β版表記 */}
             <div className="mt-6">
               <BetaNotice />
+            </div>
+
+            {/* ナビゲーションボタン */}
+            <div className="mt-6 space-y-3">
+              <Button
+                variant="outline"
+                onClick={() => navigate('/jobseeker/register')}
+                className="w-full"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                {t('auth.goToRegister')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.location.href = 'https://justjoin.jp/'}
+                className="w-full"
+              >
+                <Home className="h-4 w-4 mr-2" />
+                {t('auth.goToTopPage')}
+              </Button>
             </div>
           </div>
         </div>

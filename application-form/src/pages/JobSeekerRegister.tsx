@@ -4,10 +4,13 @@ import { EmailVerificationForm } from '@/components/EmailVerificationForm';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { BetaNotice } from '@/components/BetaNotice';
-import { Briefcase } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Briefcase, Key, Home } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const JobSeekerRegister: React.FC = () => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   
   // HubSpotコードを埋め込み
   useEffect(() => {
@@ -72,6 +75,26 @@ const JobSeekerRegister: React.FC = () => {
             {/* β版表記 - ログイン画面と同じ */}
             <div className="mt-6">
               <BetaNotice />
+            </div>
+
+            {/* ナビゲーションボタン */}
+            <div className="mt-6 space-y-3">
+              <Button
+                variant="outline"
+                onClick={() => navigate('/jobseeker/login')}
+                className="w-full"
+              >
+                <Key className="h-4 w-4 mr-2" />
+                {t('common.login') || 'ログイン / Login'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.location.href = 'https://justjoin.jp/'}
+                className="w-full"
+              >
+                <Home className="h-4 w-4 mr-2" />
+                {t('auth.goToTopPage')}
+              </Button>
             </div>
           </div>
         </div>

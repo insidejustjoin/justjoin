@@ -1007,6 +1007,7 @@ const translations: Translations = {
     'auth.loginTargetNote': '同じメールアドレスで複数タイプが登録されている場合は、選択したマイページが開きます。',
     'auth.goToRegisterPage': '新規登録ページへ移動します',
     'auth.goToRegister': '新規登録へ',
+    'auth.goToTopPage': 'トップページへ',
   },
   en: {
     // Common
@@ -1980,6 +1981,7 @@ const translations: Translations = {
     'auth.loginTargetNote': 'If multiple types exist for this email, the selected My Page will open.',
     'auth.goToRegisterPage': 'You will be redirected to the registration page.',
     'auth.goToRegister': 'Go to Registration',
+    'auth.goToTopPage': 'Go to Top Page',
   },
   ru: {
     // Common (subset used on login)
@@ -2021,6 +2023,7 @@ const translations: Translations = {
     'auth.loginTargetNote': 'Если на этот email зарегистрировано несколько типов, откроется выбранная страница.',
     'auth.goToRegisterPage': 'Вы будете перенаправлены на страницу регистрации.',
     'auth.goToRegister': 'Перейти к регистрации',
+    'auth.goToTopPage': 'На главную страницу',
     // Completion modal
     'profileCompletion.modalTitle': 'Завершённость профиля',
     'profileCompletion.modalMessagePrefix': 'Текущий уровень завершённости профиля: ',
@@ -2071,6 +2074,7 @@ const translations: Translations = {
     'auth.loginTargetNote': "Agar shu email bilan bir nechta tur bo'lsa, tanlangan sahifa ochiladi.",
     'auth.goToRegisterPage': "Ro'yxatdan o'tish sahifasiga o'tasiz.",
     'auth.goToRegister': "Ro'yxatdan o'tish",
+    'auth.goToTopPage': "Bosh sahifaga o'tish",
     // Completion modal
     'profileCompletion.modalTitle': 'Profil toʻliqligi',
     'profileCompletion.modalMessagePrefix': 'Joriy profil toʻliqligi: ',
