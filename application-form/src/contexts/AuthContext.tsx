@@ -45,7 +45,7 @@ interface AuthContextType {
   approveCompany: (companyId: string) => Promise<boolean>;
   rejectCompany: (companyId: string, reason: string) => Promise<boolean>;
   resetPassword: (email: string, userType: 'job_seeker' | 'company', language?: 'ja' | 'en') => Promise<boolean>;
-  deleteAccount: () => Promise<boolean>;
+  deleteAccount: (registrationType?: 'engineer' | 'general') => Promise<boolean>;
 
   isAuthenticated: boolean;
   // キャッシュ関連の関数
@@ -699,8 +699,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const deleteAccount = async (): Promise<boolean> => {
+  const deleteAccount = async (registrationType?: 'engineer' | 'general'): Promise<boolean> => {
     if (!user) {
+      return false;
+    }
+
+    // 求職者の場合はregistration_typeが必須
+    if (user.user_type === 'job_seeker' && !registrationType) {
+      toast.error('registration_type (engineer または general) が指定されていません');
       return false;
     }
 
@@ -708,9 +714,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // 開発環境ではローカルAPIを使用、本番環境では本番APIを使用
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
       
-      console.log('アカウント削除API呼び出し:', { userId: user.id, apiUrl });
+      // registration_typeをクエリパラメータとして追加
+      const url = registrationType 
+        ? `${apiUrl}/api/user/account/${user.id}?registration_type=${registrationType}`
+        : `${apiUrl}/api/user/account/${user.id}`;
       
-      const response = await fetch(`${apiUrl}/api/user/account/${user.id}`, {
+      console.log('アカウント削除API呼び出し:', { userId: user.id, registrationType, apiUrl });
+      
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -726,19 +737,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       console.log('アカウント削除成功:', data);
       
-      // ローカルストレージとユーザー状態をクリア
-      setUser(null);
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_user');
-      localStorage.removeItem('auth_login_time'); // ログイン時刻もクリア
-      if (user) {
-        clearProfileCache(String(user.id));
+      // 求職者の場合、他のregistration_typeが残っている可能性があるため、完全にログアウトしない
+      // ただし、すべてのregistration_typeが削除された場合はログアウト
+      const remainingRegistrationTypes = user.registration_types?.filter(type => type !== registrationType) || [];
+      
+      if (remainingRegistrationTypes.length === 0 || user.user_type !== 'job_seeker') {
+        // すべてのregistration_typeが削除された場合、または企業の場合は完全にログアウト
+        setUser(null);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+        localStorage.removeItem('auth_login_time');
+        if (user) {
+          clearProfileCache(String(user.id));
+        }
+        // ホームページにリダイレクト
+        window.location.href = '/';
+      } else {
+        // 他のregistration_typeが残っている場合は、そのregistration_typeでログインし直す
+        // または、ログインページにリダイレクト
+        toast.success(data.message || 'アカウントが正常に削除されました。他のアカウントタイプでログインしてください。');
+        // ログインページにリダイレクト
+        window.location.href = '/jobseeker/login';
       }
-      
-      toast.success(data.message || 'アカウントが正常に削除されました');
-      
-      // ホームページにリダイレクト
-      window.location.href = '/';
       
       return true;
     } catch (error) {

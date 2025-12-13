@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { API_BASE_URL } from '@/constants/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,10 +15,11 @@ import { ja } from 'date-fns/locale';
 import { Helmet } from 'react-helmet-async';
 
 export function Settings() {
-  const { user } = useAuth();
+  const { user, deleteAccount } = useAuth();
   const { t } = useLanguage();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
 
 
   // ログアウトとアカウント削除の状態
@@ -51,28 +52,48 @@ export function Settings() {
     navigate('/jobseeker/login');
   };
 
-  // アカウント削除処理
+  // アカウント削除処理（registration_type対応）
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/jobseekers/${user.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-      });
+      // 現在のパスからregistration_typeを判断
+      let registrationType: 'engineer' | 'general' | undefined = undefined;
+      
+      // リファラーまたは現在のパスから判断
+      const referrer = document.referrer;
+      const currentPath = location.pathname;
+      
+      // マイページのパスから判断
+      if (referrer.includes('/jobseeker/my-page-general') || currentPath.includes('general')) {
+        registrationType = 'general';
+      } else if (referrer.includes('/jobseeker/my-page-engineer') || currentPath.includes('engineer')) {
+        registrationType = 'engineer';
+      } else if (user?.user_type === 'job_seeker') {
+        // パスから判断できない場合は、ユーザーのregistration_typesから最初のものを使用
+        // または、エンジニアをデフォルトとする
+        registrationType = user.registration_types?.includes('general') ? 'general' : 'engineer';
+      }
 
-      if (response.ok) {
+      // 求職者の場合はregistration_typeが必須
+      if (user?.user_type === 'job_seeker' && !registrationType) {
+        toast({
+          title: t('settings.error'),
+          description: 'registration_typeが特定できませんでした。マイページから削除してください。',
+          variant: 'destructive',
+        });
+        setIsDeleting(false);
+        setShowDeleteModal(false);
+        return;
+      }
+
+      // AuthContextのdeleteAccount関数を使用（registration_typeを渡す）
+      const success = await deleteAccount(registrationType);
+      
+      if (success) {
         toast({
           title: t('settings.accountDeleted'),
           description: t('settings.accountDeletedDescription'),
         });
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user');
-        navigate('/jobseeker/login');
-      } else {
-        throw new Error('アカウント削除に失敗しました');
       }
     } catch (error) {
       console.error('Account deletion error:', error);

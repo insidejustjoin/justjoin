@@ -2222,10 +2222,11 @@ app.delete('/api/admin/users/:id', async (req, res) => {
   }
 });
 
-// ユーザー自身によるアカウント削除API
+// ユーザー自身によるアカウント削除API（registration_type対応版）
 app.delete('/api/user/account/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    const registrationType = req.query.registration_type as string | undefined; // 'engineer' | 'general' | undefined
 
     const { query } = await import('../integrations/postgres/client.js');
 
@@ -2247,31 +2248,104 @@ app.delete('/api/user/account/:userId', async (req, res) => {
 
     const user = userResult.rows[0];
 
+    // registration_typeが指定されていない場合はエラー
+    if (user.user_type === 'job_seeker' && !registrationType) {
+      return res.status(400).json({
+        success: false,
+        message: 'registration_type (engineer または general) が必須です'
+      });
+    }
+
+    // registration_typeを正規化
+    const normalizedRegistrationType = registrationType === 'general' ? 'general' : 'engineer';
+
     try {
+      // トランザクション開始
+      await query('BEGIN');
+
       if (user.user_type === 'job_seeker') {
+        // 1. job_seekersテーブルから該当するregistration_typeのレコードを取得
+        const jobSeekerResult = await query(
+          'SELECT id, registration_type FROM job_seekers WHERE user_id = $1 AND LOWER(COALESCE(registration_type, \'engineer\')) = LOWER($2)',
+          [userId, normalizedRegistrationType]
+        );
+
+        if (jobSeekerResult.rows.length === 0) {
+          await query('ROLLBACK');
+          return res.status(404).json({
+            success: false,
+            message: `指定されたregistration_type (${normalizedRegistrationType}) の求職者データが見つかりません`
+          });
+        }
+
+        const jobSeekerRecord = jobSeekerResult.rows[0];
+
+        // 2. job_seeker_status_historyに退会済みレコードを追加（registration_typeを指定）
         await query(
           `
-            INSERT INTO job_seeker_status_history (user_id, status, withdrawal_date, reason, notes)
-            VALUES ($1, 'withdrawn', NOW(), 'user_self_deleted', 'マイページからの自己削除')
+            INSERT INTO job_seeker_status_history (user_id, registration_type, status, withdrawal_date, reason, notes)
+            VALUES ($1, $2, 'withdrawn', NOW(), 'user_self_deleted', 'マイページからの自己削除')
+          `,
+          [userId, normalizedRegistrationType]
+        );
+
+        // 3. user_documentsから該当するregistration_typeのレコードを削除
+        await query(
+          'DELETE FROM user_documents WHERE user_id = $1 AND LOWER(COALESCE(registration_type, \'engineer\')) = LOWER($2)',
+          [userId, normalizedRegistrationType]
+        );
+
+        // 4. applicationsから削除（該当するjob_seeker_idで）
+        try {
+          await query('DELETE FROM applications WHERE job_seeker_id = $1', [jobSeekerRecord.id]);
+        } catch (error) {
+          console.log('applicationsテーブルは存在しないか、データがありません:', (error as any).message);
+        }
+
+        // 5. job_seekersテーブルから該当するregistration_typeのレコードを削除
+        await query(
+          'DELETE FROM job_seekers WHERE user_id = $1 AND LOWER(COALESCE(registration_type, \'engineer\')) = LOWER($2)',
+          [userId, normalizedRegistrationType]
+        );
+
+        // 6. 残りのjob_seekersレコード数を確認
+        const remainingCountResult = await query(
+          'SELECT COUNT(*) as count FROM job_seekers WHERE user_id = $1',
+          [userId]
+        );
+        const remainingCount = parseInt(remainingCountResult.rows[0]?.count || '0');
+
+        // 7. すべてのregistration_typeが削除された場合のみusersテーブルのstatusを'deleted'に更新
+        if (remainingCount === 0) {
+          await query(
+            `
+              UPDATE users
+              SET status = 'deleted', updated_at = NOW()
+              WHERE id = $1
+            `,
+            [userId]
+          );
+        }
+      } else {
+        // 企業の場合は従来通り
+        await query(
+          `
+            UPDATE users
+            SET status = 'deleted', updated_at = NOW()
+            WHERE id = $1
           `,
           [userId]
         );
       }
 
-      await query(
-        `
-          UPDATE users
-          SET status = 'deleted', updated_at = NOW()
-          WHERE id = $1
-        `,
-        [userId]
-      );
+      await query('COMMIT');
 
       res.json({
         success: true,
         message: 'アカウントが正常に削除されました'
       });
     } catch (deletionError) {
+      await query('ROLLBACK');
       console.error('アカウント削除処理エラー:', deletionError);
       res.status(500).json({
         success: false,
