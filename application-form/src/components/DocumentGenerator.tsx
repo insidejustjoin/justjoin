@@ -146,6 +146,8 @@ interface DocumentGeneratorProps {
     id: string;
     user_id: string;
     full_name: string;
+    first_name: string | null;
+    last_name: string | null;
     date_of_birth: string | null;
     gender: 'male' | 'female' | 'other' | null;
     email: string;
@@ -571,10 +573,22 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   useEffect(() => {
     if (isAdminMode && jobSeekerData) {
       // 求職者データから初期データを設定
-      const fullName = jobSeekerData.full_name || '';
-      const nameParts = fullName.split(' ');
-      const lastName = nameParts[0] || '';
-      const firstName = nameParts.slice(1).join(' ') || '';
+      // full_nameから名前を取得（「一般職」「エンジニア」などのプレフィックスを除去）
+      let fullName = (jobSeekerData.full_name || '').trim();
+      // registration_typeに関連するプレフィックスを除去
+      fullName = fullName.replace(/^(一般職|エンジニア)\s+/, '');
+      // first_nameとlast_nameが直接利用可能な場合はそれを使用
+      let lastName = '';
+      let firstName = '';
+      if (jobSeekerData.first_name && jobSeekerData.last_name) {
+        lastName = String(jobSeekerData.last_name).trim();
+        firstName = String(jobSeekerData.first_name).trim();
+      } else {
+        // full_nameから分割
+        const nameParts = fullName.split(/\s+/).filter(part => part.length > 0);
+        lastName = nameParts[0] || '';
+        firstName = nameParts.slice(1).join(' ') || '';
+      }
       
       // スキルデータを設定
       const skillData: { [key: string]: { level: string; experience: string; projects: string; evaluation: string; pcUsageYears?: string } } = {};
@@ -1637,8 +1651,19 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
         const adminNameFallback = (isAdminMode && jobSeekerData && 
           ((registrationTypeOverride || effectiveRegistrationType) === (jobSeekerData.registration_type || 'engineer'))) 
           ? (() => {
-              const fullName = jobSeekerData.full_name || '';
-              const nameParts = fullName.split(' ');
+              // full_nameから名前を取得（「一般職」「エンジニア」などのプレフィックスを除去）
+              let fullName = (jobSeekerData.full_name || '').trim();
+              // registration_typeに関連するプレフィックスを除去
+              fullName = fullName.replace(/^(一般職|エンジニア)\s+/, '');
+              // first_nameとlast_nameが直接利用可能な場合はそれを使用
+              if (jobSeekerData.first_name && jobSeekerData.last_name) {
+                return {
+                  lastName: String(jobSeekerData.last_name).trim(),
+                  firstName: String(jobSeekerData.first_name).trim()
+                };
+              }
+              // full_nameから分割
+              const nameParts = fullName.split(/\s+/).filter(part => part.length > 0);
               return {
                 lastName: nameParts[0] || '',
                 firstName: nameParts.slice(1).join(' ') || ''
