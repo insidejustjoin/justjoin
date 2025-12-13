@@ -150,6 +150,33 @@ export function ResumeForm() {
         return;
       }
 
+      // registration_typeを取得（デフォルトは'engineer'）
+      let registrationType: 'engineer' | 'general' = 'engineer';
+      try {
+        const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
+        const typesResponse = await fetch(`${apiUrl}/api/jobseekers/registration-types/${user.id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (typesResponse.ok) {
+          const typesData = await typesResponse.json();
+          const types: string[] = Array.isArray(typesData?.types) ? typesData.types : [];
+          // 両方持っている場合は、保存された好みを使用
+          const preference = localStorage.getItem('job_seeker_registration_preference') as 'engineer' | 'general' | null;
+          if (preference && types.includes(preference)) {
+            registrationType = preference;
+          } else if (types.includes('general')) {
+            registrationType = 'general';
+          } else {
+            registrationType = 'engineer';
+          }
+        }
+      } catch (error) {
+        console.warn('registration_type取得エラー:', error);
+        // エラー時はデフォルトの'engineer'を使用
+      }
+
       const response = await fetch(`${API_BASE_URL}/documents`, {
         method: 'POST',
         headers: {
@@ -159,7 +186,8 @@ export function ResumeForm() {
         body: JSON.stringify({
           userId: user.id,
           documentType: 'resume',
-          documentData: data
+          documentData: data,
+          registrationType: registrationType
         })
       });
 
