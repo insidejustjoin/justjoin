@@ -43,6 +43,10 @@ interface AdvancedFilters {
   spouseStatus: 'all' | 'married' | 'single' | 'other';
   commutingTime: 'all' | '30min' | '1hour' | '1.5hour' | '2hour' | '2hour+';
   interviewAttempts: number; // 追加: 面接受験回数フィルター
+  // 新規追加: 日本の在留資格関連
+  residencyStatus: 'all' | '技人国' | '特定技能1号' | '特定技能2号' | '技能実習' | '未取得/不明';
+  technicalTrainingIndustry: 'all' | '農業' | '漁業' | '建設' | '食品製造' | '繊維・縫製' | '機械金属' | '電気電子' | '自動車' | '化学・プラ' | '印刷' | '木材家具' | '介護' | '清掃';
+  desiredJobTypes: string[]; // 希望職種（複数選択可能）
 }
 
 export function AdminJobSeekers() {
@@ -109,6 +113,9 @@ export function AdminJobSeekers() {
     spouseStatus: 'all',
     commutingTime: 'all',
     interviewAttempts: 0, // 追加: 面接受験回数フィルターの初期値
+    residencyStatus: 'all',
+    technicalTrainingIndustry: 'all',
+    desiredJobTypes: [],
   });
   
   const CACHE_DURATION = 10 * 60 * 1000; // 10分に延長
@@ -841,6 +848,36 @@ export function AdminJobSeekers() {
         if (filters.commutingTime === '2hour+' && commutingTime !== '2hour+') return false;
       }
 
+      // 日本の在留資格フィルター
+      if (filters.residencyStatus !== 'all') {
+        const documentData = jobSeeker.detailed_info?.documentData;
+        const residencyStatus = documentData?.resume?.residencyStatus || documentData?.residencyStatus;
+        if (residencyStatus !== filters.residencyStatus) {
+          return false;
+        }
+      }
+
+      // 技能実習の業種フィルター
+      if (filters.technicalTrainingIndustry !== 'all') {
+        const documentData = jobSeeker.detailed_info?.documentData;
+        const technicalTrainingIndustry = documentData?.resume?.technicalTrainingIndustry || documentData?.technicalTrainingIndustry;
+        if (technicalTrainingIndustry !== filters.technicalTrainingIndustry) {
+          return false;
+        }
+      }
+
+      // 希望職種フィルター
+      if (filters.desiredJobTypes && filters.desiredJobTypes.length > 0) {
+        const documentData = jobSeeker.detailed_info?.documentData;
+        const desiredJobTypes = documentData?.resume?.desiredJobTypes || documentData?.desiredJobTypes || [];
+        const hasMatchingJobType = filters.desiredJobTypes.some(filterType => 
+          desiredJobTypes.includes(filterType)
+        );
+        if (!hasMatchingJobType) {
+          return false;
+        }
+      }
+
       // スキルレベルフィルター
       const skillLevelFilters = filters.skillLevelFilters;
       if (Object.keys(skillLevelFilters).length > 0) {
@@ -1492,6 +1529,9 @@ export function AdminJobSeekers() {
       spouseStatus: 'all',
       commutingTime: 'all',
       interviewAttempts: 0, // 追加: 面接受験回数フィルターのクリア
+      residencyStatus: 'all',
+      technicalTrainingIndustry: 'all',
+      desiredJobTypes: [],
     };
     setCurrentFilters(emptyFilters);
     setFilterChange(prev => prev + 1); // フィルターが変更されたことを検知

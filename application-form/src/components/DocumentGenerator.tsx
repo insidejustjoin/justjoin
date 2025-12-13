@@ -2317,22 +2317,22 @@ l20Cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
 resumeSheet.mergeCells('J25:K25');
 const j25Cell = resumeSheet.getCell('J25');
 j25Cell.value = '配偶者';
-j25Cell.font = { name: 'MS Gothic', size: 8, bold: false };
+j25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 j25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 const l25Cell = resumeSheet.getCell('L25');
 l25Cell.value = ' 配偶者の扶養義務';
-l25Cell.font = { name: 'MS Gothic', size: 8, bold: false };
+l25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 l25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 const m25Cell = resumeSheet.getCell('M25');
 m25Cell.value = '希望職種';
-m25Cell.font = { name: 'MS Gothic', size: 8, bold: false };
+m25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 m25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 const n25Cell = resumeSheet.getCell('N25');
 n25Cell.value = '日本の在留資格';
-n25Cell.font = { name: 'MS Gothic', size: 8, bold: false };
+n25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 n25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 resumeSheet.mergeCells('J26:K26');
@@ -3676,8 +3676,8 @@ whiteCells.forEach(cell => {
                       <SelectValue placeholder={t('documents.spousePlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="あり">あり / Yes</SelectItem>
-                      <SelectItem value="なし">なし / No</SelectItem>
+                      <SelectItem value="あり">あり / Yes / Да</SelectItem>
+                      <SelectItem value="なし">なし / No / Нет</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3688,8 +3688,8 @@ whiteCells.forEach(cell => {
                       <SelectValue placeholder={t('documents.spouseSupportPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="あり">あり / Yes</SelectItem>
-                      <SelectItem value="なし">なし / No</SelectItem>
+                      <SelectItem value="あり">あり / Yes / Да</SelectItem>
+                      <SelectItem value="なし">なし / No / Нет</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3776,7 +3776,7 @@ whiteCells.forEach(cell => {
               {/* 日本の在留資格 */}
               <div className="space-y-4">
                 <div>
-                  <Label className="text-sm font-medium">日本の在留資格 <span className="text-red-500">*</span></Label>
+                  <Label className="text-sm font-medium">{t('documents.residencyStatus')} <span className="text-red-500">*</span></Label>
                   <Select 
                     value={documentData.residencyStatus} 
                     onValueChange={(value) => {
@@ -3790,14 +3790,14 @@ whiteCells.forEach(cell => {
                     }}
                   >
                     <SelectTrigger className="h-10">
-                      <SelectValue placeholder="選択してください / Please select / Пожалуйста, выберите" />
+                      <SelectValue placeholder={t('documents.selectResidencyStatus')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="技人国">技人国 / Engineer / Specialist in Humanities / International Services / Инженер / Специалист в области гуманитарных наук / Международные услуги</SelectItem>
+                      <SelectItem value="技人国">技人国 / Engineer/Specialist in Humanities/International Services / Инженер/Специалист в области гуманитарных наук/Международные услуги</SelectItem>
                       <SelectItem value="特定技能1号">特定技能1号 / Specified Skilled Worker (i) / Специализированный квалифицированный работник (i)</SelectItem>
                       <SelectItem value="特定技能2号">特定技能2号 / Specified Skilled Worker (ii) / Специализированный квалифицированный работник (ii)</SelectItem>
                       <SelectItem value="技能実習">技能実習 / Technical Intern Training / Техническое стажирование</SelectItem>
-                      <SelectItem value="未取得/不明">未取得/不明 / Not obtained / Unknown / Не получено / Неизвестно</SelectItem>
+                      <SelectItem value="未取得/不明">未取得/不明 / Not obtained/Unknown / Не получено/Неизвестно</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3806,13 +3806,13 @@ whiteCells.forEach(cell => {
                 {documentData.residencyStatus === '技能実習' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm font-medium">技能実習の業種 <span className="text-red-500">*</span></Label>
+                      <Label className="text-sm font-medium">{t('documents.technicalTrainingIndustry')} <span className="text-red-500">*</span></Label>
                       <Select 
                         value={documentData.technicalTrainingIndustry} 
                         onValueChange={(value) => setDocumentData(prev => ({ ...prev, technicalTrainingIndustry: value }))}
                       >
                         <SelectTrigger className="h-10">
-                          <SelectValue placeholder="選択してください / Please select / Пожалуйста, выберите" />
+                          <SelectValue placeholder={t('documents.selectIndustry')} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="農業">農業 / Agriculture / Сельское хозяйство</SelectItem>
@@ -3832,11 +3832,11 @@ whiteCells.forEach(cell => {
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium">技能実習の職種 <span className="text-red-500">*</span></Label>
+                      <Label className="text-sm font-medium">{t('documents.technicalTrainingJobType')} <span className="text-red-500">*</span></Label>
                       <Input
                         value={documentData.technicalTrainingJobType}
                         onChange={(e) => setDocumentData(prev => ({ ...prev, technicalTrainingJobType: e.target.value }))}
-                        placeholder="職種を入力してください / Please enter job type / Пожалуйста, введите тип работы"
+                        placeholder={t('documents.technicalTrainingJobTypePlaceholder')}
                         className="h-10"
                       />
                     </div>
@@ -3846,40 +3846,40 @@ whiteCells.forEach(cell => {
               
               {/* 希望職種 */}
               <div>
-                <Label className="text-sm font-medium">希望職種 <span className="text-red-500">*</span></Label>
+                <Label className="text-sm font-medium">{t('documents.desiredJobTypes')} <span className="text-red-500">*</span></Label>
                 <div className="space-y-2 mt-2">
                   {[
-                    { value: '技術・専門職系', label: '技術・専門職系 / Technical & Professional / Технические и профессиональные' },
-                    { value: '事務・オフィス系', label: '事務・オフィス系 / Administrative & Office / Административные и офисные' },
-                    { value: '通訳・翻訳／語学系', label: '通訳・翻訳／語学系 / Interpreting, Translation & Language / Перевод и лингвистика' },
-                    { value: '製造業系', label: '製造業系 / Manufacturing / Производство' },
-                    { value: '建設・インフラ系', label: '建設・インフラ系 / Construction & Infrastructure / Строительство и инфраструктура' },
-                    { value: '介護・医療補助系', label: '介護・医療補助系 / Caregiving & Medical Support / Уход и медицинская поддержка' },
-                    { value: '農業・漁業系', label: '農業・漁業系 / Agriculture & Fishing / Сельское хозяйство и рыболовство' },
-                    { value: 'サービス・接客系', label: 'サービス・接客系 / Service & Hospitality / Сервис и гостеприимство' },
-                    { value: '物流・運輸系', label: '物流・運輸系 / Logistics & Transportation / Логистика и транспорт' },
-                    { value: 'その他/特になし', label: 'その他/特になし / Other / None / Другое / Не указано' }
+                    '技術・専門職系',
+                    '事務・オフィス系',
+                    '通訳・翻訳／語学系',
+                    '製造業系',
+                    '建設・インフラ系',
+                    '介護・医療補助系',
+                    '農業・漁業系',
+                    'サービス・接客系',
+                    '物流・運輸系',
+                    'その他/他になし'
                   ].map((jobType) => (
-                    <div key={jobType.value} className="flex items-center space-x-2">
+                    <div key={jobType} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`desiredJobType-${jobType.value}`}
-                        checked={documentData.desiredJobTypes.includes(jobType.value)}
+                        id={`desiredJobType-${jobType}`}
+                        checked={documentData.desiredJobTypes.includes(jobType)}
                         onCheckedChange={(checked) => {
                           if (checked) {
                             setDocumentData(prev => ({
                               ...prev,
-                              desiredJobTypes: [...prev.desiredJobTypes, jobType.value]
+                              desiredJobTypes: [...prev.desiredJobTypes, jobType]
                             }));
                           } else {
                             setDocumentData(prev => ({
                               ...prev,
-                              desiredJobTypes: prev.desiredJobTypes.filter(t => t !== jobType.value)
+                              desiredJobTypes: prev.desiredJobTypes.filter(t => t !== jobType)
                             }));
                           }
                         }}
                       />
-                      <Label htmlFor={`desiredJobType-${jobType.value}`} className="text-sm font-normal cursor-pointer">
-                        {jobType.label}
+                      <Label htmlFor={`desiredJobType-${jobType}`} className="text-sm font-normal cursor-pointer">
+                        {t(`documents.jobType.${jobType}`)}
                       </Label>
                     </div>
                   ))}

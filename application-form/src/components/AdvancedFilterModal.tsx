@@ -26,6 +26,10 @@ interface AdvancedFilters {
   spouseStatus: 'all' | 'married' | 'single' | 'other';
   commutingTime: 'all' | '30min' | '1hour' | '1.5hour' | '2hour' | '2hour+';
   interviewAttempts: number; // 面接受験回数
+  // 新規追加: 日本の在留資格関連
+  residencyStatus: 'all' | '技人国' | '特定技能1号' | '特定技能2号' | '技能実習' | '未取得/不明';
+  technicalTrainingIndustry: 'all' | '農業' | '漁業' | '建設' | '食品製造' | '繊維・縫製' | '機械金属' | '電気電子' | '自動車' | '化学・プラ' | '印刷' | '木材家具' | '介護' | '清掃';
+  desiredJobTypes: string[]; // 希望職種（複数選択可能）
 }
 
 interface AdvancedFilterModalProps {
@@ -61,6 +65,9 @@ export function AdvancedFilterModal({
     spouseStatus: 'all',
     commutingTime: 'all',
     interviewAttempts: 0,
+    residencyStatus: 'all',
+    technicalTrainingIndustry: 'all',
+    desiredJobTypes: [],
   });
   const [skillSearchTerm, setSkillSearchTerm] = useState('');
 
@@ -86,6 +93,9 @@ export function AdvancedFilterModal({
       spouseStatus: 'all',
       commutingTime: 'all',
       interviewAttempts: 0,
+      residencyStatus: 'all',
+      technicalTrainingIndustry: 'all',
+      desiredJobTypes: [],
     };
     setFilters(emptyFilters);
     onClearFilters();
@@ -487,6 +497,92 @@ export function AdvancedFilterModal({
                 <p className="text-sm text-muted-foreground mt-1">
                   指定した回数以上面接を受験した求職者を表示します
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 日本の在留資格関連フィルター */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b pb-2">日本の在留資格関連</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 日本の在留資格 */}
+              <div>
+                <Label>日本の在留資格</Label>
+                <Select value={filters.residencyStatus} onValueChange={v => setFilters(prev => ({ ...prev, residencyStatus: v as any }))}>
+                  <SelectTrigger><SelectValue placeholder="指定なし" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">指定なし</SelectItem>
+                    <SelectItem value="技人国">技人国</SelectItem>
+                    <SelectItem value="特定技能1号">特定技能1号</SelectItem>
+                    <SelectItem value="特定技能2号">特定技能2号</SelectItem>
+                    <SelectItem value="技能実習">技能実習</SelectItem>
+                    <SelectItem value="未取得/不明">未取得/不明</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* 技能実習の業種 */}
+              <div>
+                <Label>技能実習の業種</Label>
+                <Select value={filters.technicalTrainingIndustry} onValueChange={v => setFilters(prev => ({ ...prev, technicalTrainingIndustry: v as any }))}>
+                  <SelectTrigger><SelectValue placeholder="指定なし" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">指定なし</SelectItem>
+                    <SelectItem value="農業">農業</SelectItem>
+                    <SelectItem value="漁業">漁業</SelectItem>
+                    <SelectItem value="建設">建設</SelectItem>
+                    <SelectItem value="食品製造">食品製造</SelectItem>
+                    <SelectItem value="繊維・縫製">繊維・縫製</SelectItem>
+                    <SelectItem value="機械金属">機械金属</SelectItem>
+                    <SelectItem value="電気電子">電気電子</SelectItem>
+                    <SelectItem value="自動車">自動車</SelectItem>
+                    <SelectItem value="化学・プラ">化学・プラ</SelectItem>
+                    <SelectItem value="印刷">印刷</SelectItem>
+                    <SelectItem value="木材家具">木材家具</SelectItem>
+                    <SelectItem value="介護">介護</SelectItem>
+                    <SelectItem value="清掃">清掃</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* 希望職種 */}
+              <div className="md:col-span-2">
+                <Label>希望職種（複数選択可）</Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 border rounded-md p-4 max-h-60 overflow-y-auto">
+                  {[
+                    '技術・専門職系',
+                    '事務・オフィス系',
+                    '通訳・翻訳／語学系',
+                    '製造業系',
+                    '建設・インフラ系',
+                    '介護・医療補助系',
+                    '農業・漁業系',
+                    'サービス・接客系',
+                    '物流・運輸系',
+                    'その他/他になし'
+                  ].map((jobType) => (
+                    <div key={jobType} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`desiredJobType-${jobType}`}
+                        checked={filters.desiredJobTypes.includes(jobType)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setFilters(prev => ({
+                              ...prev,
+                              desiredJobTypes: [...prev.desiredJobTypes, jobType]
+                            }));
+                          } else {
+                            setFilters(prev => ({
+                              ...prev,
+                              desiredJobTypes: prev.desiredJobTypes.filter(t => t !== jobType)
+                            }));
+                          }
+                        }}
+                      />
+                      <Label htmlFor={`desiredJobType-${jobType}`} className="text-sm font-normal cursor-pointer">
+                        {jobType}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

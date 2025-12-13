@@ -974,37 +974,95 @@ const BulkDocumentGenerator: React.FC<BulkDocumentGeneratorProps> = ({
     l20Cell.font = { name: 'MS Gothic', size: 10, bold: false };
     l20Cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
-    const m25Cell = resumeSheet.getCell('J25:L25');
-    m25Cell.value = '配偶者';
-    m25Cell.font = { name: 'MS Gothic', size: 8, bold: false };
-    m25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    resumeSheet.mergeCells('J25:K25');
+const j25Cell = resumeSheet.getCell('J25');
+j25Cell.value = '配偶者';
+j25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+j25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    const n25Cell = resumeSheet.getCell('M25:N25');
-    n25Cell.value = ' 配偶者の扶養義務';
-    n25Cell.font = { name: 'MS Gothic', size: 8, bold: false };
-    n25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+const l25Cell = resumeSheet.getCell('L25');
+l25Cell.value = ' 配偶者の扶養義務';
+l25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+l25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    const m26Cell = resumeSheet.getCell('J26:L26');
-    m26Cell.value = documentData.spouse;
-    m26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-    m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+const m25Cell = resumeSheet.getCell('M25');
+m25Cell.value = '希望職種';
+m25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+m25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    const n26Cell = resumeSheet.getCell('M26:N26');
-    n26Cell.value = documentData.spouseSupport;
-    n26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-    n26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+const n25Cell = resumeSheet.getCell('N25');
+n25Cell.value = '日本の在留資格';
+n25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+n25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    resumeSheet.mergeCells('J27:N27');
-    const j27Cell = resumeSheet.getCell('J27');
-    j27Cell.value = '本人希望記入欄（特に待遇・職種・勤務時間・その他についての希望などがあれば記入）';
-    j27Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-    j27Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+resumeSheet.mergeCells('J26:K26');
+const j26Cell = resumeSheet.getCell('J26');
+j26Cell.value = documentData.spouse;
+j26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+j26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    resumeSheet.mergeCells('J28:N33');
-    const j28Cell = resumeSheet.getCell('J28');
-    j28Cell.value = documentData.personalPreference;
-    j28Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-    j28Cell.alignment = { horizontal: 'left', vertical: 'middle' };
+const l26Cell = resumeSheet.getCell('L26');
+l26Cell.value = documentData.spouseSupport;
+l26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+l26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+const m26Cell = resumeSheet.getCell('M26');
+// 希望職種は配列を「、」で結合（日本語表記のみを使用）
+m26Cell.value = documentData.desiredJobTypes && documentData.desiredJobTypes.length > 0 
+  ? documentData.desiredJobTypes.join('、') 
+  : '';
+m26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+m26Cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+
+const n26Cell = resumeSheet.getCell('N26');
+n26Cell.value = documentData.residencyStatus || '';
+n26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+n26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+// 技能実習の業種（常に表示、技能実習でない場合は「-」を表示）
+resumeSheet.mergeCells('J27:K27');
+const j27Cell = resumeSheet.getCell('J27');
+j27Cell.value = '技能実習の業種';
+j27Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+j27Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+resumeSheet.mergeCells('L27:N27');
+const l27Cell = resumeSheet.getCell('L27');
+l27Cell.value = documentData.residencyStatus === '技能実習' 
+  ? (documentData.technicalTrainingIndustry || '') 
+  : '-';
+l27Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+l27Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+// 技能実習の職種（常に表示、技能実習でない場合は「-」を表示）
+resumeSheet.mergeCells('J28:K28');
+const j28Cell = resumeSheet.getCell('J28');
+j28Cell.value = '技能実習の職種';
+j28Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+j28Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+resumeSheet.mergeCells('L28:N28');
+const l28Cell = resumeSheet.getCell('L28');
+l28Cell.value = documentData.residencyStatus === '技能実習' 
+  ? (documentData.technicalTrainingJobType || '') 
+  : '-';
+l28Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+l28Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+// 本人希望記入欄
+resumeSheet.mergeCells('J29:N29');
+const j29Cell = resumeSheet.getCell('J29');
+j29Cell.value = '本人希望記入欄（特に待遇・職種・勤務時間・その他についての希望などがあれば記入）';
+j29Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+j29Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+// 本人希望記入欄の値
+resumeSheet.mergeCells('J30:N34');
+const j30Cell = resumeSheet.getCell('J30');
+j30Cell.value = documentData.personalPreference;
+j30Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+j30Cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
 
       
     // 職務経歴書シート
