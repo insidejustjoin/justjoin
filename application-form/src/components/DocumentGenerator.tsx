@@ -2346,11 +2346,11 @@ j25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 j25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 const l25Cell = resumeSheet.getCell('L25');
-l25Cell.value = ' 配偶者の扶養義務';
+l25Cell.value = '配偶者の扶養義務';
 l25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 l25Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-resumeSheet.mergeCells('M25:N26');
+resumeSheet.mergeCells('M25:N25');
 const m25Cell = resumeSheet.getCell('M25');
 m25Cell.value = '日本の在留資格';
 m25Cell.font = { name: 'MS Gothic', size: 10, bold: false };
@@ -2367,11 +2367,11 @@ l26Cell.value = documentData.spouseSupport;
 l26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 l26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-
-const n26Cell = resumeSheet.getCell('N26');
-n26Cell.value = documentData.residencyStatus || '';
-n26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-n26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+resumeSheet.mergeCells('M26:N26');
+const m26Cell = resumeSheet.getCell('M26');
+m26Cell.value = documentData.residencyStatus || '';
+m26Cell.font = { name: 'MS Gothic', size: 10, bold: false };
+m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
 // 技能実習の業種（常に表示、技能実習でない場合は「-」を表示）
 resumeSheet.mergeCells('J27:K27');
