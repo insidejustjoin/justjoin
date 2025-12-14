@@ -39,14 +39,15 @@ class OpenAITtsService {
             return null;
         }
         try {
-            // OpenAI TTS APIを使用
-            // 日本語には 'shimmer' または 'nova' ボイスが高品質
-            const voice = 'shimmer'; // 日本語に最適化された女性ボイス
+            // Apple Siriレベルの高品質音声を生成
+            // 'nova' ボイスはより自然でSiriに近い音質を提供
+            // 'shimmer' も高品質だが、novaの方がより柔らかく自然
+            const voice = 'nova'; // Siriのような自然な女性ボイス
             const response = await this.client.audio.speech.create({
-                model: 'tts-1-hd', // 最高品質モデル
+                model: 'tts-1-hd', // 最高品質モデル（HD品質）
                 voice: voice,
                 input: text,
-                speed: 0.9, // 少しゆっくりめ（聞き取りやすく）
+                speed: 1.0, // 自然な速度（Siriはやや速めで自然）
             });
             // Response bodyをBufferに変換
             const arrayBuffer = await response.arrayBuffer();

@@ -3,10 +3,12 @@ import {
   Mic, 
   MicOff, 
   Clock, 
-  CheckCircle2,
   Play,
   Volume2,
-  VolumeX
+  VolumeX,
+  CheckCircle2,
+  Loader2,
+  Radio
 } from 'lucide-react';
 import { Language, Question } from '@/types/interview';
 import { LanguageToggle } from './LanguageToggle';
@@ -21,7 +23,7 @@ declare global {
 interface InterviewScreenProps {
   sessionId: string;
   language: Language;
-  onComplete: () => void;
+  onComplete: (data?: { duration: number; questionsAnswered: number; totalQuestions: number }) => void;
   onError: (error: string) => void;
   email?: string;
   name?: string;
@@ -147,7 +149,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         setIsLoading(true);
         setStartTime(new Date());
         
-        // 最初の質問を取得
         const response = await fetch(`/api/interview/${sessionId}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -161,7 +162,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           setProgress({ current: 1, total: data.total || 10, percentage: 10 });
           setCanStartRecording(true);
           
-          // 質問を自動再生
           setTimeout(() => {
             playAIMessage(data.question.text);
           }, 1000);
@@ -211,7 +211,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       const data = await response.json();
 
       if (data.success && data.audio) {
-        // フォーマットに応じてMIMEタイプを設定
         const mimeType = data.format === 'wav' ? 'audio/wav' : 'audio/mp3';
         const audioBlob = new Blob([
           Uint8Array.from(atob(data.audio), c => c.charCodeAt(0))
@@ -236,7 +235,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         return;
       }
       
-      // フォールバック
       setIsPlaying(false);
       setCanStartRecording(true);
     } catch (error) {
@@ -254,7 +252,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     setRecordingTime(0);
     setTranscript('');
 
-    // 音声認識
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
@@ -280,7 +277,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       recognitionRef.current = recognition;
     }
 
-    // 録音時間の更新
     recordingIntervalRef.current = setInterval(() => {
       setRecordingTime(prev => prev + 1);
     }, 1000);
@@ -329,13 +325,17 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           setTranscript('');
           setRecordingTime(0);
           
-          // 次の質問を再生
           setTimeout(() => {
             playAIMessage(data.nextQuestion.text);
           }, 500);
         } else {
           // 面接完了
-          onComplete();
+          const finalDuration = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
+          onComplete({
+            duration: finalDuration,
+            questionsAnswered: progress.current,
+            totalQuestions: progress.total
+          });
         }
       }
     } catch (error) {
@@ -351,37 +351,43 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-600">準備中...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="text-center animate-fade-in">
+          <div className="relative">
+            <div className="absolute inset-0 bg-blue-500 rounded-full blur-xl opacity-20 animate-pulse"></div>
+            <Loader2 className="h-16 w-16 text-blue-600 animate-spin mx-auto relative z-10" />
+          </div>
+          <p className="mt-6 text-gray-600 font-medium text-lg">準備中...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* シンプルなヘッダー */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      {/* モダンなヘッダー */}
+      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <CheckCircle2 className="h-6 w-6 text-white" />
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl blur opacity-50"></div>
+                  <div className="relative w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <Radio className="h-6 w-6 text-white" />
+                  </div>
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900">AI面接</p>
+                  <p className="font-bold text-gray-900 text-lg">AI面接</p>
                   <p className="text-xs text-gray-500">{name || email || '求職者'}</p>
                 </div>
               </div>
-              <div className="hidden sm:flex items-center gap-4 text-sm text-gray-600">
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  <span>{formatTime(elapsedTime)}</span>
+              <div className="hidden md:flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg">
+                  <Clock className="h-4 w-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">{formatTime(elapsedTime)}</span>
                 </div>
-                <div className="px-2 py-1 bg-blue-50 rounded text-blue-700 font-medium">
+                <div className="px-3 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold shadow-md">
                   {progress.current}/{progress.total}
                 </div>
               </div>
@@ -390,7 +396,11 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
               <LanguageToggle language={displayLanguage} onLanguageChange={setDisplayLanguage} />
               <button
                 onClick={toggleMute}
-                className={`p-2 rounded-lg ${isMuted ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}
+                className={`p-2.5 rounded-xl transition-all ${
+                  isMuted 
+                    ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
               >
                 {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </button>
@@ -400,16 +410,21 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       </header>
 
       {/* メインコンテンツ */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* 進捗バー */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2 text-sm text-gray-600">
-            <span>{t.progress}</span>
-            <span className="font-semibold">{progress.percentage}%</span>
+        <div className="mb-8 animate-slide-in-up">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-gray-600">{t.progress}</span>
+            <span className="text-sm font-bold text-gray-900">{progress.percentage}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="relative w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full"></div>
             <div 
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-600 to-purple-700 rounded-full transition-all duration-500 ease-out shadow-lg"
+              style={{ width: `${progress.percentage}%` }}
+            />
+            <div 
+              className="absolute inset-y-0 left-0 bg-white/30 rounded-full transition-all duration-500 ease-out"
               style={{ width: `${progress.percentage}%` }}
             />
           </div>
@@ -417,109 +432,135 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
         {/* 質問カード */}
         {currentQuestion && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8">
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">
-                    {progress.current}
+          <div className="mb-8 animate-slide-in-up">
+            <div className="relative bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-gray-200/50 p-8 sm:p-10 overflow-hidden">
+              {/* 装飾的な背景要素 */}
+              <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-100/50 to-purple-100/50 rounded-full blur-3xl -mr-32 -mt-32"></div>
+              
+              <div className="relative">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl blur opacity-50"></div>
+                        <div className="relative w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                          {progress.current}
+                        </div>
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">{t.question} {progress.current}</h2>
+                        <p className="text-sm text-gray-500 mt-1">{progress.total}問中</p>
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-8 border-l-4 border-blue-500 shadow-sm">
+                      <p className="text-xl text-gray-800 leading-relaxed font-medium">
+                        {typeof currentQuestion.text === 'string' 
+                          ? currentQuestion.text
+                          : currentQuestion.text[displayLanguage] || currentQuestion.text.ja || ''}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">{t.question} {progress.current}</h2>
-                    <p className="text-sm text-gray-500">{progress.total}問中</p>
-                  </div>
-                </div>
-                <div className="bg-blue-50 rounded-xl p-6 border-l-4 border-blue-600">
-                  <p className="text-lg text-gray-800 leading-relaxed">
-                    {typeof currentQuestion.text === 'string' 
-                      ? currentQuestion.text
-                      : currentQuestion.text[displayLanguage] || currentQuestion.text.ja || ''}
-                  </p>
+                  {!isPlaying && (
+                    <button
+                      onClick={() => {
+                        const questionText = typeof currentQuestion.text === 'string' 
+                          ? currentQuestion.text 
+                          : currentQuestion.text.ja || '';
+                        playAIMessage(questionText);
+                      }}
+                      className="ml-4 p-4 bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-2xl hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl hover:scale-105"
+                    >
+                      <Play className="h-6 w-6" />
+                    </button>
+                  )}
                 </div>
               </div>
-              {!isPlaying && (
-                <button
-                  onClick={() => {
-                    const questionText = typeof currentQuestion.text === 'string' 
-                      ? currentQuestion.text 
-                      : currentQuestion.text.ja || '';
-                    playAIMessage(questionText);
-                  }}
-                  className="ml-4 p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-                >
-                  <Play className="h-5 w-5" />
-                </button>
-              )}
             </div>
           </div>
         )}
 
         {/* 録音エリア */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-          {isPlaying ? (
-            <div className="text-center py-12">
-              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <Volume2 className="h-10 w-10 text-blue-600" />
-              </div>
-              <p className="text-gray-600 font-medium">{t.thinking}</p>
-            </div>
-          ) : isSubmitting ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
-              <p className="text-gray-600 font-medium">{t.processing}</p>
-            </div>
-          ) : isRecording ? (
-            <div className="text-center">
-              <button
-                onClick={toggleRecording}
-                className="w-32 h-32 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg hover:bg-red-700 transition-colors"
-              >
-                <MicOff className="h-16 w-16 text-white" />
-              </button>
-              <div className="mb-6">
-                <p className="text-xl font-bold text-red-600 mb-2">{t.recording}</p>
-                <p className="text-4xl font-mono text-gray-800 font-bold">{formatTime(recordingTime)}</p>
-              </div>
-              {transcript && (
-                <div className="bg-gray-50 rounded-xl p-6 mb-6 text-left">
-                  <p className="text-gray-800 leading-relaxed mb-4">{transcript}</p>
-                  <div className="flex gap-3">
+        <div className="animate-slide-in-up">
+          <div className="relative bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-gray-200/50 p-8 sm:p-12 overflow-hidden">
+            {/* 装飾的な背景要素 */}
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-purple-100/50 to-pink-100/50 rounded-full blur-3xl -ml-32 -mb-32"></div>
+            
+            <div className="relative">
+              {isPlaying ? (
+                <div className="text-center py-16">
+                  <div className="relative inline-block mb-6">
+                    <div className="absolute inset-0 bg-blue-500 rounded-full blur-2xl opacity-30 animate-pulse"></div>
+                    <div className="relative w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto shadow-xl">
+                      <Volume2 className="h-12 w-12 text-white animate-pulse" />
+                    </div>
+                  </div>
+                  <p className="text-gray-600 font-medium text-lg">{t.thinking}</p>
+                </div>
+              ) : isSubmitting ? (
+                <div className="text-center py-16">
+                  <Loader2 className="h-16 w-16 text-blue-600 animate-spin mx-auto mb-4" />
+                  <p className="text-gray-600 font-medium text-lg">{t.processing}</p>
+                </div>
+              ) : isRecording ? (
+                <div className="text-center">
+                  <div className="relative inline-block mb-8">
+                    <div className="absolute inset-0 bg-red-500 rounded-full blur-2xl opacity-40 animate-ping"></div>
                     <button
-                      onClick={handleSubmit}
-                      disabled={isSubmitting}
-                      className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 disabled:bg-gray-400 transition-colors font-medium"
+                      onClick={toggleRecording}
+                      className="relative w-40 h-40 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto shadow-2xl hover:shadow-red-500/50 transition-all hover:scale-105"
                     >
-                      {t.submit}
-                    </button>
-                    <button
-                      onClick={stopRecording}
-                      className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
-                    >
-                      {t.stop}
+                      <MicOff className="h-20 w-20 text-white" />
                     </button>
                   </div>
+                  <div className="mb-8">
+                    <div className="flex items-center justify-center gap-2 mb-3">
+                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                      <p className="text-2xl font-bold text-red-600">{t.recording}</p>
+                    </div>
+                    <p className="text-6xl font-mono text-gray-800 font-bold tracking-wider">{formatTime(recordingTime)}</p>
+                  </div>
+                  {transcript && (
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-8 mb-6 text-left border border-gray-200 shadow-inner">
+                      <p className="text-gray-800 leading-relaxed text-lg mb-6 min-h-[100px]">{transcript}</p>
+                      <div className="flex gap-4">
+                        <button
+                          onClick={handleSubmit}
+                          disabled={isSubmitting}
+                          className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 transition-all font-semibold text-lg shadow-lg hover:shadow-xl disabled:shadow-none"
+                        >
+                          {t.submit}
+                        </button>
+                        <button
+                          onClick={stopRecording}
+                          className="px-8 py-4 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all font-semibold text-lg"
+                        >
+                          {t.stop}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center">
+                  <button
+                    onClick={toggleRecording}
+                    disabled={!canStartRecording || isPlaying}
+                    className={`relative w-40 h-40 rounded-full flex items-center justify-center mx-auto mb-8 shadow-2xl transition-all ${
+                      canStartRecording && !isPlaying
+                        ? 'bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white hover:scale-105 hover:shadow-blue-500/50'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Mic className="h-20 w-20" />
+                  </button>
+                  <p className="text-2xl font-bold text-gray-700 mb-2">
+                    {canStartRecording ? t.speakNow : t.thinking}
+                  </p>
+                  <p className="text-gray-500">ボタンを押して録音を開始</p>
                 </div>
               )}
             </div>
-          ) : (
-            <div className="text-center">
-              <button
-                onClick={toggleRecording}
-                disabled={!canStartRecording || isPlaying}
-                className={`w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg transition-all ${
-                  canStartRecording && !isPlaying
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-              >
-                <Mic className="h-16 w-16" />
-              </button>
-              <p className="text-lg font-semibold text-gray-700 mb-2">
-                {canStartRecording ? t.speakNow : t.thinking}
-              </p>
-              <p className="text-sm text-gray-500">ボタンを押して録音を開始</p>
-            </div>
-          )}
+          </div>
         </div>
       </main>
     </div>
