@@ -180,9 +180,134 @@ const InterviewPreparation: React.FC<InterviewPreparationProps> = ({
         preparationIncomplete: 'Please complete all preparation items'
       }
     },
-    // ロシア語・ウズベク語は当面、日本語または英語にフォールバック
-    ru: {} as any,
-    uz: {} as any,
+    ru: {
+      title: 'Подготовка к интервью',
+      subtitle: 'Важные шаги перед началом интервью',
+      description: 'Перед началом интервью, пожалуйста, выполните следующие шаги.',
+      
+      step1: {
+        title: 'Проверка основной информации',
+        description: 'Проверьте основную информацию, необходимую для интервью.',
+        nameLabel: 'Имя',
+        emailLabel: 'Электронная почта',
+        positionLabel: 'Желаемая должность',
+        languageLabel: 'Язык интервью'
+      },
+      
+      step2: {
+        title: 'Согласия',
+        description: 'Пожалуйста, дайте согласие на запись интервью и обработку данных.',
+        consentRecording: 'Запись и хранение интервью',
+        consentRecordingText: 'Интервью может записываться и использоваться для оценки и улучшения качества. Данные хранятся безопасно и не используются в иных целях, кроме подбора персонала.',
+        consentDataProcessing: 'Обработка данных',
+        consentDataProcessingText: 'Введённая информация и содержание интервью будут безопасно обрабатываться и храниться в Google Cloud Platform. Данные шифруются и защищены современными методами безопасности.',
+        consentTerms: 'Условия использования',
+        consentTermsText: 'Я согласен(на) с Условиями использования и Политикой конфиденциальности Just Join.'
+      },
+      
+      step3: {
+        title: 'Проверка окружения',
+        description: 'Проверьте окружение, необходимое для проведения интервью.',
+        microphone: 'Проверка микрофона',
+        microphoneText: 'Убедитесь, что микрофон работает корректно.',
+        camera: 'Проверка камеры',
+        cameraText: 'Убедитесь, что камера работает корректно.',
+        internet: 'Проверка интернет-соединения',
+        internetText: 'Убедитесь, что у вас стабильное интернет-соединение.',
+        audio: 'Проверка звука',
+        audioText: 'Убедитесь, что вы без проблем слышите звук.',
+        environment: 'Проверка окружающей среды',
+        environmentText: 'Убедитесь, что вокруг тихо и ничто не мешает интервью.'
+      },
+      
+      step4: {
+        title: 'Финальная проверка',
+        description: 'Финальная проверка перед началом интервью.',
+        duration: 'Продолжительность интервью: около 10–15 минут',
+        questions: 'Количество вопросов: 10',
+        language: 'Язык интервью: японский (если указано иное — см. инструкцию компании)',
+        oneTimeOnly: 'Интервью можно пройти только один раз как первый этап отбора',
+        results: 'Результаты интервью будут оценены автоматически'
+      },
+      
+      buttons: {
+        next: 'Далее',
+        back: 'Назад',
+        start: 'Начать интервью',
+        test: 'Тест',
+        retry: 'Повторить'
+      },
+      
+      errors: {
+        consentRequired: 'Поставьте отметку во всех полях согласия',
+        emailInvalid: 'Введите корректный адрес электронной почты',
+        preparationIncomplete: 'Пожалуйста, завершите все шаги подготовки'
+      }
+    },
+    uz: {
+      title: 'Suhbatga tayyorgarlik',
+      subtitle: 'Suhbatdan oldingi tekshiruv roʻyxati',
+      description: 'Suhbatni boshlashdan oldin quyidagi bandlarni tekshiring.',
+      
+      step1: {
+        title: 'Asosiy maʼlumotlarni tekshirish',
+        description: 'Suhbat uchun zarur bo‘lgan asosiy maʼlumotlarni tekshiring.',
+        nameLabel: 'Ism',
+        emailLabel: 'Elektron pochta',
+        positionLabel: 'Ariza berilgan lavozim',
+        languageLabel: 'Suhbat tili'
+      },
+      
+      step2: {
+        title: 'Roziliklar',
+        description: 'Suhbatni yozib olish va maʼlumotlarni qayta ishlashga rozilik bering.',
+        consentRecording: 'Suhbatni yozib olish haqida',
+        consentRecordingText: 'Ushbu suhbat sifatni oshirish va baholash maqsadida yozib olinishi mumkin. Maʼlumotlar xavfsiz saqlanadi va faqat ishga qabul qilish jarayonida foydalaniladi.',
+        consentDataProcessing: 'Maʼlumotlarni qayta ishlash',
+        consentDataProcessingText: 'Kiritilgan maʼlumotlar va suhbat mazmuni Google Cloud Platformʼda xavfsiz tarzda qayta ishlanadi va saqlanadi. Maʼlumotlar shifrlanadi va tegishli xavfsizlik choralariga ega.',
+        consentTerms: 'Foydalanish shartlari',
+        consentTermsText: 'Men Just Join foydalanish shartlari va Maxfiylik siyosatiga roziman.'
+      },
+      
+      step3: {
+        title: 'Muhitni tekshirish',
+        description: 'Suhbat uchun zarur bo‘lgan muhitni tekshiring.',
+        microphone: 'Mikrofonni tekshirish',
+        microphoneText: 'Mikrofon toʻgʻri ishlayotganini tekshiring.',
+        camera: 'Kamerani tekshirish',
+        cameraText: 'Kamera toʻgʻri ishlayotganini tekshiring.',
+        internet: 'Internet aloqasini tekshirish',
+        internetText: 'Internet aloqangiz barqaror ekanligiga ishonch hosil qiling.',
+        audio: 'Ovoz tekshiruvi',
+        audioText: 'Ovozni aniq eshityotganingizni tekshiring.',
+        environment: 'Muhitni tekshirish',
+        environmentText: 'Suhbatni tinch va shovqinsiz joyda oʻtkazayotganingizni tekshiring.'
+      },
+      
+      step4: {
+        title: 'Yakuniy tekshiruv',
+        description: 'Suhbatni boshlashdan oldingi yakuniy tekshiruv.',
+        duration: 'Suhbat davomiyligi: taxminan 10–15 daqiqa',
+        questions: 'Savollar soni: 10 ta',
+        language: 'Suhbat tili: yapon tili (agar boshqacha koʻrsatilmagan boʻlsa)',
+        oneTimeOnly: 'Bu suhbat birinchi bosqich sifatida faqat bir marta o‘tkaziladi',
+        results: 'Suhbat natijalari darhol baholanadi'
+      },
+      
+      buttons: {
+        next: 'Keyingisi',
+        back: 'Orqaga',
+        start: 'Suhbatni boshlash',
+        test: 'Test',
+        retry: 'Qayta urinish'
+      },
+      
+      errors: {
+        consentRequired: 'Iltimos, barcha rozilik bandlarini belgilang',
+        emailInvalid: 'Yaroqli elektron pochta manzilini kiriting',
+        preparationIncomplete: 'Iltimos, tayyorgarlikning barcha bandlarini yakunlang'
+      }
+    },
   };
 
   // 安全にフォールバック（言語ごとの詳細な翻訳をまだ用意していないため）
@@ -1123,36 +1248,65 @@ Press "OK" to complete audio check, "Cancel" to retry.`;
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-8">
         {/* ヘッダー */}
-        <div className="text-center mb-8">
-          <div className="mb-4">
-            <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <UserIcon className="w-8 h-8 text-white" />
+        <div className="text-center mb-10">
+          <div className="mb-5">
+            <div className="relative inline-block">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl blur-xl opacity-40" />
+              <div className="relative w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
+                <UserIcon className="w-8 h-8 text-white" />
+              </div>
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t.title}</h1>
-          <h2 className="text-lg text-blue-600 mb-4">{t.subtitle}</h2>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2 text-responsive-3xl">{t.title}</h1>
+          <h2 className="text-lg text-blue-600 mb-3 font-semibold">{t.subtitle}</h2>
           <p className="text-gray-600">{t.description}</p>
         </div>
 
-        {/* プログレスバー */}
+        {/* ステップインジケータ */}
         <div className="mb-8">
-          <div className="flex justify-between mb-2">
-            {[1, 2, 3, 4].map((step) => (
-              <div key={step} className="flex items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  step <= currentStep 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {step}
+          <div className="flex justify-between items-center">
+            {[1, 2, 3, 4].map((step) => {
+              const isActive = step === currentStep;
+              const isCompleted = step < currentStep;
+              const isFuture = step > currentStep;
+              
+              const baseCircle =
+                'flex items-center justify-center rounded-full transition-all duration-200 shadow-sm';
+              
+              return (
+                <div key={step} className="flex-1 flex flex-col items-center">
+                  {/* 線 */}
+                  {step > 1 && (
+                    <div
+                      className={`w-full h-1 mb-3 ${
+                        isCompleted
+                          ? 'bg-gradient-to-r from-blue-500 to-indigo-500'
+                          : 'bg-gray-200'
+                      }`}
+                    />
+                  )}
+                  {/* 番号バッジ */}
+                  <div
+                    className={`${baseCircle} ${
+                      isActive
+                        ? 'w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-lg font-bold'
+                        : isCompleted
+                        ? 'w-10 h-10 bg-blue-100 text-blue-700 text-sm font-semibold'
+                        : 'w-10 h-10 bg-gray-100 text-gray-500 text-sm font-medium'
+                    }`}
+                  >
+                    {step}
+                  </div>
+                  {/* ラベル */}
+                  <div className="mt-2 text-xs sm:text-sm text-gray-600 text-center leading-snug">
+                    {step === 1 && (t.step1?.title || '基本情報')}
+                    {step === 2 && (t.step2?.title || '同意')}
+                    {step === 3 && (t.step3?.title || '環境確認')}
+                    {step === 4 && (t.step4?.title || '最終確認')}
+                  </div>
                 </div>
-                {step < 4 && (
-                  <div className={`w-12 h-1 mx-2 ${
-                    step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
-                  }`} />
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

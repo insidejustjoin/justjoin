@@ -235,7 +235,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       const response = await fetch('/api/interview/synthesize-speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: message, languageCode: 'ja' })
+        body: JSON.stringify({ text: message, languageCode: displayLanguage })
       });
 
       const data = await response.json();
@@ -264,13 +264,60 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         await audio.play();
         return;
       }
-      
+
+      // サーバー側TTSが利用できない場合はブラウザの音声合成にフォールバック
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.lang =
+          displayLanguage === 'en'
+            ? 'en-US'
+            : displayLanguage === 'ru'
+            ? 'ru-RU'
+            : displayLanguage === 'uz'
+            ? 'uz-UZ'
+            : 'ja-JP';
+        utterance.rate = 0.9;
+        utterance.onend = () => {
+          setIsPlaying(false);
+          setCanStartRecording(true);
+        };
+        utterance.onerror = () => {
+          setIsPlaying(false);
+          setCanStartRecording(true);
+        };
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+
       setIsPlaying(false);
       setCanStartRecording(true);
     } catch (error) {
       console.error('音声再生エラー:', error);
-      setIsPlaying(false);
-      setCanStartRecording(true);
+      // エラー時もブラウザ側の音声合成を試す
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.lang =
+          displayLanguage === 'en'
+            ? 'en-US'
+            : displayLanguage === 'ru'
+            ? 'ru-RU'
+            : displayLanguage === 'uz'
+            ? 'uz-UZ'
+            : 'ja-JP';
+        utterance.rate = 0.9;
+        utterance.onend = () => {
+          setIsPlaying(false);
+          setCanStartRecording(true);
+        };
+        utterance.onerror = () => {
+          setIsPlaying(false);
+          setCanStartRecording(true);
+        };
+        window.speechSynthesis.speak(utterance);
+      } else {
+        setIsPlaying(false);
+        setCanStartRecording(true);
+      }
     }
   };
 
