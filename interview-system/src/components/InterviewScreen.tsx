@@ -62,6 +62,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const [audioRecorder, setAudioRecorder] = useState<MediaRecorder | null>(null);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [displayLanguage, setDisplayLanguage] = useState<Language>(language);
+  // 実際にAPIで使用するセッションID（サーバー側の値を優先）
+  const [activeSessionId, setActiveSessionId] = useState<string>(sessionId);
   
   useEffect(() => {
     setDisplayLanguage(language);
@@ -148,22 +150,50 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       try {
         setIsLoading(true);
         setStartTime(new Date());
-        
-        const response = await fetch(`/api/interview/${sessionId}/start`, {
+
+        // サーバー側のテスト用開始APIを呼び出し
+        const response = await fetch('/api/interview/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            name,
+            position,
+            language: displayLanguage,
+            consentGiven: consentGiven ?? true,
+          }),
         });
 
         if (!response.ok) throw new Error('面接開始に失敗しました');
 
         const data = await response.json();
-        if (data.success && data.question) {
-          setCurrentQuestion(data.question);
-          setProgress({ current: 1, total: data.total || 10, percentage: 10 });
+        if (data.success && (data.nextQuestion || data.question)) {
+          // サーバー側セッションIDを優先的に利用
+          if (data.sessionId) {
+            setActiveSessionId(data.sessionId);
+          }
+
+          const firstQuestion = data.nextQuestion || data.question;
+          const initialProgress = data.progress || {
+            current: 0,
+            total: 10,
+            percentage: 0,
+          };
+
+          setCurrentQuestion(firstQuestion);
+          setProgress({
+            current: initialProgress.current ?? 0,
+            total: initialProgress.total ?? 10,
+            percentage: initialProgress.percentage ?? 0,
+          });
           setCanStartRecording(true);
           
           setTimeout(() => {
-            playAIMessage(data.question.text);
+            playAIMessage(
+              typeof firstQuestion.text === 'string'
+                ? firstQuestion.text
+                : firstQuestion.text?.ja || ''
+            );
           }, 1000);
         }
       } catch (error) {
@@ -303,12 +333,14 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/interview/${sessionId}/answer`, {
+      const response = await fetch('/api/interview/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          sessionId: activeSessionId,
           questionId: currentQuestion?.id,
-          answer: transcript.trim()
+          text: transcript.trim(),
+          responseTime: recordingTime,
         })
       });
 
