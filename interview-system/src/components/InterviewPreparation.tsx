@@ -179,10 +179,16 @@ const InterviewPreparation: React.FC<InterviewPreparationProps> = ({
         emailInvalid: 'Please enter a valid email address',
         preparationIncomplete: 'Please complete all preparation items'
       }
-    }
+    },
+    // ロシア語・ウズベク語は当面、日本語または英語にフォールバック
+    ru: {} as any,
+    uz: {} as any,
   };
 
-  const t = texts[language];
+  // 安全にフォールバック（言語ごとの詳細な翻訳をまだ用意していないため）
+  const t = texts[language] && Object.keys(texts[language] as any).length > 0
+    ? texts[language]
+    : texts.ja;
 
   const validateEmail = (email: string): boolean => {
     if (!email) return true; // 任意項目
