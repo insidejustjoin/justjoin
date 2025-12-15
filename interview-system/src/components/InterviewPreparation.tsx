@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CheckIcon, AlertTriangleIcon, UserIcon, GlobeIcon, ClockIcon, VideoIcon, MicIcon, WifiIcon, VolumeIcon, BarChart3Icon } from 'lucide-react';
 import { Language } from '@/types/interview';
+import { LanguageToggle } from './LanguageToggle';
 
 interface InterviewPreparationProps {
   onComplete: (data: {
@@ -1246,7 +1247,12 @@ Press "OK" to complete audio check, "Cancel" to retry.`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-8">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-8 relative">
+        {/* 言語切り替えボタン（右上固定） */}
+        <div className="absolute top-4 right-4 z-10">
+          <LanguageToggle language={language} onLanguageChange={onLanguageChange} />
+        </div>
+
         {/* ヘッダー */}
         <div className="text-center mb-10">
           <div className="mb-5">
@@ -1264,41 +1270,50 @@ Press "OK" to complete audio check, "Cancel" to retry.`;
 
         {/* ステップインジケータ */}
         <div className="mb-8">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-start relative">
+            {/* 背景の線 */}
+            <div className="absolute top-8 left-0 right-0 h-1 bg-gray-200 z-0" style={{ marginLeft: '3rem', marginRight: '3rem' }} />
+            <div 
+              className="absolute top-8 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 z-0 transition-all duration-500"
+              style={{ 
+                left: '3rem',
+                width: `${((currentStep - 1) / 3) * 100}%`
+              }}
+            />
+            
             {[1, 2, 3, 4].map((step) => {
               const isActive = step === currentStep;
               const isCompleted = step < currentStep;
               const isFuture = step > currentStep;
               
-              const baseCircle =
-                'flex items-center justify-center rounded-full transition-all duration-200 shadow-sm';
-              
               return (
-                <div key={step} className="flex-1 flex flex-col items-center">
-                  {/* 線 */}
-                  {step > 1 && (
+                <div key={step} className="flex-1 flex flex-col items-center relative z-10">
+                  {/* 番号バッジ - 大きく、見やすく */}
+                  <div className="relative">
+                    {/* グロー効果（アクティブ時） */}
+                    {isActive && (
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full blur-lg opacity-50 animate-pulse" />
+                    )}
                     <div
-                      className={`w-full h-1 mb-3 ${
-                        isCompleted
-                          ? 'bg-gradient-to-r from-blue-500 to-indigo-500'
-                          : 'bg-gray-200'
+                      className={`relative flex items-center justify-center rounded-full transition-all duration-300 shadow-lg ${
+                        isActive
+                          ? 'w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-2xl font-black border-4 border-white'
+                          : isCompleted
+                          ? 'w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-500 text-white text-xl font-bold border-2 border-blue-300'
+                          : 'w-14 h-14 bg-gray-200 text-gray-400 text-xl font-semibold border-2 border-gray-300'
                       }`}
-                    />
-                  )}
-                  {/* 番号バッジ */}
-                  <div
-                    className={`${baseCircle} ${
-                      isActive
-                        ? 'w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-lg font-bold'
-                        : isCompleted
-                        ? 'w-10 h-10 bg-blue-100 text-blue-700 text-sm font-semibold'
-                        : 'w-10 h-10 bg-gray-100 text-gray-500 text-sm font-medium'
-                    }`}
-                  >
-                    {step}
+                    >
+                      {step}
+                    </div>
                   </div>
-                  {/* ラベル */}
-                  <div className="mt-2 text-xs sm:text-sm text-gray-600 text-center leading-snug">
+                  {/* ラベル - 大きく、見やすく */}
+                  <div className={`mt-3 text-center leading-tight ${
+                    isActive 
+                      ? 'text-base font-bold text-gray-900' 
+                      : isCompleted
+                      ? 'text-sm font-semibold text-blue-700'
+                      : 'text-sm font-medium text-gray-500'
+                  }`}>
                     {step === 1 && (t.step1?.title || '基本情報')}
                     {step === 2 && (t.step2?.title || '同意')}
                     {step === 3 && (t.step3?.title || '環境確認')}
