@@ -62,6 +62,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const [audioRecorder, setAudioRecorder] = useState<MediaRecorder | null>(null);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [displayLanguage, setDisplayLanguage] = useState<Language>(language);
+  const [error, setError] = useState<string>('');
   // 実際にAPIで使用するセッションID（サーバー側の値を優先）
   const [activeSessionId, setActiveSessionId] = useState<string>(sessionId);
   
@@ -83,6 +84,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       submit: '送信',
       thinking: 'AIが考えています...',
       processing: '処理中...',
+      listening: '音声を認識中...',
+      recognizing: '音声を認識しています',
       timeElapsed: '経過時間',
       mute: 'ミュート',
       unmute: 'ミュート解除',
@@ -98,6 +101,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       submit: 'Submit',
       thinking: 'AI is thinking...',
       processing: 'Processing...',
+      listening: 'Listening...',
+      recognizing: 'Recognizing speech',
       timeElapsed: 'Time elapsed',
       mute: 'Mute',
       unmute: 'Unmute',
@@ -113,6 +118,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       submit: 'Отправить',
       thinking: 'AI думает...',
       processing: 'Обработка...',
+      listening: 'Слушаю...',
+      recognizing: 'Распознавание речи',
       timeElapsed: 'Прошло времени',
       mute: 'Отключить звук',
       unmute: 'Включить звук',
@@ -128,6 +135,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       submit: 'Yuborish',
       thinking: 'AI o\'ylayapti...',
       processing: 'Qayta ishlanmoqda...',
+      listening: 'Tinglanmoqda...',
+      recognizing: 'Nutqni tanib olish',
       timeElapsed: 'O\'tgan vaqt',
       mute: 'Ovozni o\'chirish',
       unmute: 'Ovozni yoqish',
@@ -337,16 +346,39 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       recognition.interimResults = true;
 
       recognition.onresult = (event: any) => {
+        let finalTranscript = '';
         let interimTranscript = '';
+        
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          interimTranscript += event.results[i][0].transcript;
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
         }
-        setTranscript(interimTranscript);
+        
+        // finalとinterimを結合して表示（常に更新）
+        const combined = (finalTranscript + interimTranscript).trim();
+        setTranscript(combined);
+        console.log('音声認識結果:', { finalTranscript, interimTranscript, combined });
       };
 
       recognition.onerror = (event: any) => {
         if (event.error !== 'aborted') {
           console.error('音声認識エラー:', event.error);
+          setIsRecording(false);
+          if (recordingIntervalRef.current) {
+            clearInterval(recordingIntervalRef.current);
+            recordingIntervalRef.current = null;
+          }
+        }
+      };
+
+      recognition.onend = () => {
+        // 音声認識が終了した場合の処理
+        if (isRecording) {
+          console.log('音声認識が終了しました（自動停止）');
         }
       };
 
@@ -391,6 +423,11 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         })
       });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
       
       if (data.success) {
@@ -405,21 +442,31 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           setRecordingTime(0);
           
           setTimeout(() => {
-            playAIMessage(data.nextQuestion.text);
+            const questionText = typeof data.nextQuestion.text === 'string' 
+              ? data.nextQuestion.text 
+              : data.nextQuestion.text[displayLanguage] || data.nextQuestion.text.ja || '';
+            playAIMessage(questionText);
           }, 500);
         } else {
           // 面接完了
           const finalDuration = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
           onComplete({
             duration: finalDuration,
-            questionsAnswered: progress.current,
+            questionsAnswered: progress.current + 1,
             totalQuestions: progress.total
           });
         }
+      } else {
+        throw new Error(data.message || '回答の送信に失敗しました');
       }
     } catch (error) {
       console.error('回答送信エラー:', error);
-      onError('回答の送信に失敗しました');
+      const errorMessage = error instanceof Error ? error.message : '回答の送信に失敗しました';
+      // UIにエラーを表示（alertではなく）
+      setError(errorMessage);
+      setIsSubmitting(false);
+      // 3秒後にエラーメッセージを消す
+      setTimeout(() => setError(''), 5000);
     } finally {
       setIsSubmitting(false);
     }
@@ -517,18 +564,18 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
               <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-100/50 to-purple-100/50 rounded-full blur-3xl -mr-32 -mt-32"></div>
               
               <div className="relative">
-                <div className="flex items-start justify-between mb-6">
+                    <div className="flex items-start justify-between mb-6">
                   <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-6">
+                    <div className="flex items-center gap-6 mb-6">
                       <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl blur opacity-50"></div>
-                        <div className="relative w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl blur-xl opacity-60 animate-pulse"></div>
+                        <div className="relative w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl flex items-center justify-center text-white font-black text-4xl shadow-2xl border-4 border-white/30">
                           {progress.current}
                         </div>
                       </div>
                       <div>
-                        <h2 className="text-2xl font-bold text-gray-900">{t.question} {progress.current}</h2>
-                        <p className="text-sm text-gray-500 mt-1">{progress.total}問中</p>
+                        <h2 className="text-3xl font-bold text-gray-900 mb-2">{t.question} {progress.current}</h2>
+                        <p className="text-base text-gray-500 font-medium">{progress.total}問中 / {progress.percentage}%</p>
                       </div>
                     </div>
                     <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-8 border-l-4 border-blue-500 shadow-sm">
@@ -558,6 +605,26 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           </div>
         )}
 
+        {/* エラーメッセージ */}
+        {error && (
+          <div className="mb-6 animate-slide-in-up">
+            <div className="bg-red-50 border-l-4 border-red-500 rounded-xl p-4 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xs font-bold">!</span>
+                </div>
+                <p className="text-red-800 font-medium flex-1">{error}</p>
+                <button
+                  onClick={() => setError('')}
+                  className="text-red-500 hover:text-red-700 transition-colors"
+                >
+                  <span className="text-xl">×</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 録音エリア */}
         <div className="animate-slide-in-up">
           <div className="relative bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-gray-200/50 p-8 sm:p-12 overflow-hidden">
@@ -580,15 +647,71 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   <Loader2 className="h-16 w-16 text-blue-600 animate-spin mx-auto mb-4" />
                   <p className="text-gray-600 font-medium text-lg">{t.processing}</p>
                 </div>
+              ) : transcript ? (
+                <div className="text-center">
+                  {/* 認識されたテキストがある場合（録音中または停止後） */}
+                  {isRecording && (
+                    <>
+                      <div className="relative inline-block mb-6">
+                        <div className="absolute inset-0 bg-red-500 rounded-full blur-2xl opacity-40 animate-ping"></div>
+                        <button
+                          onClick={toggleRecording}
+                          className="relative w-32 h-32 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto shadow-2xl hover:shadow-red-500/50 transition-all hover:scale-105"
+                        >
+                          <MicOff className="h-16 w-16 text-white" />
+                        </button>
+                      </div>
+                      <div className="mb-6">
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                          <p className="text-xl font-bold text-red-600">{t.recording}</p>
+                        </div>
+                        <p className="text-4xl font-mono text-gray-800 font-bold tracking-wider">{formatTime(recordingTime)}</p>
+                      </div>
+                    </>
+                  )}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 text-left border-2 border-blue-300 shadow-lg">
+                    <p className="text-gray-900 leading-relaxed text-xl mb-6 font-medium whitespace-pre-wrap break-words min-h-[120px]">
+                      {transcript}
+                    </p>
+                    {isRecording && (
+                      <div className="flex items-center gap-2 mb-4 text-sm text-green-600">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span>{t.recognizing}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-4">
+                      <button
+                        onClick={handleSubmit}
+                        disabled={!transcript.trim()}
+                        className={`flex-1 px-8 py-4 rounded-xl transition-all font-semibold text-lg shadow-lg hover:shadow-xl ${
+                          transcript.trim()
+                            ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {t.submit}
+                      </button>
+                      {isRecording && (
+                        <button
+                          onClick={stopRecording}
+                          className="px-8 py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all font-semibold text-lg shadow-md"
+                        >
+                          {t.stop}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               ) : isRecording ? (
                 <div className="text-center">
                   <div className="relative inline-block mb-8">
                     <div className="absolute inset-0 bg-red-500 rounded-full blur-2xl opacity-40 animate-ping"></div>
                     <button
-                      onClick={toggleRecording}
+                      onClick={stopRecording}
                       className="relative w-40 h-40 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto shadow-2xl hover:shadow-red-500/50 transition-all hover:scale-105"
                     >
-                      <MicOff className="h-20 w-20 text-white" />
+                      <Mic className="h-20 w-20 text-white" />
                     </button>
                   </div>
                   <div className="mb-8">
@@ -598,26 +721,36 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                     </div>
                     <p className="text-6xl font-mono text-gray-800 font-bold tracking-wider">{formatTime(recordingTime)}</p>
                   </div>
-                  {transcript && (
-                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-8 mb-6 text-left border border-gray-200 shadow-inner">
-                      <p className="text-gray-800 leading-relaxed text-lg mb-6 min-h-[100px]">{transcript}</p>
-                      <div className="flex gap-4">
-                        <button
-                          onClick={handleSubmit}
-                          disabled={isSubmitting}
-                          className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 transition-all font-semibold text-lg shadow-lg hover:shadow-xl disabled:shadow-none"
-                        >
-                          {t.submit}
-                        </button>
-                        <button
-                          onClick={stopRecording}
-                          className="px-8 py-4 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all font-semibold text-lg"
-                        >
-                          {t.stop}
-                        </button>
+                  {/* 録音中のテキスト表示エリア（大きく表示） */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 text-left border-2 border-blue-300 shadow-lg min-h-[200px]">
+                    {transcript ? (
+                      <>
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                          <span className="text-sm font-medium text-green-600">{t.recognizing}</span>
+                        </div>
+                        <p className="text-2xl text-gray-900 leading-relaxed font-medium whitespace-pre-wrap break-words min-h-[120px]">
+                          {transcript}
+                        </p>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center h-[200px]">
+                        <div className="text-center">
+                          <div className="relative inline-block mb-4">
+                            <div className="absolute inset-0 bg-blue-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
+                            <div className="relative w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                          <p className="text-gray-500 text-lg">{t.listening}</p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                    <button
+                      onClick={stopRecording}
+                      className="w-full px-8 py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all font-semibold text-lg shadow-md mt-6"
+                    >
+                      {t.stop}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center">
@@ -635,7 +768,12 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   <p className="text-2xl font-bold text-gray-700 mb-2">
                     {canStartRecording ? t.speakNow : t.thinking}
                   </p>
-                  <p className="text-gray-500">ボタンを押して録音を開始</p>
+                  <p className="text-gray-500">
+                    {displayLanguage === 'ja' ? 'ボタンを押して録音を開始' : 
+                     displayLanguage === 'en' ? 'Press button to start recording' :
+                     displayLanguage === 'ru' ? 'Нажмите кнопку, чтобы начать запись' :
+                     'Boshlash uchun tugmani bosing'}
+                  </p>
                 </div>
               )}
             </div>
