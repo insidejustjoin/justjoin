@@ -222,7 +222,9 @@ export function JobSeekerMyPageGeneral() {
                 ...basicUserData,
                 full_name: profileData.full_name || '',
                 interview_enabled: profileData.interview_enabled || false,
-                profile_photo: profileData.profile_photo || null
+                profile_photo: profileData.profile_photo || null,
+                whyJapan: profileData.whyJapan || null,
+                whyInterestJapan: profileData.whyInterestJapan || null
               };
               setUserData(updatedUserData);
             }
@@ -752,6 +754,34 @@ export function JobSeekerMyPageGeneral() {
                   </p>
                 </div>
               </div>
+              
+              {userData?.whyJapan && (
+                <>
+                  <Separator />
+                  <div className="flex flex-col gap-3">
+                    <p className="text-sm font-medium">
+                      {t('documents.whyJapan')}
+                    </p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                      {userData.whyJapan}
+                    </p>
+                  </div>
+                </>
+              )}
+              
+              {userData?.whyInterestJapan && (
+                <>
+                  <Separator />
+                  <div className="flex flex-col gap-3">
+                    <p className="text-sm font-medium">
+                      {t('documents.whyInterestJapan')}
+                    </p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                      {userData.whyInterestJapan}
+                    </p>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

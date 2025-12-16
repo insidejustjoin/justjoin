@@ -4563,6 +4563,9 @@ whiteCells.forEach(cell => {
                     technicalTrainingIndustry: documentData.technicalTrainingIndustry,
                     technicalTrainingJobType: documentData.technicalTrainingJobType,
                     desiredJobTypes: documentData.desiredJobTypes,
+                    // 日本で働きたい理由・日本に興味を持った理由
+                    whyJapan: documentData.whyJapan || '',
+                    whyInterestJapan: documentData.whyInterestJapan || '',
                   };
                   
                   // スキルシート（shouldHideSkillSheet=falseの場合のみ追加）

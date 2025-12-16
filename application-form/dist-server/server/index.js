@@ -1215,6 +1215,13 @@ app.get('/api/jobseekers/:id', async (req, res) => {
             else if (data.certificateStatus?.name) {
                 merged.japanese_level = data.certificateStatus.name;
             }
+            // whyJapanとwhyInterestJapanを追加
+            if (data.whyJapan && !merged.whyJapan) {
+                merged.whyJapan = data.whyJapan;
+            }
+            if (data.whyInterestJapan && !merged.whyInterestJapan) {
+                merged.whyInterestJapan = data.whyInterestJapan;
+            }
         }
         res.json({ success: true, data: merged });
     }
@@ -1273,8 +1280,8 @@ app.get('/api/jobseekers/profile/:userId', async (req, res) => {
         `, [userId]);
             row = fallback.rows[0] || null;
         }
-        // 顔写真が未設定の場合、該当タイプの user_documents から補完
-        if (row && !row.profile_photo) {
+        // 顔写真、whyJapan、whyInterestJapanを該当タイプの user_documents から取得
+        if (row) {
             try {
                 const doc = await query(`
             SELECT document_data
@@ -1286,19 +1293,27 @@ app.get('/api/jobseekers/profile/:userId', async (req, res) => {
           `, [userId, type]);
                 if (doc.rows.length > 0) {
                     const dd = doc.rows[0].document_data;
-                    const photo = typeof dd === 'string'
+                    const documentData = typeof dd === 'string'
                         ? (() => {
                             try {
-                                const p = JSON.parse(dd);
-                                return p?.resume?.photoUrl || null;
+                                return JSON.parse(dd);
                             }
                             catch {
                                 return null;
                             }
                         })()
-                        : dd?.resume?.photoUrl || null;
-                    if (photo) {
-                        row.profile_photo = photo;
+                        : dd;
+                    if (documentData) {
+                        // 顔写真が未設定の場合のみ補完
+                        if (!row.profile_photo) {
+                            const photo = documentData?.resume?.photoUrl || null;
+                            if (photo) {
+                                row.profile_photo = photo;
+                            }
+                        }
+                        // whyJapanとwhyInterestJapanを追加
+                        row.whyJapan = documentData?.whyJapan || null;
+                        row.whyInterestJapan = documentData?.whyInterestJapan || null;
                     }
                 }
             }

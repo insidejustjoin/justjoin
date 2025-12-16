@@ -96,16 +96,6 @@ const JobSeekerRegisterEngineer: React.FC = () => {
       // v2チェックボックス運用のため、v3実行は行わない
       const recaptchaToken: string | undefined = undefined;
 
-      // 送信サイズ削減: 画像などの大型データは除去
-      const sanitizedDocuments = (() => {
-        if (!documentsData) return null;
-        const clone = JSON.parse(JSON.stringify(documentsData));
-        if (clone?.resume?.photoUrl) {
-          delete clone.resume.photoUrl;
-        }
-        return clone;
-      })();
-
       const response = await fetch('/api/register/engineer', {
         method: 'POST',
         headers: {
@@ -116,7 +106,7 @@ const JobSeekerRegisterEngineer: React.FC = () => {
           firstName,
           lastName,
           password,
-          documentsData: sanitizedDocuments,
+          documentsData: documentsData,
           recaptchaToken
         }),
       });

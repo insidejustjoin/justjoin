@@ -487,21 +487,21 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
           }
           
           const existingDoc = await query(
-            'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2',
-            [userId.toString(), 'resume']
+            'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2 AND registration_type = $3',
+            [userId.toString(), 'resume', 'engineer']
           );
           if (existingDoc.rows.length > 0) {
             await query(
               `UPDATE user_documents 
                SET document_data = $1, updated_at = NOW() 
-               WHERE user_id = $2 AND document_type = $3`,
-              [JSON.stringify(finalDocumentsData), userId.toString(), 'resume']
+               WHERE user_id = $2 AND document_type = $3 AND registration_type = $4`,
+              [JSON.stringify(finalDocumentsData), userId.toString(), 'resume', 'engineer']
             );
           } else {
             await query(
-              `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
-               VALUES ($1, $2, $3, NOW(), NOW())`,
-              [userId.toString(), 'resume', JSON.stringify(finalDocumentsData)]
+              `INSERT INTO user_documents (user_id, document_type, registration_type, document_data, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+              [userId.toString(), 'resume', 'engineer', JSON.stringify(finalDocumentsData)]
             );
           }
         }
@@ -939,21 +939,21 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
           }
           
           const existingDoc = await query(
-            'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2',
-            [userId.toString(), 'resume']
+            'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2 AND registration_type = $3',
+            [userId.toString(), 'resume', 'general']
           );
           if (existingDoc.rows.length > 0) {
             await query(
               `UPDATE user_documents 
                SET document_data = $1, updated_at = NOW() 
-               WHERE user_id = $2 AND document_type = $3`,
-              [JSON.stringify(finalDocumentsData), userId.toString(), 'resume']
+               WHERE user_id = $2 AND document_type = $3 AND registration_type = $4`,
+              [JSON.stringify(finalDocumentsData), userId.toString(), 'resume', 'general']
             );
           } else {
             await query(
-              `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
-               VALUES ($1, $2, $3, NOW(), NOW())`,
-              [userId.toString(), 'resume', JSON.stringify(finalDocumentsData)]
+              `INSERT INTO user_documents (user_id, document_type, registration_type, document_data, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+              [userId.toString(), 'resume', 'general', JSON.stringify(finalDocumentsData)]
             );
           }
         }
