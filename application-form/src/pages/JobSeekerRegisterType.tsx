@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 const JobSeekerRegisterType: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isCheckingVerification, setIsCheckingVerification] = useState(false);
   
   // 前のページから渡されたデータを取得
   const {
@@ -37,15 +38,46 @@ const JobSeekerRegisterType: React.FC = () => {
   const canRegisterGeneral = availability?.canRegisterGeneral !== false;
   const existingRegistrationTypes = availability?.existingRegistrationTypes || [];
 
+  // メール認証が必要な場合は、30分以内に確認済みのレコードがあるかチェック
+  useEffect(() => {
+    if (email && !emailVerified) {
+      setIsCheckingVerification(true);
+      const checkVerification = async () => {
+        try {
+          const checkResponse = await fetch(`/api/email-verification/check/${encodeURIComponent(email)}`);
+          const checkResult = await checkResponse.json();
+          
+          if (checkResult.success && checkResult.isWithin30Minutes) {
+            // 30分以内に確認済みの場合は、そのまま続行
+            setIsCheckingVerification(false);
+          } else {
+            // 30分を超えている場合は、新規登録画面に戻す
+            navigate('/jobseeker/register');
+          }
+        } catch (error) {
+          console.error('確認状態チェックエラー:', error);
+          navigate('/jobseeker/register');
+        }
+      };
+      
+      checkVerification();
+    }
+  }, [email, emailVerified, navigate]);
+
   // データがない場合は最初のページに戻す（メールアドレスベースまたは電話番号ベースのどちらか）
   if ((!email && !phoneNumber) || !firstName || !lastName) {
     navigate('/jobseeker/register');
     return null;
   }
 
-  // メール認証が必要な場合は、認証済みかチェック
-  if (email && !emailVerified) {
+  // メール認証が必要で、30分以内の確認済みレコードがない場合は、新規登録画面に戻す
+  if (email && !emailVerified && isCheckingVerification === false) {
     navigate('/jobseeker/register');
+    return null;
+  }
+
+  // 確認中は何も表示しない
+  if (email && !emailVerified && isCheckingVerification) {
     return null;
   }
 

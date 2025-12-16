@@ -153,7 +153,7 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
               <p className="text-sm text-red-500">{form.formState.errors.code.message}</p>
             )}
             <p className="text-xs text-gray-500 text-center">
-              ※ このコードは5分間有効です
+              ※ このコードは2分間有効です
             </p>
           </div>
 

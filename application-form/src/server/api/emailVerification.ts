@@ -174,7 +174,7 @@ router.post('/verify-email', async (req, res) => {
 
     // 6桁の確認コードを生成
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5分有効
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2分有効
     console.log('確認コードを生成:', { code: verificationCode, expiresAt });
 
     // email_verifications テーブルに保存（既存の場合は更新）
@@ -187,28 +187,59 @@ router.post('/verify-email', async (req, res) => {
         [email]
       );
       
+      // verification_token カラムが存在する場合にも対応するため、動的にクエリを構築
+      // 本番DBでは verification_token が NOT NULL 制約付きで存在しており、
+      // これを指定しないと今回のような 23502 エラー（NOT NULL violation）が発生する。
+      const hasVerificationTokenColumn = true; // 本番では必須のため、常にセットする前提にする
+      const tokenValue = verificationCode; // シンプルに確認コードと同じ値をトークンとして保存しておく
+
       if (existingResult.rows.length > 0) {
         // 既存レコードを更新
         console.log('既存レコードを更新します');
-        await query(
-          `UPDATE email_verifications 
-           SET first_name = $1,
-               last_name = $2,
-               verification_code = $3,
-               expires_at = $4,
-               verified = false,
-               updated_at = NOW()
-           WHERE email = $5`,
-          [firstName, lastName, verificationCode, expiresAt, email]
-        );
+
+        if (hasVerificationTokenColumn) {
+          await query(
+            `UPDATE email_verifications 
+             SET first_name = $1,
+                 last_name = $2,
+                 verification_code = $3,
+                 verification_token = $4,
+                 expires_at = $5,
+                 verified = false,
+                 updated_at = NOW()
+             WHERE email = $6`,
+            [firstName, lastName, verificationCode, tokenValue, expiresAt, email]
+          );
+        } else {
+          await query(
+            `UPDATE email_verifications 
+             SET first_name = $1,
+                 last_name = $2,
+                 verification_code = $3,
+                 expires_at = $4,
+                 verified = false,
+                 updated_at = NOW()
+             WHERE email = $5`,
+            [firstName, lastName, verificationCode, expiresAt, email]
+          );
+        }
       } else {
         // 新規レコードを挿入
         console.log('新規レコードを挿入します');
-        await query(
-          `INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
-           VALUES ($1, $2, $3, $4, $5, NOW())`,
-          [email, firstName, lastName, verificationCode, expiresAt]
-        );
+
+        if (hasVerificationTokenColumn) {
+          await query(
+            `INSERT INTO email_verifications (email, first_name, last_name, verification_code, verification_token, expires_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [email, firstName, lastName, verificationCode, tokenValue, expiresAt]
+          );
+        } else {
+          await query(
+            `INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, NOW())`,
+            [email, firstName, lastName, verificationCode, expiresAt]
+          );
+        }
       }
       console.log('email_verifications テーブルへの保存完了');
     } catch (dbError: any) {
@@ -295,7 +326,7 @@ router.post('/verify-code', async (req, res) => {
     if (new Date(verification.expires_at) < new Date()) {
       return res.status(400).json({
         success: false,
-        message: '確認コードの有効期限（5分）が切れています。再度メールを送信してください。'
+        message: '確認コードの有効期限（2分）が切れています。再度メールを送信してください。'
       });
     }
 
@@ -347,7 +378,7 @@ router.get('/check/:email', async (req, res) => {
     const { email } = req.params;
 
     const result = await query(
-      `SELECT verified, expires_at
+      `SELECT verified, expires_at, updated_at
        FROM email_verifications
        WHERE email = $1
        ORDER BY created_at DESC
@@ -365,10 +396,16 @@ router.get('/check/:email', async (req, res) => {
 
     const verification = result.rows[0];
     
+    // 30分以内に確認済みの場合は、有効とみなす
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const isWithin30Minutes = verification.verified && new Date(verification.updated_at) > thirtyMinutesAgo;
+    
     res.json({
       success: true,
       verified: verification.verified,
-      expiresAt: verification.expires_at
+      expiresAt: verification.expires_at,
+      isWithin30Minutes: isWithin30Minutes,
+      updatedAt: verification.updated_at
     });
   } catch (error: any) {
     console.error('メール確認状態チェックエラー:', error);

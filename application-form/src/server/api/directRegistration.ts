@@ -363,6 +363,11 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
       } catch {}
 
       // 求職者情報作成（エンジニア向け）
+      // photoUrlは複数の場所から取得を試みる
+      const photoUrl = documentsData?.resume?.photoUrl || 
+                      documentsData?.resume?.basicInfo?.photoUrl || 
+                      documentsData?.photoUrl || null;
+      
       if (reactivating && existingEngineerRow?.jobseeker_id) {
         await query(
           `UPDATE job_seekers
@@ -385,7 +390,7 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
             documentsData?.gender || null,
             documentsData?.nationality || null,
             documentsData?.liveAddress || null,
-            documentsData?.resume?.photoUrl || null,
+            photoUrl,
           ] : [
             existingEngineerRow.jobseeker_id,
             firstName,
@@ -395,7 +400,7 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
             documentsData?.gender || null,
             documentsData?.nationality || null,
             documentsData?.liveAddress || null,
-            documentsData?.resume?.photoUrl || null,
+            photoUrl,
           ]
         );
       } else {
@@ -414,7 +419,7 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
               documentsData?.gender || null,
               documentsData?.nationality || null,
               documentsData?.liveAddress || null,
-              documentsData?.resume?.photoUrl || null,
+              photoUrl,
               'engineer'
             ] : [
               userId,
@@ -425,7 +430,7 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
               documentsData?.gender || null,
               documentsData?.nationality || null,
               documentsData?.liveAddress || null,
-              documentsData?.resume?.photoUrl || null,
+              photoUrl,
               'engineer'
             ]
           );
@@ -469,8 +474,18 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
       }
 
       // 書類データ保存（失敗しても続行）
+      // フロントエンドでphotoUrlが削除されている可能性があるため、保存前に復元する
       try {
         if (documentsData) {
+          // photoUrlが削除されている場合は、job_seekersテーブルから取得して復元
+          let finalDocumentsData = { ...documentsData };
+          if (!finalDocumentsData.resume?.photoUrl && photoUrl) {
+            if (!finalDocumentsData.resume) {
+              finalDocumentsData.resume = {};
+            }
+            finalDocumentsData.resume.photoUrl = photoUrl;
+          }
+          
           const existingDoc = await query(
             'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2',
             [userId.toString(), 'resume']
@@ -480,13 +495,13 @@ router.post('/engineer', rateLimit(3, 60000), async (req, res) => {
               `UPDATE user_documents 
                SET document_data = $1, updated_at = NOW() 
                WHERE user_id = $2 AND document_type = $3`,
-              [JSON.stringify(documentsData), userId.toString(), 'resume']
+              [JSON.stringify(finalDocumentsData), userId.toString(), 'resume']
             );
           } else {
             await query(
               `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
                VALUES ($1, $2, $3, NOW(), NOW())`,
-              [userId.toString(), 'resume', JSON.stringify(documentsData)]
+              [userId.toString(), 'resume', JSON.stringify(finalDocumentsData)]
             );
           }
         }
@@ -776,6 +791,11 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
       } catch {}
 
       // 求職者情報作成（一般職向けはスキルシートなし）
+      // photoUrlは複数の場所から取得を試みる
+      const photoUrlGeneral = documentsData?.resume?.photoUrl || 
+                              documentsData?.resume?.basicInfo?.photoUrl || 
+                              documentsData?.photoUrl || null;
+      
       if (reactivating && existingGeneralRow?.jobseeker_id) {
         await query(
           `UPDATE job_seekers
@@ -798,7 +818,7 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
             documentsData?.gender || null,
             documentsData?.nationality || null,
             documentsData?.liveAddress || null,
-            documentsData?.resume?.photoUrl || null,
+            photoUrlGeneral,
           ] : [
             existingGeneralRow.jobseeker_id,
             firstName,
@@ -808,7 +828,7 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
             documentsData?.gender || null,
             documentsData?.nationality || null,
             documentsData?.liveAddress || null,
-            documentsData?.resume?.photoUrl || null,
+            photoUrlGeneral,
           ]
         );
       } else {
@@ -827,7 +847,7 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
               documentsData?.gender || null,
               documentsData?.nationality || null,
               documentsData?.liveAddress || null,
-              documentsData?.resume?.photoUrl || null,
+              photoUrlGeneral,
               'general'
             ] : [
               userId,
@@ -838,7 +858,7 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
               documentsData?.gender || null,
               documentsData?.nationality || null,
               documentsData?.liveAddress || null,
-              documentsData?.resume?.photoUrl || null,
+              photoUrlGeneral,
               'general'
             ]
           );
@@ -904,9 +924,20 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
       }
 
       // スキルシートを除外して書類データ保存（失敗しても続行）
+      // フロントエンドでphotoUrlが削除されている可能性があるため、保存前に復元する
       try {
         if (documentsData) {
           const { skillSheet, ...documentsWithoutSkillSheet } = documentsData;
+          
+          // photoUrlが削除されている場合は、job_seekersテーブルから取得して復元
+          let finalDocumentsData = { ...documentsWithoutSkillSheet };
+          if (!finalDocumentsData.resume?.photoUrl && photoUrlGeneral) {
+            if (!finalDocumentsData.resume) {
+              finalDocumentsData.resume = {};
+            }
+            finalDocumentsData.resume.photoUrl = photoUrlGeneral;
+          }
+          
           const existingDoc = await query(
             'SELECT id FROM user_documents WHERE user_id = $1 AND document_type = $2',
             [userId.toString(), 'resume']
@@ -916,13 +947,13 @@ router.post('/general', rateLimit(3, 60000), async (req, res) => {
               `UPDATE user_documents 
                SET document_data = $1, updated_at = NOW() 
                WHERE user_id = $2 AND document_type = $3`,
-              [JSON.stringify(documentsWithoutSkillSheet), userId.toString(), 'resume']
+              [JSON.stringify(finalDocumentsData), userId.toString(), 'resume']
             );
           } else {
             await query(
               `INSERT INTO user_documents (user_id, document_type, document_data, created_at, updated_at)
                VALUES ($1, $2, $3, NOW(), NOW())`,
-              [userId.toString(), 'resume', JSON.stringify(documentsWithoutSkillSheet)]
+              [userId.toString(), 'resume', JSON.stringify(finalDocumentsData)]
             );
           }
         }

@@ -122,8 +122,8 @@ Please enter the following 6-digit verification code.
 確認コード / Verification Code:
 ${verificationCode}
 
-このコードは5分間有効です。
-This code is valid for 5 minutes.
+このコードは2分間有効です。
+This code is valid for 2 minutes.
 
 確認後、書類作成に進むことができます。
 After verification, you can proceed to document creation.
@@ -152,7 +152,7 @@ ${this.fromEmail}
       <p style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #2563eb; margin: 0;">${verificationCode}</p>
     </div>
     
-    <p style="color: #dc2626; font-size: 14px;"><strong>このコードは5分間有効です。<br>This code is valid for 5 minutes.</strong></p>
+    <p style="color: #dc2626; font-size: 14px;"><strong>このコードは2分間有効です。<br>This code is valid for 2 minutes.</strong></p>
     
     <p>確認後、書類作成に進むことができます。<br>After verification, you can proceed to document creation.</p>
     
@@ -973,13 +973,19 @@ ${this.fromEmail}
                 logger: process.env.NODE_ENV === 'development' // 開発環境でのみログ出力
             });
             // 接続テスト
+            // NOTE:
+            // Cloud Run 本番環境など一部環境では `transporter.verify()` が
+            // ネットワーク制限や一時的な証明書問題で失敗するケースがあり、
+            // 実際の送信は可能なのにここで false を返してしまい 500 エラーの
+            // 原因になることがあったため、「送信前の verify 失敗では落とさない」
+            // 仕様に変更する。
             try {
                 await transporter.verify();
                 console.log('Gmail SMTP接続テスト成功');
             }
             catch (verifyError) {
-                console.error('Gmail SMTP接続テスト失敗:', verifyError);
-                return false;
+                console.warn('Gmail SMTP接続テストで警告:', verifyError);
+                // ここでは return せず、そのまま sendMail を試す
             }
             const mailOptions = {
                 from: `"${this.fromName}" <${this.fromEmail}>`,

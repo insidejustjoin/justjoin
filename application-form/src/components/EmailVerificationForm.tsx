@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -47,6 +48,7 @@ interface EmailVerificationFormProps {
 
 export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ onSuccess }) => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [emailSent, setEmailSent] = useState(false);
@@ -70,6 +72,35 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
     setMessage(null);
 
     try {
+      // まず30分以内に確認済みのレコードがあるかチェック
+      const checkResponse = await fetch(`/api/email-verification/check/${encodeURIComponent(data.email.trim())}`);
+      const checkResult = await checkResponse.json();
+      
+      if (checkResult.success && checkResult.isWithin30Minutes) {
+        // 30分以内に確認済みの場合は、直接書類作成ページに遷移
+        const checkRegResponse = await fetch(`/api/email-verification/check-registration/${encodeURIComponent(data.email.trim())}`);
+        const checkRegData = await checkRegResponse.json();
+        
+        if (checkRegData.success) {
+          // 登録タイプ選択画面に遷移
+          navigate('/jobseeker/register/type', {
+            state: {
+              email: data.email.trim(),
+              firstName: data.firstName.trim(),
+              lastName: data.lastName.trim(),
+              emailVerified: true,
+              availability: {
+                canRegisterEngineer: checkRegData.canRegisterEngineer !== false,
+                canRegisterGeneral: checkRegData.canRegisterGeneral !== false,
+                existingRegistrationTypes: checkRegData.existingRegistrationTypes || [],
+                userExists: checkRegData.userExists || false
+              }
+            }
+          });
+          return;
+        }
+      }
+
       // HubSpotにデータを送信
       if (window.hsConversationsAPI) {
         try {
