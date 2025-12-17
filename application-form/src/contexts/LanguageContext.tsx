@@ -2541,6 +2541,8 @@ const translations: Translations = {
     'auth.goToRegisterPage': "Ro'yxatdan o'tish sahifasiga o'tasiz.",
     'auth.goToRegister': "Ro'yxatdan o'tish",
     'auth.goToTopPage': "Bosh sahifaga o'tish",
+    'auth.lastName': 'Familiya',
+    'auth.lastNamePlaceholder': 'Ivanov',
     
     // Email Verification Form
     'register.emailVerification.title': 'Elektron pochta manzilini tasdiqlash',
