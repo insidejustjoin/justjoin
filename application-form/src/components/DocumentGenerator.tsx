@@ -3217,7 +3217,7 @@ whiteCells.forEach(cell => {
                         className="h-10"
                         required
                       />
-                      <p className="text-xs text-gray-500 mt-1">有効なメールアドレスを入力してください（例：example@email.com）</p>
+                      <p className="text-xs text-gray-500 mt-1">{t('documents.contactEmailHelp')}</p>
                     </div>
                   </div>
                 </>
@@ -4483,7 +4483,7 @@ whiteCells.forEach(cell => {
                 size="lg"
               >
                 <CheckCircle className="mr-2 h-4 w-4" />
-                次へ（パスワード設定）
+                {t('documents.nextToPasswordSetting')}
               </Button>
             )}
             
@@ -4495,7 +4495,7 @@ whiteCells.forEach(cell => {
                 size="lg"
                 className="w-full"
               >
-                閉じる
+                {t('common.close')}
               </Button>
             )}
           </div>
