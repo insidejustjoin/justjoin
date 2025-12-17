@@ -2198,6 +2198,8 @@ const translations: Translations = {
     'auth.goToRegisterPage': 'Вы будете перенаправлены на страницу регистрации.',
     'auth.goToRegister': 'Перейти к регистрации',
     'auth.goToTopPage': 'На главную страницу',
+    'auth.lastName': 'Фамилия',
+    'auth.lastNamePlaceholder': 'Иванов',
     
     // Email Verification Form
     'register.emailVerification.title': 'Подтверждение адреса электронной почты',
@@ -2261,6 +2263,17 @@ const translations: Translations = {
     'profileCompletion.completeProfileFirst': 'Сначала завершите профиль',
     'profileCompletion.later': 'Позже',
     'profileCompletion.completeNow': 'Завершить сейчас',
+    
+    // Documents - Form labels
+    'documents.lastName': 'Фамилия',
+    'documents.firstName': 'Имя',
+    'documents.birthDate': 'Дата рождения',
+    'documents.gender': 'Пол',
+    'documents.postalCode': 'Почтовый индекс',
+    'documents.address': 'Адрес',
+    'documents.phoneNumber': 'Номер телефона',
+    'documents.emailAddress': 'Адрес электронной почты',
+    'documents.nationality': 'Национальность',
     
     // Documents - Gender options
     'documents.male': 'Мужской',
@@ -2591,6 +2604,17 @@ const translations: Translations = {
     'profileCompletion.completeProfileFirst': 'Avval profilni toʻldiring',
     'profileCompletion.later': 'Keyinroq',
     'profileCompletion.completeNow': "Hozir yakunlash",
+    
+    // Documents - Form labels
+    'documents.lastName': 'Familiya',
+    'documents.firstName': 'Ism',
+    'documents.birthDate': 'Tug\'ilgan sana',
+    'documents.gender': 'Jins',
+    'documents.postalCode': 'Pochta indeksi',
+    'documents.address': 'Manzil',
+    'documents.phoneNumber': 'Telefon raqami',
+    'documents.emailAddress': 'Elektron pochta manzili',
+    'documents.nationality': 'Millat',
     
     // Documents validation error messages
     'documents.validation.requiredFieldsMissing': 'Majburiy maydonlar to\'ldirilmagan',
