@@ -9,6 +9,8 @@ import DocumentGenerator from '@/components/DocumentGenerator';
 import { ArrowLeft, Lock, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { LanguageToggle } from '@/components/LanguageToggle';
 
 declare global {
   interface Window {
@@ -25,6 +27,7 @@ declare global {
 const JobSeekerRegisterGeneral: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [documentsData, setDocumentsData] = useState<any>(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -161,15 +164,17 @@ const JobSeekerRegisterGeneral: React.FC = () => {
     return (
       <>
         <Helmet>
-          <title>パスワード設定 - JustJoin</title>
+          <title>{t('register.generalRegister.passwordStep.title')} - JustJoin</title>
         </Helmet>
         <div className="min-h-screen bg-gray-50 py-8">
           <div className="max-w-md mx-auto px-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-2xl">パスワード設定 / Password Setting</CardTitle>
+                <CardTitle className="text-2xl">
+                  {t('register.generalRegister.passwordStep.title')}
+                </CardTitle>
                 <CardDescription>
-                  ログイン用のパスワードを設定してください
+                  {t('register.generalRegister.passwordStep.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -177,7 +182,7 @@ const JobSeekerRegisterGeneral: React.FC = () => {
                   <div className="space-y-2">
                     <Label htmlFor="password">
                       <Lock className="inline-block h-4 w-4 mr-2" />
-                      パスワード / Password
+                      {t('register.generalRegister.password.label')}
                     </Label>
                     <div className="relative">
                       <Input
@@ -185,7 +190,7 @@ const JobSeekerRegisterGeneral: React.FC = () => {
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="8文字以上、英数字混合"
+                        placeholder={t('register.generalRegister.password.placeholder')}
                         required
                         disabled={isSubmitting}
                       />
@@ -202,7 +207,7 @@ const JobSeekerRegisterGeneral: React.FC = () => {
 
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword">
-                      パスワード確認 / Confirm Password
+                      {t('register.generalRegister.passwordConfirm.label')}
                     </Label>
                     <div className="relative">
                       <Input
@@ -210,7 +215,7 @@ const JobSeekerRegisterGeneral: React.FC = () => {
                         type={showConfirm ? 'text' : 'password'}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="パスワードを再入力"
+                        placeholder={t('register.generalRegister.passwordConfirm.placeholder')}
                         required
                         disabled={isSubmitting}
                       />
@@ -243,11 +248,11 @@ const JobSeekerRegisterGeneral: React.FC = () => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        登録処理中...
+                        {t('register.generalRegister.passwordStep.submitting')}
                       </>
                     ) : (
                       <>
-                        登録を完了する
+                        {t('register.generalRegister.passwordStep.submit')}
                         <CheckCircle className="ml-2 h-4 w-4" />
                       </>
                     )}
@@ -264,13 +269,13 @@ const JobSeekerRegisterGeneral: React.FC = () => {
   return (
     <>
       <Helmet>
-        <title>一般職向け登録 - JustJoin</title>
-        <meta name="description" content="一般職・事務職向けの新規登録フォーム" />
+        <title>{t('register.generalRegister.title')} - JustJoin</title>
+        <meta name="description" content={t('register.generalRegister.descriptionMeta')} />
       </Helmet>
       
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-6xl mx-auto px-4">
-          <div className="mb-6">
+          <div className="mb-6 flex justify-between items-center">
             <Button
               variant="ghost"
               onClick={() =>
@@ -280,15 +285,18 @@ const JobSeekerRegisterGeneral: React.FC = () => {
               }
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              戻る
+              {t('register.generalRegister.back')}
             </Button>
+            <LanguageToggle />
           </div>
 
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="text-2xl">一般職向け登録 / General Registration</CardTitle>
+              <CardTitle className="text-2xl">
+                {t('register.generalRegister.title')}
+              </CardTitle>
               <CardDescription>
-                {firstName} {lastName} 様、必要な情報を入力してください
+                {t('register.generalRegister.description', { firstName, lastName })}
               </CardDescription>
             </CardHeader>
           </Card>
