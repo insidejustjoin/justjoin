@@ -27,15 +27,12 @@ interface DocumentData {
   // 基本情報
   lastName: string;
   firstName: string;
-  kanaLastName: string;
-  kanaFirstName: string;
   birthDate: string;
   gender: string;
   
   // 現住所情報
   livePostNumber: string;
   liveAddress: string;
-  kanaLiveAddress: string;
   livePhoneNumber: string;
   liveMail: string;
   nationality: string; // 国籍
@@ -43,7 +40,6 @@ interface DocumentData {
   // 連絡先情報
   contactPostNumber: string;
   contactAddress: string;
-  kanaContactAddress: string;
   contactPhoneNumber: string;
   contactMail: string;
   
@@ -234,15 +230,12 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     // 基本情報
     lastName: '',
     firstName: '',
-    kanaLastName: '',
-    kanaFirstName: '',
     birthDate: '2000-01-01', // ← 初期値を2000年1月1日に
     gender: '',
     
     // 現住所情報
     livePostNumber: '',
     liveAddress: '',
-    kanaLiveAddress: '',
     livePhoneNumber: '',
     liveMail: '',
     nationality: '', // 国籍を追加
@@ -250,7 +243,6 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     // 連絡先情報
     contactPostNumber: '',
     contactAddress: '',
-    kanaContactAddress: '',
     contactPhoneNumber: '',
     contactMail: '',
     
@@ -654,8 +646,6 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
             // 基本情報
             lastName: savedDocumentData.lastName || savedDocumentData.basicInfo?.lastName || lastName,
             firstName: savedDocumentData.firstName || savedDocumentData.basicInfo?.firstName || firstName,
-            kanaLastName: savedDocumentData.kanaLastName || savedDocumentData.basicInfo?.kanaLastName || jobSeekerData.kana_last_name || '',
-            kanaFirstName: savedDocumentData.kanaFirstName || savedDocumentData.basicInfo?.kanaFirstName || jobSeekerData.kana_first_name || '',
             birthDate: savedDocumentData.birthDate || savedDocumentData.basicInfo?.birthDate || (jobSeekerData.date_of_birth ? new Date(jobSeekerData.date_of_birth).toLocaleDateString('ja-JP') : ''),
             gender: savedDocumentData.gender || savedDocumentData.basicInfo?.gender || (jobSeekerData.gender === 'male' ? '男性' : jobSeekerData.gender === 'female' ? '女性' : 'その他'),
             nationality: savedDocumentData.nationality || savedDocumentData.basicInfo?.nationality || '', // 国籍を追加
@@ -663,14 +653,12 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
             // 現住所情報
             livePostNumber: savedDocumentData.livePostNumber || savedDocumentData.addressInfo?.livePostNumber || '',
             liveAddress: savedDocumentData.liveAddress || savedDocumentData.addressInfo?.liveAddress || jobSeekerData.address || '',
-            kanaLiveAddress: savedDocumentData.kanaLiveAddress || savedDocumentData.addressInfo?.kanaLiveAddress || '',
             livePhoneNumber: savedDocumentData.livePhoneNumber || savedDocumentData.addressInfo?.livePhoneNumber || jobSeekerData.phone || '',
             liveMail: savedDocumentData.liveMail || savedDocumentData.addressInfo?.liveMail || jobSeekerData.email,
             
             // 連絡先情報
             contactPostNumber: savedDocumentData.contactPostNumber || savedDocumentData.addressInfo?.contactPostNumber || '',
             contactAddress: savedDocumentData.contactAddress || savedDocumentData.addressInfo?.contactAddress || '',
-            kanaContactAddress: savedDocumentData.kanaContactAddress || savedDocumentData.addressInfo?.kanaContactAddress || '',
             contactPhoneNumber: savedDocumentData.contactPhoneNumber || savedDocumentData.addressInfo?.contactPhoneNumber || '',
             contactMail: savedDocumentData.contactMail || savedDocumentData.addressInfo?.contactMail || '',
             contactSameAsLive: savedDocumentData.contactSameAsLive || savedDocumentData.addressInfo?.contactSameAsLive || false,
@@ -718,8 +706,6 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
             // 基本情報
             lastName: lastName,
             firstName: firstName,
-            kanaLastName: jobSeekerData.kana_last_name || '',
-            kanaFirstName: jobSeekerData.kana_first_name || '',
             birthDate: jobSeekerData.date_of_birth ? new Date(jobSeekerData.date_of_birth).toLocaleDateString('ja-JP') : '',
             gender: jobSeekerData.gender === 'male' ? '男性' : jobSeekerData.gender === 'female' ? '女性' : 'その他',
             nationality: '', // 国籍を追加
@@ -727,14 +713,12 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
             // 現住所情報
             livePostNumber: '',
             liveAddress: jobSeekerData.address || '',
-            kanaLiveAddress: '',
             livePhoneNumber: jobSeekerData.phone || '',
             liveMail: jobSeekerData.email,
             
             // 連絡先情報
             contactPostNumber: '',
             contactAddress: '',
-            kanaContactAddress: '',
             contactPhoneNumber: '',
             contactMail: '',
             
@@ -792,19 +776,17 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
               noQualifications: false
             }
           });
-          toast({
-            title: "成功",
-            description: "求職者データを読み込みました",
-          });
+      toast({
+        title: t('documents.loadJobSeekerSuccessTitle'),
+        description: t('documents.loadJobSeekerSuccessDescription'),
+      });
         } catch (error) {
           console.error('保存されたデータの読み込みエラー:', error);
           // エラーが発生した場合は基本データのみで設定
           setDocumentData({
             // 基本情報
-            lastName: lastName,
-            firstName: firstName,
-            kanaLastName: jobSeekerData.kana_last_name || '',
-            kanaFirstName: jobSeekerData.kana_first_name || '',
+          lastName: lastName,
+          firstName: firstName,
             birthDate: jobSeekerData.date_of_birth ? new Date(jobSeekerData.date_of_birth).toLocaleDateString('ja-JP') : '',
             gender: jobSeekerData.gender === 'male' ? '男性' : jobSeekerData.gender === 'female' ? '女性' : 'その他',
             nationality: '', // 国籍を追加
@@ -812,14 +794,12 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
             // 現住所情報
             livePostNumber: '',
             liveAddress: jobSeekerData.address || '',
-            kanaLiveAddress: '',
             livePhoneNumber: jobSeekerData.phone || '',
             liveMail: jobSeekerData.email,
             
             // 連絡先情報
             contactPostNumber: '',
             contactAddress: '',
-            kanaContactAddress: '',
             contactPhoneNumber: '',
             contactMail: '',
             
@@ -1325,8 +1305,6 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       // 基本情報
     addField(data.lastName);
     addField(data.firstName);
-    addField(data.kanaLastName);
-    addField(data.kanaFirstName);
     addField(data.birthDate);
     addField(data.gender);
     addField(data.nationality);
@@ -1334,20 +1312,18 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       // 現住所情報
     addField(data.livePostNumber);
     addField(data.liveAddress);
-    addField(data.kanaLiveAddress);
     addField(data.livePhoneNumber);
     addField(data.liveMail);
       
     // 連絡先情報（同一の場合は自動充足）
     addField(data.contactSameAsLive ? true : data.contactPostNumber);
     addField(data.contactSameAsLive ? true : data.contactAddress);
-    addField(data.contactSameAsLive ? true : data.kanaContactAddress);
     addField(data.contactSameAsLive ? true : data.contactPhoneNumber);
     addField(data.contactSameAsLive ? true : data.contactMail);
       
     // 履歴書
     addField(data.resume?.photoUrl);
-    // 学歴・職歴・資格（"なし"チェック時は充足とみなす）
+    // 学歴・職歴・資格（「なし」チェック時は充足とみなす）
     addField(data.resume?.noEducation ? true : (data.resume?.education && data.resume.education.length > 0));
     addField(data.resume?.noWorkExperience ? true : (data.resume?.workExperience && data.resume.workExperience.length > 0));
     addField(data.resume?.noQualifications ? true : (data.resume?.qualifications && data.resume.qualifications.length > 0));
@@ -1489,8 +1465,6 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       const jobSeekerUpdateData = {
         firstName: documentData.firstName,
         lastName: documentData.lastName,
-        kanaFirstName: documentData.kanaFirstName,
-        kanaLastName: documentData.kanaLastName,
         dateOfBirth: documentData.birthDate,
         gender: documentData.gender === '男性' ? 'male' : documentData.gender === '女性' ? 'female' : 'other',
         phone: documentData.livePhoneNumber,
@@ -1675,15 +1649,12 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
           // 基本情報（resume.basicInfo もフォールバック、管理者モードの場合はjobSeekerDataから取得）
           lastName: savedData.lastName || savedData.resume?.basicInfo?.lastName || adminNameFallback.lastName || '',
           firstName: savedData.firstName || savedData.resume?.basicInfo?.firstName || adminNameFallback.firstName || '',
-          kanaLastName: savedData.kanaLastName || savedData.resume?.basicInfo?.kanaLastName || '',
-          kanaFirstName: savedData.kanaFirstName || savedData.resume?.basicInfo?.kanaFirstName || '',
           birthDate: savedData.birthDate || savedData.resume?.basicInfo?.dateOfBirth || '2000-01-01',
           gender: savedData.gender || savedData.resume?.basicInfo?.gender || '',
           
           // 現住所情報（basicInfoにある場合はフォールバック）
           livePostNumber: savedData.livePostNumber || savedData.addressInfo?.livePostNumber || '',
           liveAddress: savedData.liveAddress || savedData.addressInfo?.liveAddress || savedData.resume?.basicInfo?.address || '',
-          kanaLiveAddress: savedData.kanaLiveAddress || savedData.addressInfo?.kanaLiveAddress || '',
           livePhoneNumber: savedData.livePhoneNumber || savedData.addressInfo?.livePhoneNumber || savedData.resume?.basicInfo?.phone || '',
           liveMail: savedData.liveMail || savedData.addressInfo?.liveMail || savedData.resume?.basicInfo?.email || '',
           nationality: savedData.nationality || savedData.resume?.basicInfo?.nationality || '',
@@ -1691,7 +1662,6 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
           // 連絡先情報
           contactPostNumber: savedData.contactPostNumber || '',
           contactAddress: savedData.contactAddress || '',
-          kanaContactAddress: savedData.kanaContactAddress || '',
           contactPhoneNumber: savedData.contactPhoneNumber || '',
           contactMail: savedData.contactMail || '',
           
@@ -1977,16 +1947,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       dateCell.alignment = { horizontal: 'right' };
       
       // 基本情報
-      const b3Cell = resumeSheet.getCell('B3');
-b3Cell.value = 'フリガナ';
-b3Cell.font = { name: 'MS Gothic', size: 8, bold: false };
-b3Cell.alignment = { horizontal: 'center', vertical: 'middle' };
-
-resumeSheet.mergeCells('C3:E3');
-const c3Cell = resumeSheet.getCell('C3');
-c3Cell.value = `${documentData.kanaLastName} ${documentData.kanaFirstName}`;
-c3Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-c3Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      // フリガナ行は削除（カナ入力廃止）
 
   resumeSheet.mergeCells('F3:F5');
   const f3Cell = resumeSheet.getCell('F3');
@@ -2020,12 +1981,12 @@ c3Cell.alignment = { horizontal: 'center', vertical: 'middle' };
       g3Cell.fill = { type: 'pattern', pattern: 'none' };
     } catch (error) {
               console.error(t('documents.imageAddError'), error);
-      g3Cell.value = "写真";
+      g3Cell.value = t('documents.photoCell');
       g3Cell.font = { name: 'MS Gothic', size: 10, bold: false };
       g3Cell.alignment = { horizontal: 'center', vertical: 'middle' };
     }
   } else {
-    g3Cell.value = "写真";
+    g3Cell.value = t('documents.photoCell');
     g3Cell.font = { name: 'MS Gothic', size: 10, bold: false };
     g3Cell.alignment = { horizontal: 'center', vertical: 'middle' };
   }
@@ -2068,15 +2029,7 @@ c6Cell.value = documentData.birthDate;
 c6Cell.font = { name: 'MS Gothic', size: 10, bold: false };
 c6Cell.alignment = { horizontal: 'center', vertical: 'middle' };
       
-const b7Cell = resumeSheet.getCell('B7');
-b7Cell.value = 'フリガナ';
-b7Cell.font = { name: 'MS Gothic', size: 8, bold: false };
-b7Cell.alignment = { horizontal: 'center', vertical: 'middle' };
-resumeSheet.mergeCells('C7:F7');
-const c7Cell = resumeSheet.getCell('C7');
-c7Cell.value = documentData.kanaLiveAddress;
-c7Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-c7Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      // 住所フリガナ行は削除（カナ入力廃止）
 const g7Cell = resumeSheet.getCell('G7');
 g7Cell.value = '電話：' + documentData.livePhoneNumber;
 g7Cell.font = { name: 'MS Gothic', size: 8, bold: false };
@@ -2110,16 +2063,7 @@ g9Cell.value = documentData.liveMail;
 g9Cell.font = { name: 'MS Gothic', size: 8, bold: false };
 g9Cell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-const b11Cell = resumeSheet.getCell('B11');
-b11Cell.value = 'フリガナ';
-b11Cell.font = { name: 'MS Gothic', size: 8, bold: false };
-b11Cell.alignment = { horizontal: 'center', vertical: 'middle' };
-
-resumeSheet.mergeCells('C11:F11');
-const c11Cell = resumeSheet.getCell('C11');
-c11Cell.value = documentData.contactSameAsLive ? '' : `${documentData.kanaLastName} ${documentData.kanaFirstName}`;
-c11Cell.font = { name: 'MS Gothic', size: 10, bold: false };
-c11Cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      // 連絡先フリガナ行は削除（カナ入力廃止）
 
 const g11Cell = resumeSheet.getCell('G11');
 g11Cell.value = documentData.contactSameAsLive ? '' : '電話：' + documentData.contactPhoneNumber;
@@ -2872,8 +2816,8 @@ whiteCells.forEach(cell => {
       window.URL.revokeObjectURL(url);
       
       toast({
-        title: "成功",
-        description: "Excelファイルが正常に生成されました",
+        title: t('documents.excelGenerateSuccessTitle'),
+        description: t('documents.excelGenerateSuccessDescription'),
         variant: "default",
       });
       
@@ -2965,10 +2909,10 @@ whiteCells.forEach(cell => {
               <div className="text-right">
                 <div className="text-2xl font-bold text-blue-600">{completionRate}%</div>
                 <div className="text-sm text-blue-600">
-                  {completionRate < 30 && "初回入力が必要です"}
-                  {completionRate >= 30 && completionRate < 70 && "もう少し頑張りましょう"}
-                  {completionRate >= 70 && completionRate < 100 && "ほぼ完成です"}
-                  {completionRate === 100 && "完璧です！"}
+                  {completionRate < 30 && t('profileCompletion.initialEntry')}
+                  {completionRate >= 30 && completionRate < 70 && t('profileCompletion.incomplete')}
+                  {completionRate >= 70 && completionRate < 100 && t('profileCompletion.almostComplete')}
+                  {completionRate === 100 && t('profileCompletion.complete')}
                 </div>
               </div>
             </div>
@@ -3030,38 +2974,7 @@ whiteCells.forEach(cell => {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">{t('documents.lastNameKana')} <span className="text-red-500">*</span></Label>
-                  <Input
-                    value={documentData.kanaLastName}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      // 何でも入力可能（保存時にエラーチェック）
-                      setDocumentData(prev => ({ ...prev, kanaLastName: value }));
-                    }}
-                    placeholder={t('documents.lastNameKanaPlaceholder')}
-                    className="h-10"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">{t('documents.kanaHelp')}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">{t('documents.firstNameKana')} <span className="text-red-500">*</span></Label>
-                  <Input
-                    value={documentData.kanaFirstName}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      // 何でも入力可能（保存時にエラーチェック）
-                      setDocumentData(prev => ({ ...prev, kanaFirstName: value }));
-                    }}
-                    placeholder={t('documents.firstNameKanaPlaceholder')}
-                    className="h-10"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">{t('documents.kanaHelp')}</p>
-                </div>
-              </div>
+    {/* カナ入力は不要になったため削除 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium">{t('documents.birthDate')} <span className="text-red-500">*</span></Label>
@@ -3080,9 +2993,9 @@ whiteCells.forEach(cell => {
                       <SelectValue placeholder={t('documents.selectGender')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="男性">男性 / Male</SelectItem>
-                      <SelectItem value="女性">女性 / Female</SelectItem>
-                      <SelectItem value="その他">その他 / Other</SelectItem>
+                      <SelectItem value="男性">{t('documents.male')}</SelectItem>
+                      <SelectItem value="女性">{t('documents.female')}</SelectItem>
+                      <SelectItem value="その他">{t('documents.other')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3127,21 +3040,6 @@ whiteCells.forEach(cell => {
                   />
                 </div>
               </div>
-                                <div>
-                    <Label className="text-sm font-medium">{t('documents.addressKana')} <span className="text-red-500">*</span></Label>
-                    <Input
-                      value={documentData.kanaLiveAddress}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // 何でも入力可能（保存時にエラーチェック）
-                        setDocumentData(prev => ({ ...prev, kanaLiveAddress: value }));
-                      }}
-                      placeholder={t('documents.addressKanaPlaceholder')}
-                      className="h-10"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">{t('documents.addressKanaHelp')}</p>
-                  </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium">{t('documents.phoneNumber')} <span className="text-red-500">*</span></Label>
@@ -3283,21 +3181,7 @@ whiteCells.forEach(cell => {
                   />
                     </div>
                   </div>
-                  <div>
-                    <Label className="text-sm font-medium">{t('documents.contactAddressKana')} <span className="text-red-500">*</span></Label>
-                    <Input
-                      value={documentData.kanaContactAddress}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // 何でも入力可能（保存時にエラーチェック）
-                        setDocumentData(prev => ({ ...prev, kanaContactAddress: value }));
-                      }}
-                      placeholder={t('documents.contactAddressKanaPlaceholder')}
-                      className="h-10"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">{t('documents.addressKanaFormatHelp')}</p>
-                  </div>
+                  {/* 連絡先住所のカナ入力も不要のため削除 */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm font-medium">{t('documents.contactPhone')} <span className="text-red-500">*</span></Label>
@@ -4500,8 +4384,6 @@ whiteCells.forEach(cell => {
                       basicInfo: {
                         firstName: documentData.firstName,
                         lastName: documentData.lastName,
-                        kanaFirstName: documentData.kanaFirstName,
-                        kanaLastName: documentData.kanaLastName,
                         gender: documentData.gender,
                         email: documentData.liveMail,
                         phone: documentData.livePhoneNumber,
@@ -4528,21 +4410,17 @@ whiteCells.forEach(cell => {
                     // 基本情報
                     firstName: documentData.firstName,
                     lastName: documentData.lastName,
-                    kanaFirstName: documentData.kanaFirstName,
-                    kanaLastName: documentData.kanaLastName,
                     birthDate: documentData.birthDate,
                     gender: documentData.gender,
                     nationality: documentData.nationality,
                     // 現住所情報
                     livePostNumber: documentData.livePostNumber || '',
                     liveAddress: documentData.liveAddress || '',
-                    kanaLiveAddress: documentData.kanaLiveAddress || '',
                     livePhoneNumber: documentData.livePhoneNumber || '',
                     liveMail: documentData.liveMail || '',
                     // 連絡先情報
                     contactPostNumber: documentData.contactPostNumber || '',
                     contactAddress: documentData.contactAddress || '',
-                    kanaContactAddress: documentData.kanaContactAddress || '',
                     contactPhoneNumber: documentData.contactPhoneNumber || '',
                     contactMail: documentData.contactMail || '',
                     contactSameAsLive: !!documentData.contactSameAsLive,
