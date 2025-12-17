@@ -496,27 +496,27 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     console.log('certificateStatus:', documentData.certificateStatus);
     
     // 基本情報の必須項目
-    if (!documentData.lastName) missingFields.push('姓');
-    if (!documentData.firstName) missingFields.push('名');
-    if (!documentData.liveMail) missingFields.push('メールアドレス');
-    if (!documentData.livePhoneNumber) missingFields.push('電話番号');
-    if (!documentData.birthDate) missingFields.push('生年月日');
-    if (!documentData.liveAddress) missingFields.push('住所');
+    if (!documentData.lastName) missingFields.push(t('documents.validation.lastName'));
+    if (!documentData.firstName) missingFields.push(t('documents.validation.firstName'));
+    if (!documentData.liveMail) missingFields.push(t('documents.validation.email'));
+    if (!documentData.livePhoneNumber) missingFields.push(t('documents.validation.phoneNumber'));
+    if (!documentData.birthDate) missingFields.push(t('documents.validation.birthDate'));
+    if (!documentData.liveAddress) missingFields.push(t('documents.validation.address'));
     // 登録モードでは顔写真は任意
-    if (!isRegistrationMode && !documentData.resume?.photoUrl) missingFields.push('顔写真');
+    if (!isRegistrationMode && !documentData.resume?.photoUrl) missingFields.push(t('documents.validation.photo'));
     
     // スキルシートの必須項目（登録モードでは任意、shouldHideSkillSheetの場合は除外）
     if (!isRegistrationMode && !shouldHideSkillSheet && (!documentData.skillSheet?.skills || Object.keys(documentData.skillSheet.skills).length === 0)) {
-      missingFields.push('スキルシート');
+      missingFields.push(t('documents.validation.skillSheet'));
     }
     
     // 学歴・職歴のチェック（仮登録モードでは任意）
     if (!isRegistrationMode) {
       if (!documentData.resume?.noEducation && (!documentData.resume?.education || documentData.resume.education.length === 0)) {
-        missingFields.push('学歴');
+        missingFields.push(t('documents.validation.education'));
       }
       if (!documentData.resume?.noWorkExperience && (!documentData.resume?.workExperience || documentData.resume.workExperience.length === 0)) {
-        missingFields.push('職歴');
+        missingFields.push(t('documents.validation.workExperience'));
       }
     }
     
@@ -531,28 +531,28 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     
     // 登録モードでは日本語資格関連は任意
     if (!isRegistrationMode) {
-    if (!japaneseLevel && !isNone) missingFields.push('日本語資格');
-    if (!qualificationDate && !isNone) missingFields.push('資格取得日');
+    if (!japaneseLevel && !isNone) missingFields.push(t('documents.validation.japaneseQualification'));
+    if (!qualificationDate && !isNone) missingFields.push(t('documents.validation.qualificationDate'));
     }
     
     // 日本の在留資格（必須）
     if (!documentData.residencyStatus) {
-      missingFields.push('日本の在留資格');
+      missingFields.push(t('documents.validation.residencyStatus'));
     }
     
     // 技能実習の場合は業種・職種も必須
     if (documentData.residencyStatus === '技能実習') {
       if (!documentData.technicalTrainingIndustry) {
-        missingFields.push('技能実習の業種');
+        missingFields.push(t('documents.validation.technicalTrainingIndustry'));
       }
       if (!documentData.technicalTrainingJobType) {
-        missingFields.push('技能実習の職種');
+        missingFields.push(t('documents.validation.technicalTrainingJobType'));
       }
     }
     
     // 希望職種（必須・複数選択）
     if (!documentData.desiredJobTypes || documentData.desiredJobTypes.length === 0) {
-      missingFields.push('希望職種');
+      missingFields.push(t('documents.validation.desiredJobTypes'));
     }
     
     console.log('チェック後の値:', { japaneseLevel, qualificationDate, certName, isNone });
@@ -4506,8 +4506,8 @@ whiteCells.forEach(cell => {
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="text-sm font-medium text-red-800 mb-1">必須項目が未入力です</h4>
-                  <p className="text-sm text-red-700 mb-2">以下の項目は必須です：</p>
+                  <h4 className="text-sm font-medium text-red-800 mb-1">{t('documents.validation.requiredFieldsMissing')}</h4>
+                  <p className="text-sm text-red-700 mb-2">{t('documents.validation.followingFieldsRequired')}</p>
                   <ul className="text-sm text-red-700 space-y-1">
                     {validateRequiredFields().map((field, index) => (
                       <li key={index} className="flex items-start gap-1">
@@ -4523,17 +4523,17 @@ whiteCells.forEach(cell => {
           
           {!isAdminMode && !user && (
             <p className="text-sm text-muted-foreground mt-2 text-center">
-              データベース保存にはログインが必要です
+              {t('documents.loginRequiredForDatabase')}
             </p>
           )}
           {isAdminMode && (
             <p className="text-sm text-muted-foreground mt-2 text-center">
-              管理者モード：求職者データを更新します
+              {t('documents.adminModeUpdate')}
             </p>
           )}
           {validateRequiredFields().length > 0 && (
             <p className="text-sm text-muted-foreground mt-2 text-center">
-              必須項目を入力してください
+              {t('documents.validation.pleaseEnterRequiredFields')}
             </p>
           )}
         </CardContent>
