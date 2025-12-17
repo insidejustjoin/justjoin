@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Code, Briefcase, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { LanguageToggle } from '@/components/LanguageToggle';
 
 const JobSeekerRegisterType: React.FC = () => {
+  const { t } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
   const [isCheckingVerification, setIsCheckingVerification] = useState(false);
@@ -123,12 +126,15 @@ const JobSeekerRegisterType: React.FC = () => {
       
       <div className="min-h-screen bg-gray-50 py-12 px-4">
         <div className="max-w-4xl mx-auto">
+          <div className="flex justify-end mb-4">
+            <LanguageToggle />
+          </div>
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              登録タイプを選択 / Select Registration Type
+              {t('register.typeSelection.title')}
             </h1>
             <p className="text-gray-600">
-              {firstName} {lastName} 様、ご希望の登録タイプを選択してください
+              {t('register.typeSelection.description', { firstName, lastName })}
             </p>
           </div>
 
@@ -149,33 +155,33 @@ const JobSeekerRegisterType: React.FC = () => {
                   </div>
                 </div>
                 <CardTitle className="text-center text-2xl">
-                  エンジニア向け / Engineer
+                  {t('register.typeSelection.engineer.title')}
                 </CardTitle>
                 <CardDescription className="text-center mt-2">
-                  エンジニア・開発者向けの登録フォーム
+                  {t('register.typeSelection.engineer.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm text-gray-600">
                   <li className="flex items-start">
                     <span className="mr-2">✓</span>
-                    <span>スキルシート入力</span>
+                    <span>{t('register.typeSelection.engineer.feature1')}</span>
                   </li>
                   <li className="flex items-start">
                     <span className="mr-2">✓</span>
-                    <span>技術スキル管理</span>
+                    <span>{t('register.typeSelection.engineer.feature2')}</span>
                   </li>
                   <li className="flex items-start">
                     <span className="mr-2">✓</span>
-                    <span>プロジェクト経験記録</span>
+                    <span>{t('register.typeSelection.engineer.feature3')}</span>
                   </li>
                 </ul>
                 <Button className="w-full" onClick={() => handleTypeSelect('engineer')} disabled={!canRegisterEngineer}>
-                  エンジニア向けで登録
+                  {t('register.typeSelection.engineer.button')}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 {!canRegisterEngineer && (
-                  <p className="text-xs text-center text-gray-500">エンジニア向けは既に登録済みです</p>
+                  <p className="text-xs text-center text-gray-500">{t('register.typeSelection.engineer.alreadyRegistered')}</p>
                 )}
               </CardContent>
             </Card>
@@ -196,25 +202,25 @@ const JobSeekerRegisterType: React.FC = () => {
                   </div>
                 </div>
                 <CardTitle className="text-center text-2xl">
-                  一般職向け / General
+                  {t('register.typeSelection.general.title')}
                 </CardTitle>
                 <CardDescription className="text-center mt-2">
-                  一般職・事務職向けの登録フォーム
+                  {t('register.typeSelection.general.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm text-gray-600">
                   <li className="flex items-start">
                     <span className="mr-2">✓</span>
-                    <span>履歴書・職務経歴書</span>
+                    <span>{t('register.typeSelection.general.feature1')}</span>
                   </li>
                   <li className="flex items-start">
                     <span className="mr-2">✓</span>
-                    <span>基本情報入力</span>
+                    <span>{t('register.typeSelection.general.feature2')}</span>
                   </li>
                   <li className="flex items-start">
                     <span className="mr-2">✓</span>
-                    <span>シンプルな登録プロセス</span>
+                    <span>{t('register.typeSelection.general.feature3')}</span>
                   </li>
                 </ul>
                 <Button
@@ -223,11 +229,11 @@ const JobSeekerRegisterType: React.FC = () => {
                   onClick={() => handleTypeSelect('general')}
                   disabled={!canRegisterGeneral}
                 >
-                  一般職向けで登録
+                  {t('register.typeSelection.general.button')}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 {!canRegisterGeneral && (
-                  <p className="text-xs text-center text-gray-500">一般職向けは既に登録済みです</p>
+                  <p className="text-xs text-center text-gray-500">{t('register.typeSelection.general.alreadyRegistered')}</p>
                 )}
               </CardContent>
             </Card>
@@ -235,13 +241,15 @@ const JobSeekerRegisterType: React.FC = () => {
 
           {existingRegistrationTypes.length > 0 && (
             <div className="mt-6 text-center text-sm text-gray-600">
-              <p>現在登録済みのタイプ: {existingRegistrationTypes.map((type) => (type === 'general' ? '一般職' : 'エンジニア')).join(' / ')}</p>
+              <p>{t('register.typeSelection.existingTypes', { 
+                types: existingRegistrationTypes.map((type) => (type === 'general' ? t('register.typeSelection.general.title') : t('register.typeSelection.engineer.title'))).join(' / ')
+              })}</p>
             </div>
           )}
 
           <div className="mt-8 text-center">
             <Button variant="ghost" onClick={() => navigate('/jobseeker/register')}>
-              戻る / Back
+              {t('register.typeSelection.back')}
             </Button>
           </div>
         </div>

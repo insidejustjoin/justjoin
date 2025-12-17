@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Mail, User, CheckCircle, AlertCircle } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { EmailVerificationCodeForm } from './EmailVerificationCodeForm';
 
 // HubSpot型定義
@@ -182,6 +183,9 @@ export const EmailVerificationForm: React.FC<EmailVerificationFormProps> = ({ on
   return (
     <Card>
       <CardHeader className="text-center">
+        <div className="flex justify-end mb-2">
+          <LanguageToggle />
+        </div>
         <CardTitle className="flex items-center justify-center gap-2">
           <Mail className="h-5 w-5 text-blue-600" />
           {t('register.emailVerification.title')}

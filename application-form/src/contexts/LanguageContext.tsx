@@ -677,6 +677,42 @@ const translations: Translations = {
     'register.emailVerification.validation.email': '有効なメールアドレスを入力してください',
     'register.emailVerification.validation.firstName': '名を入力してください',
     'register.emailVerification.validation.lastName': '姓を入力してください',
+    
+    // 確認コード入力フォーム
+    'register.codeVerification.title': '確認コードを入力',
+    'register.codeVerification.description': '{email} に送信された6桁の確認コードを入力してください',
+    'register.codeVerification.code': '確認コード / Verification Code',
+    'register.codeVerification.codePlaceholder': '123456',
+    'register.codeVerification.note': '※ このコードは2分間有効です',
+    'register.codeVerification.submitButton': '確認して次へ進む',
+    'register.codeVerification.verifying': '確認中...',
+    'register.codeVerification.resendButton': 'コードを再送信',
+    'register.codeVerification.success': 'メールアドレスが確認されました',
+    'register.codeVerification.invalidCode': '確認コードが正しくありません',
+    'register.codeVerification.verificationError': '確認コードの検証中にエラーが発生しました。再度お試しください。',
+    'register.codeVerification.checkFailed': '登録可能性の確認に失敗しました',
+    'register.codeVerification.validation.code': '6桁の数字を入力してください',
+    
+    // 登録タイプ選択
+    'register.typeSelection.title': '登録タイプを選択 / Select Registration Type',
+    'register.typeSelection.description': '{firstName} {lastName} 様、ご希望の登録タイプを選択してください',
+    'register.typeSelection.engineer.title': 'エンジニア向け / Engineer',
+    'register.typeSelection.engineer.description': 'エンジニア・開発者向けの登録フォーム',
+    'register.typeSelection.engineer.feature1': 'スキルシート入力',
+    'register.typeSelection.engineer.feature2': '技術スキル管理',
+    'register.typeSelection.engineer.feature3': 'プロジェクト経験記録',
+    'register.typeSelection.engineer.button': 'エンジニア向けで登録',
+    'register.typeSelection.engineer.alreadyRegistered': 'エンジニア向けは既に登録済みです',
+    'register.typeSelection.general.title': '一般職向け / General',
+    'register.typeSelection.general.description': '一般職・事務職向けの登録フォーム',
+    'register.typeSelection.general.feature1': '履歴書・職務経歴書',
+    'register.typeSelection.general.feature2': '基本情報入力',
+    'register.typeSelection.general.feature3': 'シンプルな登録プロセス',
+    'register.typeSelection.general.button': '一般職向けで登録',
+    'register.typeSelection.general.alreadyRegistered': '一般職向けは既に登録済みです',
+    'register.typeSelection.existingTypes': '現在登録済みのタイプ: {types}',
+    'register.typeSelection.back': '戻る / Back',
+    
     'auth.error': 'エラー',
     'auth.passwordResetFailed': 'パスワード再発行に失敗しました。',
     'auth.currentPasswordPlaceholder': '現在のパスワードを入力',
@@ -1590,6 +1626,42 @@ const translations: Translations = {
     'register.emailVerification.validation.email': 'Please enter a valid email address',
     'register.emailVerification.validation.firstName': 'Please enter your first name',
     'register.emailVerification.validation.lastName': 'Please enter your last name',
+    
+    // Code Verification Form
+    'register.codeVerification.title': 'Enter Verification Code',
+    'register.codeVerification.description': 'Please enter the 6-digit verification code sent to {email}',
+    'register.codeVerification.code': 'Verification Code',
+    'register.codeVerification.codePlaceholder': '123456',
+    'register.codeVerification.note': '※ This code is valid for 2 minutes',
+    'register.codeVerification.submitButton': 'Verify and Continue',
+    'register.codeVerification.verifying': 'Verifying...',
+    'register.codeVerification.resendButton': 'Resend Code',
+    'register.codeVerification.success': 'Email address has been verified',
+    'register.codeVerification.invalidCode': 'The verification code is incorrect',
+    'register.codeVerification.verificationError': 'An error occurred while verifying the code. Please try again.',
+    'register.codeVerification.checkFailed': 'Failed to check registration availability',
+    'register.codeVerification.validation.code': 'Please enter a 6-digit number',
+    
+    // Registration Type Selection
+    'register.typeSelection.title': 'Select Registration Type',
+    'register.typeSelection.description': '{firstName} {lastName}, please select your preferred registration type',
+    'register.typeSelection.engineer.title': 'Engineer',
+    'register.typeSelection.engineer.description': 'Registration form for engineers and developers',
+    'register.typeSelection.engineer.feature1': 'Skill sheet input',
+    'register.typeSelection.engineer.feature2': 'Technical skill management',
+    'register.typeSelection.engineer.feature3': 'Project experience recording',
+    'register.typeSelection.engineer.button': 'Register as Engineer',
+    'register.typeSelection.engineer.alreadyRegistered': 'Engineer registration is already completed',
+    'register.typeSelection.general.title': 'General',
+    'register.typeSelection.general.description': 'Registration form for general and office workers',
+    'register.typeSelection.general.feature1': 'Resume and work history',
+    'register.typeSelection.general.feature2': 'Basic information input',
+    'register.typeSelection.general.feature3': 'Simple registration process',
+    'register.typeSelection.general.button': 'Register as General',
+    'register.typeSelection.general.alreadyRegistered': 'General registration is already completed',
+    'register.typeSelection.existingTypes': 'Currently registered types: {types}',
+    'register.typeSelection.back': 'Back',
+    
     'auth.error': 'Error',
     'auth.passwordResetFailed': 'Failed to reset password.',
     'auth.currentPasswordPlaceholder': 'Enter current password',
@@ -2024,6 +2096,60 @@ const translations: Translations = {
     'auth.goToRegisterPage': 'Вы будете перенаправлены на страницу регистрации.',
     'auth.goToRegister': 'Перейти к регистрации',
     'auth.goToTopPage': 'На главную страницу',
+    
+    // Email Verification Form
+    'register.emailVerification.title': 'Подтверждение адреса электронной почты',
+    'register.emailVerification.description': 'Пожалуйста, введите адрес электронной почты и имя. Мы отправим письмо с подтверждением.',
+    'register.emailVerification.email': 'Адрес электронной почты',
+    'register.emailVerification.firstName': 'Имя',
+    'register.emailVerification.lastName': 'Фамилия',
+    'register.emailVerification.sendButton': 'Отправить письмо с подтверждением',
+    'register.emailVerification.sending': 'Отправка...',
+    'register.emailVerification.note': '※ Письмо с подтверждением действительно в течение 2 минут',
+    'register.emailVerification.emailPlaceholder': 'example@email.com',
+    'register.emailVerification.firstNamePlaceholder': 'Иван',
+    'register.emailVerification.lastNamePlaceholder': 'Иванов',
+    'register.emailVerification.error': 'Произошла ошибка',
+    'register.emailVerification.sendError': 'Произошла ошибка при отправке письма. Пожалуйста, попробуйте позже.',
+    'register.emailVerification.validation.email': 'Пожалуйста, введите действительный адрес электронной почты',
+    'register.emailVerification.validation.firstName': 'Пожалуйста, введите имя',
+    'register.emailVerification.validation.lastName': 'Пожалуйста, введите фамилию',
+    
+    // Code Verification Form
+    'register.codeVerification.title': 'Введите код подтверждения',
+    'register.codeVerification.description': 'Пожалуйста, введите 6-значный код подтверждения, отправленный на {email}',
+    'register.codeVerification.code': 'Код подтверждения',
+    'register.codeVerification.codePlaceholder': '123456',
+    'register.codeVerification.note': '※ Этот код действителен в течение 2 минут',
+    'register.codeVerification.submitButton': 'Подтвердить и продолжить',
+    'register.codeVerification.verifying': 'Проверка...',
+    'register.codeVerification.resendButton': 'Отправить код повторно',
+    'register.codeVerification.success': 'Адрес электронной почты подтвержден',
+    'register.codeVerification.invalidCode': 'Код подтверждения неверен',
+    'register.codeVerification.verificationError': 'Произошла ошибка при проверке кода. Пожалуйста, попробуйте снова.',
+    'register.codeVerification.checkFailed': 'Не удалось проверить возможность регистрации',
+    'register.codeVerification.validation.code': 'Пожалуйста, введите 6-значное число',
+    
+    // Registration Type Selection
+    'register.typeSelection.title': 'Выберите тип регистрации',
+    'register.typeSelection.description': '{firstName} {lastName}, пожалуйста, выберите предпочитаемый тип регистрации',
+    'register.typeSelection.engineer.title': 'Инженер',
+    'register.typeSelection.engineer.description': 'Форма регистрации для инженеров и разработчиков',
+    'register.typeSelection.engineer.feature1': 'Ввод листа навыков',
+    'register.typeSelection.engineer.feature2': 'Управление техническими навыками',
+    'register.typeSelection.engineer.feature3': 'Запись опыта проектов',
+    'register.typeSelection.engineer.button': 'Зарегистрироваться как инженер',
+    'register.typeSelection.engineer.alreadyRegistered': 'Регистрация инженера уже завершена',
+    'register.typeSelection.general.title': 'Общий',
+    'register.typeSelection.general.description': 'Форма регистрации для общих и офисных работников',
+    'register.typeSelection.general.feature1': 'Резюме и история работы',
+    'register.typeSelection.general.feature2': 'Ввод основной информации',
+    'register.typeSelection.general.feature3': 'Простой процесс регистрации',
+    'register.typeSelection.general.button': 'Зарегистрироваться как общий',
+    'register.typeSelection.general.alreadyRegistered': 'Общая регистрация уже завершена',
+    'register.typeSelection.existingTypes': 'Текущие зарегистрированные типы: {types}',
+    'register.typeSelection.back': 'Назад',
+    
     // Completion modal
     'profileCompletion.modalTitle': 'Завершённость профиля',
     'profileCompletion.modalMessagePrefix': 'Текущий уровень завершённости профиля: ',
@@ -2277,6 +2403,60 @@ const translations: Translations = {
     'auth.goToRegisterPage': "Ro'yxatdan o'tish sahifasiga o'tasiz.",
     'auth.goToRegister': "Ro'yxatdan o'tish",
     'auth.goToTopPage': "Bosh sahifaga o'tish",
+    
+    // Email Verification Form
+    'register.emailVerification.title': 'Elektron pochta manzilini tasdiqlash',
+    'register.emailVerification.description': "Iltimos, elektron pochta manzili va ismingizni kiriting. Tasdiqlash xatini yuboramiz.",
+    'register.emailVerification.email': 'Elektron pochta manzili',
+    'register.emailVerification.firstName': 'Ism',
+    'register.emailVerification.lastName': 'Familiya',
+    'register.emailVerification.sendButton': 'Tasdiqlash xatini yuborish',
+    'register.emailVerification.sending': 'Yuborilmoqda...',
+    'register.emailVerification.note': '※ Tasdiqlash xati 2 daqiqa davomida amal qiladi',
+    'register.emailVerification.emailPlaceholder': 'example@email.com',
+    'register.emailVerification.firstNamePlaceholder': 'Ivan',
+    'register.emailVerification.lastNamePlaceholder': 'Ivanov',
+    'register.emailVerification.error': 'Xato yuz berdi',
+    'register.emailVerification.sendError': 'Xat yuborishda xato yuz berdi. Iltimos, keyinroq qayta urinib ko\'ring.',
+    'register.emailVerification.validation.email': 'Iltimos, yaroqli elektron pochta manzilini kiriting',
+    'register.emailVerification.validation.firstName': 'Iltimos, ismingizni kiriting',
+    'register.emailVerification.validation.lastName': 'Iltimos, familiyangizni kiriting',
+    
+    // Code Verification Form
+    'register.codeVerification.title': 'Tasdiqlash kodini kiriting',
+    'register.codeVerification.description': 'Iltimos, {email} ga yuborilgan 6 xonali tasdiqlash kodini kiriting',
+    'register.codeVerification.code': 'Tasdiqlash kodi',
+    'register.codeVerification.codePlaceholder': '123456',
+    'register.codeVerification.note': '※ Bu kod 2 daqiqa davomida amal qiladi',
+    'register.codeVerification.submitButton': 'Tasdiqlash va davom etish',
+    'register.codeVerification.verifying': 'Tekshirilmoqda...',
+    'register.codeVerification.resendButton': 'Kodni qayta yuborish',
+    'register.codeVerification.success': 'Elektron pochta manzili tasdiqlandi',
+    'register.codeVerification.invalidCode': 'Tasdiqlash kodi noto\'g\'ri',
+    'register.codeVerification.verificationError': 'Kodni tekshirishda xato yuz berdi. Iltimos, qayta urinib ko\'ring.',
+    'register.codeVerification.checkFailed': 'Ro\'yxatdan o\'tish imkoniyatini tekshirib bo\'lmadi',
+    'register.codeVerification.validation.code': 'Iltimos, 6 xonali raqam kiriting',
+    
+    // Registration Type Selection
+    'register.typeSelection.title': 'Ro\'yxatdan o\'tish turini tanlang',
+    'register.typeSelection.description': '{firstName} {lastName}, iltimos, afzal ko\'rgan ro\'yxatdan o\'tish turingizni tanlang',
+    'register.typeSelection.engineer.title': 'Muhandis',
+    'register.typeSelection.engineer.description': 'Muhandislar va dasturchilar uchun ro\'yxatdan o\'tish formasi',
+    'register.typeSelection.engineer.feature1': 'Ko\'nikmalar jadvalini kiritish',
+    'register.typeSelection.engineer.feature2': 'Texnik ko\'nikmalarni boshqarish',
+    'register.typeSelection.engineer.feature3': 'Loyiha tajribasini yozib olish',
+    'register.typeSelection.engineer.button': 'Muhandis sifatida ro\'yxatdan o\'tish',
+    'register.typeSelection.engineer.alreadyRegistered': 'Muhandis ro\'yxatdan o\'tishi allaqachon yakunlangan',
+    'register.typeSelection.general.title': 'Umumiy',
+    'register.typeSelection.general.description': 'Umumiy va ofis xodimlari uchun ro\'yxatdan o\'tish formasi',
+    'register.typeSelection.general.feature1': 'Rezyume va ish tarixi',
+    'register.typeSelection.general.feature2': 'Asosiy ma\'lumotlarni kiritish',
+    'register.typeSelection.general.feature3': 'Oddiy ro\'yxatdan o\'tish jarayoni',
+    'register.typeSelection.general.button': 'Umumiy sifatida ro\'yxatdan o\'tish',
+    'register.typeSelection.general.alreadyRegistered': 'Umumiy ro\'yxatdan o\'tish allaqachon yakunlangan',
+    'register.typeSelection.existingTypes': 'Hozirgi ro\'yxatdan o\'tgan turlar: {types}',
+    'register.typeSelection.back': 'Orqaga',
+    
     // Completion modal
     'profileCompletion.modalTitle': 'Profil toʻliqligi',
     'profileCompletion.modalMessagePrefix': 'Joriy profil toʻliqligi: ',
@@ -2375,17 +2555,38 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
     localStorage.setItem('language', lang);
   };
 
-  const t = (key: string): string => {
-    const primary = translations[language]?.[key];
-    if (primary) return primary;
-    const fallbackEn = translations.en?.[key];
-    if (fallbackEn) {
-      // 推奨方式: ru/uz では英語フォールバックを簡易機械翻訳で置換
-      if (language === 'ru' || language === 'uz') {
-        return machineTranslate(fallbackEn, language);
+  const t = (key: string, params?: Record<string, string>): string => {
+    let primary = translations[language]?.[key];
+    if (!primary) {
+      const fallbackEn = translations.en?.[key];
+      if (fallbackEn) {
+        // 推奨方式: ru/uz では英語フォールバックを簡易機械翻訳で置換
+        if (language === 'ru' || language === 'uz') {
+          primary = machineTranslate(fallbackEn, language);
+        } else {
+          primary = fallbackEn;
+        }
       }
-      return fallbackEn;
     }
+    if (!primary) {
+      const fallbackJa = translations.ja?.[key];
+      if (fallbackJa) {
+        if (language === 'ru' || language === 'uz') {
+          primary = machineTranslate(fallbackJa, language);
+        } else {
+          primary = fallbackJa;
+        }
+      }
+    }
+    if (!primary) return key;
+    
+    // プレースホルダーを置換
+    if (params) {
+      return primary.replace(/\{(\w+)\}/g, (match, paramKey) => {
+        return params[paramKey] || match;
+      });
+    }
+    return primary;
     const fallbackJa = translations.ja?.[key];
     if (fallbackJa) {
       if (language === 'ru' || language === 'uz') {

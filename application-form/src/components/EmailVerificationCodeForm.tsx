@@ -9,9 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Mail, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { LanguageToggle } from '@/components/LanguageToggle';
 
-const codeSchema = z.object({
-  code: z.string().regex(/^\d{6}$/, '6桁の数字を入力してください')
+// 翻訳を使用したスキーマを動的に生成する関数
+const createCodeSchema = (t: (key: string) => string) => z.object({
+  code: z.string().regex(/^\d{6}$/, t('register.codeVerification.validation.code'))
 });
 
 type CodeFormData = z.infer<typeof codeSchema>;
@@ -29,12 +32,14 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
   lastName,
   onResend 
 }) => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  type CodeFormData = z.infer<ReturnType<typeof createCodeSchema>>;
   const form = useForm<CodeFormData>({
-    resolver: zodResolver(codeSchema)
+    resolver: zodResolver(createCodeSchema(t))
   });
 
   const onSubmit = async (data: CodeFormData) => {
@@ -56,7 +61,7 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
       const result = await response.json();
 
       if (result.success) {
-        setMessage({ type: 'success', text: result.message || 'メールアドレスが確認されました' });
+        setMessage({ type: 'success', text: result.message || t('register.codeVerification.success') });
         // 確認成功後、エンジニア/一般職の登録可能性をチェックしてから選択画面へ遷移
         try {
           const checkResponse = await fetch(`/api/email-verification/check-registration/${encodeURIComponent(result.email || email)}`);
@@ -80,7 +85,7 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
               });
             }, 1000);
           } else {
-            setMessage({ type: 'error', text: checkData.message || '登録可能性の確認に失敗しました' });
+            setMessage({ type: 'error', text: checkData.message || t('register.codeVerification.checkFailed') });
           }
         } catch (checkError) {
           console.error('登録可能性チェックエラー:', checkError);
@@ -103,13 +108,13 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
           }, 1000);
         }
       } else {
-        setMessage({ type: 'error', text: result.message || '確認コードが正しくありません' });
+        setMessage({ type: 'error', text: result.message || t('register.codeVerification.invalidCode') });
       }
     } catch (error) {
       console.error('確認コード検証エラー:', error);
       setMessage({
         type: 'error',
-        text: '確認コードの検証中にエラーが発生しました。再度お試しください。'
+        text: t('register.codeVerification.verificationError')
       });
     } finally {
       setIsLoading(false);
@@ -119,19 +124,22 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
   return (
     <Card>
       <CardHeader className="text-center">
+        <div className="flex justify-end mb-2">
+          <LanguageToggle />
+        </div>
         <CardTitle className="flex items-center justify-center gap-2">
           <Mail className="h-5 w-5 text-blue-600" />
-          確認コードを入力
+          {t('register.codeVerification.title')}
         </CardTitle>
         <CardDescription>
-          {email} に送信された6桁の確認コードを入力してください
+          {t('register.codeVerification.description', { email })}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="code">
-              確認コード / Verification Code *
+              {t('register.codeVerification.code')} *
             </Label>
             <Input
               id="code"
@@ -139,7 +147,7 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
               inputMode="numeric"
               maxLength={6}
               {...form.register('code')}
-              placeholder="123456"
+              placeholder={t('register.codeVerification.codePlaceholder')}
               className="text-center text-2xl tracking-widest font-mono"
               required
               disabled={isLoading}
@@ -153,7 +161,7 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
               <p className="text-sm text-red-500">{form.formState.errors.code.message}</p>
             )}
             <p className="text-xs text-gray-500 text-center">
-              ※ このコードは2分間有効です
+              {t('register.codeVerification.note')}
             </p>
           </div>
 
@@ -176,9 +184,9 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
             disabled={isLoading}
             size="lg"
           >
-            {isLoading ? '確認中...' : (
+            {isLoading ? t('register.codeVerification.verifying') : (
               <>
-                確認して次へ進む
+                {t('register.codeVerification.submitButton')}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </>
             )}
@@ -192,7 +200,7 @@ export const EmailVerificationCodeForm: React.FC<EmailVerificationCodeFormProps>
               onClick={onResend}
               disabled={isLoading}
             >
-              コードを再送信
+              {t('register.codeVerification.resendButton')}
             </Button>
           )}
         </form>
