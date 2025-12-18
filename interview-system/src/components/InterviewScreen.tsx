@@ -64,6 +64,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const [displayLanguage, setDisplayLanguage] = useState<Language>(language);
   const [error, setError] = useState<string>('');
   const [hasRecorded, setHasRecorded] = useState(false); // 録音済みフラグ
+  const [retryCount, setRetryCount] = useState(0); // 再録音回数（最大1回）
   // 実際にAPIで使用するセッションID（サーバー側の値を優先）
   const [activeSessionId, setActiveSessionId] = useState<string>(sessionId);
   
@@ -399,7 +400,6 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   // 録音停止
   const stopRecording = () => {
     setIsRecording(false);
-    setHasRecorded(true); // 録音済みフラグを設定
     
     if (recognitionRef.current) {
       recognitionRef.current.stop();
@@ -412,16 +412,41 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     }
     
     // 録音停止後、transcriptがあれば自動的に送信
-    if (transcript.trim()) {
+    const trimmedTranscript = transcript.trim();
+    if (trimmedTranscript) {
+      setHasRecorded(true); // 録音済みフラグを設定
       setTimeout(() => {
         handleSubmit();
       }, 500);
+    } else {
+      // transcriptが空の場合、再録音を許可（最大1回）
+      if (retryCount < 1) {
+        setRetryCount(prev => prev + 1);
+        setError(displayLanguage === 'ja' ? '音声が認識されませんでした。もう一度録音してください。' :
+                 displayLanguage === 'en' ? 'No speech was recognized. Please record again.' :
+                 displayLanguage === 'ru' ? 'Речь не распознана. Пожалуйста, запишите снова.' :
+                 'Nutq tanib olinmadi. Iltimos, qayta yozing.');
+        setTimeout(() => setError(''), 3000);
+        // 再録音を許可するため、hasRecordedは設定しない
+      } else {
+        // 再録音回数が上限に達した場合、空のtranscriptで送信
+        setHasRecorded(true);
+        setTimeout(() => {
+          handleSubmit();
+        }, 500);
+      }
     }
   };
 
   // 回答送信
   const handleSubmit = async () => {
-    if (!transcript.trim() || isSubmitting) return;
+    if (isSubmitting) return;
+    
+    // transcriptが空の場合でも送信を許可（再録音回数が上限に達した場合）
+    const trimmedTranscript = transcript.trim();
+    if (!trimmedTranscript && retryCount < 1) {
+      return; // 再録音可能な場合は送信しない
+    }
 
     setIsSubmitting(true);
     try {
@@ -447,6 +472,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         if (data.nextQuestion) {
           // 次の質問に進む前に状態をリセット
           setHasRecorded(false);
+          setRetryCount(0); // 再録音回数もリセット
           setTranscript('');
           setRecordingTime(0);
           setCurrentQuestion(data.nextQuestion);
@@ -729,9 +755,9 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                 <div className="text-center">
                   <button
                     onClick={toggleRecording}
-                    disabled={!canStartRecording || isPlaying || hasRecorded}
+                    disabled={!canStartRecording || isPlaying || (hasRecorded && retryCount >= 1)}
                     className={`relative w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-4 shadow-2xl transition-all ${
-                      canStartRecording && !isPlaying && !hasRecorded
+                      canStartRecording && !isPlaying && !(hasRecorded && retryCount >= 1)
                         ? 'bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white hover:scale-105 hover:shadow-blue-500/50'
                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     }`}
@@ -739,8 +765,16 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                     <Mic className="h-16 w-16" />
                   </button>
                   <p className="text-xl font-bold text-gray-700 mb-2">
-                    {canStartRecording && !hasRecorded ? t.speakNow : t.thinking}
+                    {canStartRecording && !(hasRecorded && retryCount >= 1) ? t.speakNow : t.thinking}
                   </p>
+                  {retryCount > 0 && !hasRecorded && (
+                    <p className="text-sm text-orange-600 font-medium mb-2">
+                      {displayLanguage === 'ja' ? '再録音可能（残り1回）' :
+                       displayLanguage === 'en' ? 'Retry available (1 remaining)' :
+                       displayLanguage === 'ru' ? 'Повторная запись доступна (осталось 1)' :
+                       'Qayta yozish mumkin (1 qoldi)'}
+                    </p>
+                  )}
                   <p className="text-sm text-blue-600 font-medium mb-2">{t.speakInJapanese}</p>
                   <p className="text-sm text-gray-500">
                     {displayLanguage === 'ja' ? 'ボタンを押して録音を開始' : 
