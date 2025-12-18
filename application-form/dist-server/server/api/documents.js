@@ -703,21 +703,17 @@ export const calculateCompletionRate = (data, registrationType = 'engineer') => 
     // 基本情報
     addField(data.lastName);
     addField(data.firstName);
-    addField(data.kanaLastName);
-    addField(data.kanaFirstName);
     addField(data.birthDate);
     addField(data.gender);
     addField(data.nationality);
     // 現住所情報
     addField(data.livePostNumber);
     addField(data.liveAddress);
-    addField(data.kanaLiveAddress);
     addField(data.livePhoneNumber);
     addField(data.liveMail);
     // 連絡先情報（現住所と同じ場合は充足）
     addField(data.contactSameAsLive ? true : data.contactPostNumber);
     addField(data.contactSameAsLive ? true : data.contactAddress);
-    addField(data.contactSameAsLive ? true : data.kanaContactAddress);
     addField(data.contactSameAsLive ? true : data.contactPhoneNumber);
     addField(data.contactSameAsLive ? true : data.contactMail);
     // 履歴書
@@ -750,7 +746,11 @@ export const calculateCompletionRate = (data, registrationType = 'engineer') => 
     addField(isNotYetPlanned ? true : plannedLevelName);
     const plannedDate = data.nextJapaneseTestDate || '';
     addField(isNotYetPlanned ? true : plannedDate);
-    // 追加情報
+    // 日本の在留資格（必須）
+    addField(data.residencyStatus);
+    // 希望職種（必須・複数選択）
+    addField(data.desiredJobTypes && data.desiredJobTypes.length > 0 ? true : false);
+    // 追加情報（従来通り）
     addField(data.selfIntroduction);
     addField(data.spouse);
     addField(data.spouseSupport);
