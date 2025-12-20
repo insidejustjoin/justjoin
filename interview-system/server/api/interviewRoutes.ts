@@ -312,8 +312,8 @@ router.post('/answer', async (req, res) => {
 
     console.log('回答送信API呼び出し:', { sessionId, questionId, text, responseTime });
 
-    // バリデーション
-    if (!sessionId || !questionId || !text) {
+    // バリデーション（textは空文字列でも許可）
+    if (!sessionId || !questionId || text === undefined || text === null) {
       console.log('バリデーションエラー: 必要なパラメータが不足');
       return res.status(400).json({
         success: false,
@@ -321,6 +321,9 @@ router.post('/answer', async (req, res) => {
         message: '必要なパラメータが不足しています'
       });
     }
+    
+    // textが空文字列の場合、デフォルト値を設定
+    const answerText = (text || '').trim() || '(音声が認識されませんでした)';
 
     // 現在の質問の順序を取得
     const currentQuestion = questionService.getQuestionById(questionId);
@@ -359,8 +362,8 @@ router.post('/answer', async (req, res) => {
 
     console.log('セッション情報:', session);
 
-    // 回答を評価
-    const evaluation = await aiInterviewerService.evaluateAnswer(text, responseTime);
+    // 回答を評価（空文字列の場合も処理）
+    const evaluation = await aiInterviewerService.evaluateAnswer(answerText, responseTime);
     console.log('回答評価:', evaluation);
 
     // 次の質問を取得
@@ -371,10 +374,10 @@ router.post('/answer', async (req, res) => {
         questionId,
         sessionId,
         applicantId: session.applicantId,
-        text,
+        text: answerText,
         responseTime: responseTime || 0,
         timestamp: new Date(),
-        wordCount: text.length,
+        wordCount: answerText.length,
         sentimentScore: evaluation.sentimentScore
       }
     );
