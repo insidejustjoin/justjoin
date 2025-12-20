@@ -5,7 +5,7 @@ import { QuestionService } from '../services/questionService.js';
 import textToSpeechService from '../services/textToSpeechService.js';
 import openaiTtsService from '../services/openaiTtsService.js';
 import voicevoxService from '../services/voicevoxService.js';
-import { Language, InterviewStatus } from '../../src/types/interview.js';
+import { Language, InterviewStatus, Answer } from '../../src/types/interview.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -362,25 +362,65 @@ router.post('/answer', async (req, res) => {
 
     console.log('セッション情報:', session);
 
+    // 回答オブジェクトを作成
+    const answer: Answer = {
+      id: `answer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      questionId,
+      sessionId,
+      applicantId: session.applicantId,
+      text: answerText,
+      responseTime: responseTime || 0,
+      timestamp: new Date(),
+      wordCount: answerText.split(/\s+/).filter((w: string) => w.length > 0).length || 0
+    };
+
     // 回答を評価（空文字列の場合も処理）
-    const evaluation = await aiInterviewerService.evaluateAnswer(answerText, responseTime);
-    console.log('回答評価:', evaluation);
+    let evaluation;
+    try {
+      evaluation = aiInterviewerService.evaluateAnswer(answer, currentQuestion);
+      answer.sentimentScore = evaluation.sentimentScore;
+      console.log('回答評価:', evaluation);
+    } catch (evalError) {
+      console.error('回答評価エラー:', evalError);
+      // 評価に失敗した場合でもデフォルト値を設定
+      evaluation = {
+        wordCount: answer.wordCount,
+        sentimentScore: 0,
+        completeness: 0
+      };
+      answer.sentimentScore = 0;
+    }
 
     // 次の質問を取得
-    const nextQuestionResponse = await aiInterviewerService.getNextQuestionResponse(
-      session,
-      {
-        id: `answer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        questionId,
-        sessionId,
-        applicantId: session.applicantId,
-        text: answerText,
-        responseTime: responseTime || 0,
-        timestamp: new Date(),
-        wordCount: answerText.length,
-        sentimentScore: evaluation.sentimentScore
-      }
-    );
+    let nextQuestionResponse;
+    try {
+      nextQuestionResponse = await aiInterviewerService.getNextQuestionResponse(
+        session,
+        answer
+      );
+      console.log('次の質問レスポンス:', nextQuestionResponse);
+    } catch (nextError) {
+      console.error('次の質問取得エラー:', nextError);
+      // エラーが発生した場合でも次の質問を取得
+      const nextQuestion = questionService.getNextQuestion(questionId);
+      const progress = {
+        current: nextQuestion ? nextQuestion.order - 1 : session.currentQuestionIndex + 1,
+        total: questionService.getTotalQuestionCount(),
+        percentage: Math.round(((nextQuestion ? nextQuestion.order - 1 : session.currentQuestionIndex + 1) / questionService.getTotalQuestionCount()) * 100)
+      };
+      
+      const language = session.language;
+      return res.json({
+        success: true,
+        message: language === 'ja' ? 'ありがとうございます。次の質問に移ります。' :
+                 language === 'en' ? 'Thank you. Let me move on to the next question.' :
+                 language === 'ru' ? 'Спасибо. Перейдем к следующему вопросу.' :
+                 'Rahmat. Keyingi savolga o\'tamiz.',
+        nextQuestion: nextQuestion,
+        isComplete: !nextQuestion,
+        progress: progress
+      });
+    }
 
     console.log('次の質問レスポンス:', nextQuestionResponse);
 
