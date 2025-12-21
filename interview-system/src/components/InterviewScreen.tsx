@@ -159,6 +159,15 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // APIベースURLを取得（環境に応じて）
+  const getApiBaseUrl = () => {
+    if (process.env.NODE_ENV === 'development') {
+      return 'http://localhost:3002';
+    }
+    // 本番環境では現在のドメインを使用
+    return window.location.origin;
+  };
+
   // 面接開始
   useEffect(() => {
     const startInterview = async () => {
@@ -167,7 +176,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         setStartTime(new Date());
 
         // サーバー側のテスト用開始APIを呼び出し
-        const response = await fetch('/api/interview/start', {
+        const apiBaseUrl = getApiBaseUrl();
+        const response = await fetch(`${apiBaseUrl}/api/interview/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -247,7 +257,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       setIsPlaying(true);
       setCanStartRecording(false);
       
-      const response = await fetch('/api/interview/synthesize-speech', {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/interview/synthesize-speech`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: message, languageCode: displayLanguage })
@@ -381,7 +392,11 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           formData.append('sessionId', activeSessionId);
           formData.append('type', 'audio');
 
-          const uploadResponse = await fetch('/api/interview/upload-recording', {
+          const apiBaseUrl = process.env.NODE_ENV === 'development' 
+            ? 'http://localhost:3002' 
+            : window.location.origin;
+          
+          const uploadResponse = await fetch(`${apiBaseUrl}/api/interview/upload-recording`, {
             method: 'POST',
             body: formData
           });
@@ -518,7 +533,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/interview/answer', {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/interview/answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
