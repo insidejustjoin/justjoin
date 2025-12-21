@@ -337,13 +337,74 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   };
 
   // 録音開始
-  const startRecording = () => {
+  const startRecording = async () => {
     if (!canStartRecording || isPlaying) return;
 
     setIsRecording(true);
     setRecordingTime(0);
     setTranscript('');
+    setAudioChunks([]);
 
+    try {
+      // MediaRecorderで音声ファイルを録音
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm'
+      });
+
+      const chunks: Blob[] = [];
+      
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+        setAudioChunks(chunks);
+        
+        // ストリームを停止
+        stream.getTracks().forEach(track => track.stop());
+        
+        // 録音ファイルをアップロード
+        try {
+          const formData = new FormData();
+          formData.append('file', audioBlob, `recording_${Date.now()}.webm`);
+          formData.append('sessionId', activeSessionId);
+          formData.append('type', 'audio');
+
+          const uploadResponse = await fetch('/api/interview/upload-recording', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (uploadResponse.ok) {
+            const uploadResult = await uploadResponse.json();
+            console.log('録音ファイルアップロード成功:', uploadResult);
+          } else {
+            console.error('録音ファイルアップロード失敗:', await uploadResponse.text());
+          }
+        } catch (uploadError) {
+          console.error('録音ファイルアップロードエラー:', uploadError);
+        }
+      };
+
+      recorder.start(1000); // 1秒ごとにデータを取得
+      setAudioRecorder(recorder);
+    } catch (error) {
+      console.error('MediaRecorder初期化エラー:', error);
+      // MediaRecorderが使えない場合でも音声認識は続行
+    }
+
+    // 音声認識（テキスト取得用）
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
@@ -401,6 +462,13 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const stopRecording = () => {
     setIsRecording(false);
     
+    // MediaRecorderを停止
+    if (audioRecorder && audioRecorder.state !== 'inactive') {
+      audioRecorder.stop();
+      setAudioRecorder(null);
+    }
+    
+    // 音声認識を停止
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
