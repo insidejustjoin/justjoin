@@ -1565,7 +1565,7 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
       WHERE user_id = $1 AND is_used = FALSE
     `;
     
-    await query(updateUrlQuery, [finalUserId]);
+    await query(updateUrlQuery, [finalUserId.toString()]);
     
     // 面接受験回数を更新（完了時）
     const updateAttemptsQuery = `
@@ -1574,17 +1574,17 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
       WHERE user_id = $1
     `;
     
-    await query(updateAttemptsQuery, [finalUserId]);
+    await query(updateAttemptsQuery, [finalUserId.toString()]);
     
     // 面接完了通知を送信（重複防止付き）
     try {
       const { sendNotificationToUser } = await import('../../integrations/postgres/notifications.js');
       // registration_typeを取得
-      const jobSeekerQuery = await query('SELECT registration_type FROM job_seekers WHERE user_id = $1 LIMIT 1', [finalUserId]);
+      const jobSeekerQuery = await query('SELECT registration_type FROM job_seekers WHERE user_id = $1 LIMIT 1', [finalUserId.toString()]);
       const registrationType = jobSeekerQuery.rows[0]?.registration_type || null;
       
       await sendNotificationToUser(
-        finalUserId,
+        finalUserId.toString(),
         'AI面接が完了しました！',
         `AI面接が完了しました！結果は管理者に送信されました。`,
         'success',
