@@ -215,8 +215,11 @@ function App() {
       }
       
       // 面接完了をメインプラットフォームに通知
+      // 注意: 別ドメインのため、認証トークンは取得できない可能性がある
       if (tokenData?.userId) {
         try {
+          // 別ドメインのため、localStorageからトークンを取得できない可能性がある
+          // その場合は、サーバー側で認証を処理する必要がある
           const token = localStorage.getItem('auth_token');
           const headers: HeadersInit = {
             'Content-Type': 'application/json',
@@ -225,7 +228,7 @@ function App() {
             headers['Authorization'] = `Bearer ${token}`;
           }
           
-          await fetch(`https://justjoin.jp/api/documents/interview-completed/${tokenData.userId}`, {
+          const response = await fetch(`https://justjoin.jp/api/documents/interview-completed/${tokenData.userId}`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -234,9 +237,24 @@ function App() {
               questionsAnswered: data?.questionsAnswered || questionsAnswered
             })
           });
+
+          if (!response.ok) {
+            // 401エラーなどが発生しても、面接完了処理は継続
+            console.warn('面接完了通知エラー（無視して続行）:', {
+              status: response.status,
+              statusText: response.statusText,
+              message: '面接完了通知に失敗しましたが、面接は正常に完了しています。'
+            });
+          } else {
+            console.log('✅ 面接完了通知成功');
+          }
         } catch (error) {
-          console.warn('面接完了通知エラー:', error);
+          // ネットワークエラーなどが発生しても、面接完了処理は継続
+          console.warn('面接完了通知エラー（無視して続行）:', error);
+          console.log('面接は正常に完了しています。通知エラーは無視されます。');
         }
+      } else {
+        console.log('トークンデータがないため、面接完了通知をスキップします。');
       }
       
       setCurrentState('completed');

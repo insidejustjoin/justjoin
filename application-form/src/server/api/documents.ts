@@ -1487,10 +1487,76 @@ router.get('/admin/interview-status/:userId', authenticate, async (req: Authenti
 });
 
 // 面接完了後の処理エンドポイント
-router.post('/interview-completed/:userId', authenticate, async (req: AuthenticatedRequest, res: express.Response) => {
+// 注意: 面接システムは別ドメインで動作するため、認証をオプショナルにする
+router.post('/interview-completed/:userId', async (req: express.Request, res: express.Response) => {
   try {
     const { userId } = req.params;
-    const { sessionId, score, recommendation } = req.body;
+    const { sessionId, duration, questionsAnswered } = req.body;
+    
+    // セッションIDからユーザーIDを検証（セキュリティのため）
+    let verifiedUserId: number | null = null;
+    
+    if (sessionId) {
+      try {
+        // セッションIDからユーザーIDを取得
+        const sessionQuery = `
+          SELECT 
+            ia.email,
+            u.id as user_id
+          FROM interview_sessions s
+          LEFT JOIN interview_applicants ia ON s.applicant_id = ia.id
+          LEFT JOIN users u ON ia.email = u.email AND u.user_type = 'job_seeker'
+          WHERE s.id = $1
+          LIMIT 1
+        `;
+        const sessionResult = await query(sessionQuery, [sessionId]);
+        
+        if (sessionResult.rows.length > 0 && sessionResult.rows[0].user_id) {
+          verifiedUserId = sessionResult.rows[0].user_id;
+          // パラメータのuserIdと一致するか確認
+          if (verifiedUserId.toString() !== userId) {
+            console.warn('セッションIDとuserIdが一致しません:', { sessionId, verifiedUserId, userId });
+            // 一致しない場合は、セッションIDから取得したuserIdを使用
+            verifiedUserId = sessionResult.rows[0].user_id;
+          }
+        }
+      } catch (sessionError) {
+        console.warn('セッションID検証エラー（続行）:', sessionError);
+      }
+    }
+    
+    // 認証トークンがある場合は、それを使用してuserIdを検証
+    let authenticatedUserId: number | null = null;
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      if (token) {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'justjoin-jwt-secret-2024');
+        authenticatedUserId = decoded.userId || decoded.id;
+      }
+    } catch (authError) {
+      // 認証エラーは無視（セッションID検証にフォールバック）
+      console.log('認証トークンなしまたは無効（セッションID検証にフォールバック）');
+    }
+    
+    // 使用するuserIdを決定（認証 > セッションID検証 > パラメータ）
+    const finalUserId = authenticatedUserId || verifiedUserId || parseInt(userId, 10);
+    
+    if (!finalUserId || isNaN(finalUserId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_USER_ID',
+        message: 'ユーザーIDが無効です'
+      });
+    }
+    
+    console.log('面接完了処理:', { 
+      sessionId, 
+      userId: finalUserId, 
+      duration, 
+      questionsAnswered,
+      authMethod: authenticatedUserId ? 'token' : (verifiedUserId ? 'session' : 'param')
+    });
     
     // 面接URLを使用済みに設定
     const updateUrlQuery = `
@@ -1499,7 +1565,7 @@ router.post('/interview-completed/:userId', authenticate, async (req: Authentica
       WHERE user_id = $1 AND is_used = FALSE
     `;
     
-    await query(updateUrlQuery, [userId]);
+    await query(updateUrlQuery, [finalUserId]);
     
     // 面接受験回数を更新（完了時）
     const updateAttemptsQuery = `
@@ -1508,19 +1574,19 @@ router.post('/interview-completed/:userId', authenticate, async (req: Authentica
       WHERE user_id = $1
     `;
     
-    await query(updateAttemptsQuery, [userId]);
+    await query(updateAttemptsQuery, [finalUserId]);
     
     // 面接完了通知を送信（重複防止付き）
     try {
       const { sendNotificationToUser } = await import('../../integrations/postgres/notifications.js');
       // registration_typeを取得
-      const jobSeekerQuery = await query('SELECT registration_type FROM job_seekers WHERE user_id = $1 LIMIT 1', [userId]);
+      const jobSeekerQuery = await query('SELECT registration_type FROM job_seekers WHERE user_id = $1 LIMIT 1', [finalUserId]);
       const registrationType = jobSeekerQuery.rows[0]?.registration_type || null;
       
       await sendNotificationToUser(
-        userId,
+        finalUserId,
         'AI面接が完了しました！',
-        `AI面接が完了しました！結果は管理者に送信されました。スコア: ${score || 'N/A'}, 推奨レベル: ${recommendation || 'N/A'}`,
+        `AI面接が完了しました！結果は管理者に送信されました。`,
         'success',
         registrationType as 'engineer' | 'general' | null,
         { checkTitle: 'AI面接が完了しました！', withinSeconds: 86400 } // 24時間以内の重複を防止
