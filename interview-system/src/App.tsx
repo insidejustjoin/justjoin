@@ -217,11 +217,17 @@ function App() {
       // 面接完了をメインプラットフォームに通知
       if (tokenData?.userId) {
         try {
+          const token = localStorage.getItem('auth_token');
+          const headers: HeadersInit = {
+            'Content-Type': 'application/json',
+          };
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+          
           await fetch(`https://justjoin.jp/api/documents/interview-completed/${tokenData.userId}`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({
               sessionId,
               duration: data?.duration || interviewDuration,

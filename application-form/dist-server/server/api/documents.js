@@ -1634,6 +1634,87 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req, res)
         });
     }
 });
+// 管理者用：面接録音ファイルダウンロードエンドポイント
+router.get('/admin/interview-recording/:recordingId', authenticate, async (req, res) => {
+    try {
+        const { recordingId } = req.params;
+        // 管理者権限チェック
+        const adminCheckQuery = `
+      SELECT u.user_type
+      FROM users u
+      WHERE u.id = $1
+    `;
+        const adminResult = await query(adminCheckQuery, [req.user.id]);
+        if (adminResult.rows.length === 0 || !['admin', 'super_admin'].includes(adminResult.rows[0].user_type)) {
+            return res.status(403).json({
+                success: false,
+                error: 'UNAUTHORIZED',
+                message: '管理者権限が必要です'
+            });
+        }
+        // 録音情報を取得
+        const recordingQuery = `
+      SELECT 
+        ir.id,
+        ir.session_id,
+        ir.storage_path,
+        ir.recording_url,
+        ir.recording_type,
+        ir.file_size
+      FROM interview_recordings ir
+      WHERE ir.id = $1
+    `;
+        const recordingResult = await query(recordingQuery, [recordingId]);
+        if (recordingResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'RECORDING_NOT_FOUND',
+                message: '録音ファイルが見つかりません'
+            });
+        }
+        const recording = recordingResult.rows[0];
+        // ファイルパスを決定（storage_pathまたはrecording_urlを使用）
+        let filePath = recording.storage_path || recording.recording_url;
+        if (!filePath) {
+            return res.status(404).json({
+                success: false,
+                error: 'FILE_NOT_FOUND',
+                message: '録音ファイルのパスが見つかりません'
+            });
+        }
+        // ファイルパスが相対パスの場合、絶対パスに変換
+        // 面接システムのuploads/recordingsディレクトリを参照
+        if (!path.isAbsolute(filePath)) {
+            // 面接システムのディレクトリを参照（環境変数から取得、またはデフォルト値を使用）
+            const interviewSystemPath = process.env.INTERVIEW_SYSTEM_PATH || path.join(__dirname, '../../interview-system');
+            filePath = path.join(interviewSystemPath, 'uploads', 'recordings', path.basename(filePath));
+        }
+        // ファイルが存在するかチェック
+        if (!fs.existsSync(filePath)) {
+            console.warn('録音ファイルが見つかりません:', filePath);
+            return res.status(404).json({
+                success: false,
+                error: 'FILE_NOT_FOUND',
+                message: '録音ファイルが見つかりません'
+            });
+        }
+        // ファイルを送信
+        const fileStream = fs.createReadStream(filePath);
+        const stat = fs.statSync(filePath);
+        res.setHeader('Content-Type', recording.recording_type === 'video' ? 'video/webm' : 'audio/webm');
+        res.setHeader('Content-Length', stat.size);
+        res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
+        fileStream.pipe(res);
+    }
+    catch (error) {
+        console.error('録音ファイルダウンロードエラー:', error);
+        res.status(500).json({
+            success: false,
+            error: 'INTERNAL_ERROR',
+            message: '録音ファイルのダウンロードに失敗しました'
+        });
+    }
+});
 // 面接トークン検証エンドポイント
 router.get('/interview-verify/:token', async (req, res) => {
     try {

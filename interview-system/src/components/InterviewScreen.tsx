@@ -555,7 +555,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   <span className="text-sm font-medium text-gray-700">{formatTime(elapsedTime)}</span>
                 </div>
                 <div className="px-3 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold shadow-md">
-                  {progress.current}/{progress.total}
+                  {progress.current + 1}/{progress.total}
                 </div>
               </div>
             </div>
@@ -615,7 +615,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                         </div>
                       </div>
                       <div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-1">{t.question} {progress.current}</h2>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-1">{t.question} {progress.current + 1}</h2>
                         <p className="text-sm text-gray-500 font-medium">{progress.total}問中 / {progress.percentage}%</p>
                       </div>
                     </div>

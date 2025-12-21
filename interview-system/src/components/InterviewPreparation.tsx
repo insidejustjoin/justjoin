@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckIcon, AlertTriangleIcon, UserIcon, GlobeIcon, ClockIcon, VideoIcon, MicIcon, WifiIcon, VolumeIcon, BarChart3Icon } from 'lucide-react';
+import { CheckIcon, AlertTriangleIcon, UserIcon, GlobeIcon, ClockIcon, MicIcon, WifiIcon, VolumeIcon, BarChart3Icon } from 'lucide-react';
 import { Language } from '@/types/interview';
 import { LanguageToggle } from './LanguageToggle';
 
@@ -41,7 +41,6 @@ const InterviewPreparation: React.FC<InterviewPreparationProps> = ({
 
   const [checkResults, setCheckResults] = useState({
     microphone: false,
-    camera: false,
     internet: false,
     audio: false,
     environment: false
@@ -83,8 +82,6 @@ const InterviewPreparation: React.FC<InterviewPreparationProps> = ({
         description: '面接に必要な環境を確認します。',
         microphone: 'マイク確認',
         microphoneText: 'マイクが正常に動作することを確認してください。',
-        camera: 'カメラ確認',
-        cameraText: 'カメラが正常に動作することを確認してください。',
         internet: 'インターネット接続確認',
         internetText: '安定したインターネット接続があることを確認してください。',
         audio: '音声確認',
@@ -147,8 +144,6 @@ const InterviewPreparation: React.FC<InterviewPreparationProps> = ({
         description: 'Check the environment required for the interview.',
         microphone: 'Microphone Check',
         microphoneText: 'Please confirm that your microphone is working properly.',
-        camera: 'Camera Check',
-        cameraText: 'Please confirm that your camera is working properly.',
         internet: 'Internet Connection Check',
         internetText: 'Please confirm that you have a stable internet connection.',
         audio: 'Audio Check',
@@ -211,8 +206,6 @@ const InterviewPreparation: React.FC<InterviewPreparationProps> = ({
         description: 'Проверьте окружение, необходимое для проведения интервью.',
         microphone: 'Проверка микрофона',
         microphoneText: 'Убедитесь, что микрофон работает корректно.',
-        camera: 'Проверка камеры',
-        cameraText: 'Убедитесь, что камера работает корректно.',
         internet: 'Проверка интернет-соединения',
         internetText: 'Убедитесь, что у вас стабильное интернет-соединение.',
         audio: 'Проверка звука',
@@ -275,8 +268,6 @@ const InterviewPreparation: React.FC<InterviewPreparationProps> = ({
         description: 'Suhbat uchun zarur bo‘lgan muhitni tekshiring.',
         microphone: 'Mikrofonni tekshirish',
         microphoneText: 'Mikrofon toʻgʻri ishlayotganini tekshiring.',
-        camera: 'Kamerani tekshirish',
-        cameraText: 'Kamera toʻgʻri ishlayotganini tekshiring.',
         internet: 'Internet aloqasini tekshirish',
         internetText: 'Internet aloqangiz barqaror ekanligiga ishonch hosil qiling.',
         audio: 'Ovoz tekshiruvi',
@@ -1070,7 +1061,6 @@ Press "OK" to complete audio check, "Cancel" to retry.`;
       <div className="space-y-4">
         {[
           { key: 'microphone', icon: MicIcon, title: t.step3.microphone, text: t.step3.microphoneText, test: testMicrophone, color: 'blue' },
-          { key: 'camera', icon: VideoIcon, title: t.step3.camera, text: t.step3.cameraText, test: testCamera, color: 'green' },
           { key: 'internet', icon: WifiIcon, title: t.step3.internet, text: t.step3.internetText, test: testInternet, color: 'purple' },
           { key: 'audio', icon: VolumeIcon, title: t.step3.audio, text: t.step3.audioText, test: testAudio, color: 'orange' },
           { key: 'environment', icon: AlertTriangleIcon, title: t.step3.environment, text: t.step3.environmentText, test: testEnvironment, color: 'red' }
@@ -1179,29 +1169,27 @@ Press "OK" to complete audio check, "Cancel" to retry.`;
         <p className="text-gray-600">{t.step4.description}</p>
       </div>
       
-      <div className="space-y-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <ClockIcon className="w-4 h-4 text-blue-600" />
-              <span className="text-sm text-blue-800">{t.step4.duration}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <UserIcon className="w-4 h-4 text-blue-600" />
-              <span className="text-sm text-blue-800">{t.step4.questions}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <GlobeIcon className="w-4 h-4 text-blue-600" />
-              <span className="text-sm text-blue-800">{t.step4.language}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <AlertTriangleIcon className="w-4 h-4 text-blue-600" />
-              <span className="text-sm text-blue-800">{t.step4.oneTimeOnly}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <CheckIcon className="w-4 h-4 text-blue-600" />
-              <span className="text-sm text-blue-800">{t.step4.results}</span>
-            </div>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <div className="space-y-3">
+          <div className="flex items-center space-x-3">
+            <ClockIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <span className="text-sm text-blue-800 font-medium">{t.step4.duration}</span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <UserIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <span className="text-sm text-blue-800 font-medium">{t.step4.questions}</span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <GlobeIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <span className="text-sm text-blue-800 font-medium">{t.step4.language}</span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <AlertTriangleIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <span className="text-sm text-blue-800 font-medium">{t.step4.oneTimeOnly}</span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <CheckIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <span className="text-sm text-blue-800 font-medium">{t.step4.results}</span>
           </div>
         </div>
       </div>

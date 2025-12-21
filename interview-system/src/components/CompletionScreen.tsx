@@ -49,8 +49,7 @@ const CompletionScreen: React.FC<CompletionScreenProps> = ({
       sessionInfo: 'セッション情報',
       sessionId: 'セッションID',
       actions: 'その他のアクション',
-      goHome: 'ホームページに戻る',
-      newInterview: '新しい面接を開始',
+      closeWindow: 'このウィンドウを閉じる',
       contactUs: 'お問い合わせ',
       thankYou: 'ありがとうございました',
       finalMessage: 'Just Join でのキャリア機会をお探しいただき、ありがとうございます。今後ともよろしくお願いいたします。'
@@ -73,15 +72,60 @@ const CompletionScreen: React.FC<CompletionScreenProps> = ({
       sessionInfo: 'Session Information',
       sessionId: 'Session ID',
       actions: 'Other Actions',
-      goHome: 'Go to Homepage',
-      newInterview: 'Start New Interview',
+      closeWindow: 'Close this window',
       contactUs: 'Contact Us',
       thankYou: 'Thank You',
       finalMessage: 'Thank you for exploring career opportunities with Just Join. We look forward to working with you.'
+    },
+    ru: {
+      title: 'Интервью завершено',
+      subtitle: 'Спасибо за ваше время',
+      description: 'AI-интервью завершено. Спасибо за ваше ценное время.',
+      statistics: 'Статистика интервью',
+      duration: 'Продолжительность',
+      questionsAnswered: 'Отвеченных вопросов',
+      completionRate: 'Процент завершения',
+      nextSteps: 'Следующие шаги',
+      step1Title: 'Оценка результатов',
+      step1Description: 'Наша AI-система оценит ваши ответы.',
+      step2Title: 'Проверка рекрутером',
+      step2Description: 'Результаты оценки будут проверены нашей командой по подбору персонала для комплексной оценки.',
+      step3Title: 'Уведомление о результатах',
+      step3Description: 'Вы получите результаты интервью по электронной почте в течение одной недели.',
+      sessionInfo: 'Информация о сессии',
+      sessionId: 'ID сессии',
+      actions: 'Другие действия',
+      closeWindow: 'Закрыть это окно',
+      contactUs: 'Связаться с нами',
+      thankYou: 'Спасибо',
+      finalMessage: 'Спасибо за изучение карьерных возможностей в Just Join. Мы с нетерпением ждем сотрудничества с вами.'
+    },
+    uz: {
+      title: 'Intervyu yakunlandi',
+      subtitle: 'Vaqtingiz uchun rahmat',
+      description: 'AI intervyu yakunlandi. Qimmatli vaqtingiz uchun rahmat.',
+      statistics: 'Intervyu statistikasi',
+      duration: 'Davomiyligi',
+      questionsAnswered: 'Javob berilgan savollar',
+      completionRate: 'Yakunlanish foizi',
+      nextSteps: 'Keyingi qadamlar',
+      step1Title: 'Natijalarni baholash',
+      step1Description: 'Bizning AI tizimimiz javoblaringizni baholaydi.',
+      step2Title: 'Ishga qabul qiluvchi tomonidan tekshirish',
+      step2Description: 'Baholash natijalari bizning ishga qabul qilish jamoamiz tomonidan kompleks baholash uchun ko\'rib chiqiladi.',
+      step3Title: 'Natija xabari',
+      step3Description: 'Siz intervyu natijalarini bir hafta ichida elektron pochta orqali olasiz.',
+      sessionInfo: 'Sessiya ma\'lumotlari',
+      sessionId: 'Sessiya ID',
+      actions: 'Boshqa harakatlar',
+      closeWindow: 'Ushbu oynani yoping',
+      contactUs: 'Biz bilan bog\'lanish',
+      thankYou: 'Rahmat',
+      finalMessage: 'Just Join bilan martaba imkoniyatlarini o\'rganganingiz uchun rahmat. Siz bilan ishlashni kutamiz.'
     }
   };
 
-  const t = texts[language];
+  const t = texts[language] || texts.ja;
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -95,12 +139,16 @@ const CompletionScreen: React.FC<CompletionScreenProps> = ({
     return `${mins}m ${secs}s`;
   };
 
-  const handleGoHome = () => {
-    window.location.href = 'https://justjoin.jp/jobseeker/my-page';
+  const handleCloseWindow = () => {
+    window.close();
+    // ウィンドウが閉じられない場合（ポップアップでない場合）はホームページにリダイレクト
+    if (!window.closed) {
+      window.location.href = 'https://justjoin.jp/jobseeker/my-page';
+    }
   };
 
   const handleContactUs = () => {
-    window.location.href = 'mailto:support@justjoin.jp';
+    window.location.href = 'mailto:inside.justjoin@gmail.com?subject=面接システムに関するお問い合わせ';
   };
 
   const completionRate = Math.round((questionsAnswered / totalQuestions) * 100);
@@ -244,22 +292,12 @@ const CompletionScreen: React.FC<CompletionScreenProps> = ({
                 <h2 className="text-xl font-bold text-gray-900 mb-6">{t.actions}</h2>
                 <div className="space-y-4">
                   <button
-                    onClick={handleGoHome}
+                    onClick={handleCloseWindow}
                     className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-4 px-6 rounded-2xl font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl transform hover:scale-105"
                   >
                     <Home className="w-5 h-5" />
-                    <span>{t.goHome}</span>
+                    <span>{t.closeWindow}</span>
                   </button>
-                  
-                  {onRestart && (
-                    <button
-                      onClick={onRestart}
-                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-2xl font-semibold hover:from-green-600 hover:to-emerald-700 transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl transform hover:scale-105"
-                    >
-                      <Star className="w-5 h-5" />
-                      <span>{t.newInterview}</span>
-                    </button>
-                  )}
                   
                   <button
                     onClick={handleContactUs}
