@@ -1463,8 +1463,8 @@ app.get('/api/jobseekers/profile/:userId', async (req, res) => {
             // 顔写真が未設定の場合のみ補完
             if (!row.profile_photo) {
               const photo = documentData?.resume?.photoUrl || null;
-              if (photo) {
-                row.profile_photo = photo;
+          if (photo) {
+            row.profile_photo = photo;
               }
             }
             // whyJapanとwhyInterestJapanを追加

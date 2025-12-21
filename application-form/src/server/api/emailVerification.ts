@@ -192,7 +192,7 @@ router.post('/verify-email', async (req, res) => {
       // これを指定しないと今回のような 23502 エラー（NOT NULL violation）が発生する。
       const hasVerificationTokenColumn = true; // 本番では必須のため、常にセットする前提にする
       const tokenValue = verificationCode; // シンプルに確認コードと同じ値をトークンとして保存しておく
-
+      
       if (existingResult.rows.length > 0) {
         // 既存レコードを更新
         console.log('既存レコードを更新します');
@@ -211,17 +211,17 @@ router.post('/verify-email', async (req, res) => {
             [firstName, lastName, verificationCode, tokenValue, expiresAt, email]
           );
         } else {
-          await query(
-            `UPDATE email_verifications 
-             SET first_name = $1,
-                 last_name = $2,
-                 verification_code = $3,
-                 expires_at = $4,
-                 verified = false,
-                 updated_at = NOW()
-             WHERE email = $5`,
-            [firstName, lastName, verificationCode, expiresAt, email]
-          );
+        await query(
+          `UPDATE email_verifications 
+           SET first_name = $1,
+               last_name = $2,
+               verification_code = $3,
+               expires_at = $4,
+               verified = false,
+               updated_at = NOW()
+           WHERE email = $5`,
+          [firstName, lastName, verificationCode, expiresAt, email]
+        );
         }
       } else {
         // 新規レコードを挿入
@@ -234,11 +234,11 @@ router.post('/verify-email', async (req, res) => {
             [email, firstName, lastName, verificationCode, tokenValue, expiresAt]
           );
         } else {
-          await query(
-            `INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
-             VALUES ($1, $2, $3, $4, $5, NOW())`,
-            [email, firstName, lastName, verificationCode, expiresAt]
-          );
+        await query(
+          `INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())`,
+          [email, firstName, lastName, verificationCode, expiresAt]
+        );
         }
       }
       console.log('email_verifications テーブルへの保存完了');

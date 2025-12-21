@@ -776,17 +776,17 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
               noQualifications: false
             }
           });
-      toast({
+          toast({
         title: t('documents.loadJobSeekerSuccessTitle'),
         description: t('documents.loadJobSeekerSuccessDescription'),
-      });
+          });
         } catch (error) {
           console.error('保存されたデータの読み込みエラー:', error);
           // エラーが発生した場合は基本データのみで設定
           setDocumentData({
             // 基本情報
-          lastName: lastName,
-          firstName: firstName,
+            lastName: lastName,
+            firstName: firstName,
             birthDate: jobSeekerData.date_of_birth ? new Date(jobSeekerData.date_of_birth).toLocaleDateString('ja-JP') : '',
             gender: jobSeekerData.gender === 'male' ? '男性' : jobSeekerData.gender === 'female' ? '女性' : 'その他',
             nationality: '', // 国籍を追加
@@ -3039,7 +3039,7 @@ whiteCells.forEach(cell => {
                     required
                   />
                 </div>
-              </div>
+                  </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium">{t('documents.phoneNumber')} <span className="text-red-500">*</span></Label>

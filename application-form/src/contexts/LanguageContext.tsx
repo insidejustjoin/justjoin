@@ -2878,10 +2878,10 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
   const t = (key: string, params?: Record<string, string>): string => {
     let primary = translations[language]?.[key];
     if (!primary) {
-      const fallbackEn = translations.en?.[key];
-      if (fallbackEn) {
-        // 推奨方式: ru/uz では英語フォールバックを簡易機械翻訳で置換
-        if (language === 'ru' || language === 'uz') {
+    const fallbackEn = translations.en?.[key];
+    if (fallbackEn) {
+      // 推奨方式: ru/uz では英語フォールバックを簡易機械翻訳で置換
+      if (language === 'ru' || language === 'uz') {
           primary = machineTranslate(fallbackEn, language);
         } else {
           primary = fallbackEn;

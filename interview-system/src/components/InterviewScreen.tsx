@@ -722,7 +722,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                       <div className="relative">
                         <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl blur-xl opacity-60 animate-pulse"></div>
                         <div className="relative w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-black text-3xl shadow-2xl border-4 border-white/30">
-                          {progress.current}
+                          {progress.current + 1}
                         </div>
                       </div>
                       <div>

@@ -1493,7 +1493,7 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
     const { userId } = req.params;
     const { sessionId, duration, questionsAnswered } = req.body;
     
-    // セッションIDからユーザーIDを検証（セキュリティのため）
+    // セッションIDからユーザーIDを検証（セキュリティのため、最優先）
     let verifiedUserId: number | null = null;
     
     if (sessionId) {
@@ -1512,16 +1512,13 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
         const sessionResult = await query(sessionQuery, [sessionId]);
         
         if (sessionResult.rows.length > 0 && sessionResult.rows[0].user_id) {
-          verifiedUserId = sessionResult.rows[0].user_id;
-          // パラメータのuserIdと一致するか確認
-          if (verifiedUserId.toString() !== userId) {
-            console.warn('セッションIDとuserIdが一致しません:', { sessionId, verifiedUserId, userId });
-            // 一致しない場合は、セッションIDから取得したuserIdを使用
-            verifiedUserId = sessionResult.rows[0].user_id;
-          }
+          verifiedUserId = parseInt(sessionResult.rows[0].user_id, 10);
+          console.log('セッションIDからユーザーIDを取得:', { sessionId, verifiedUserId });
+        } else {
+          console.warn('セッションIDからユーザーIDを取得できませんでした:', { sessionId, rows: sessionResult.rows });
         }
       } catch (sessionError) {
-        console.warn('セッションID検証エラー（続行）:', sessionError);
+        console.error('セッションID検証エラー:', sessionError);
       }
     }
     
@@ -1533,20 +1530,40 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
         const jwt = require('jsonwebtoken');
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'justjoin-jwt-secret-2024');
         authenticatedUserId = decoded.userId || decoded.id;
+        if (authenticatedUserId) {
+          authenticatedUserId = parseInt(authenticatedUserId.toString(), 10);
+        }
       }
     } catch (authError) {
       // 認証エラーは無視（セッションID検証にフォールバック）
       console.log('認証トークンなしまたは無効（セッションID検証にフォールバック）');
     }
     
-    // 使用するuserIdを決定（認証 > セッションID検証 > パラメータ）
-    const finalUserId = authenticatedUserId || verifiedUserId || parseInt(userId, 10);
+    // 使用するuserIdを決定（セッションID検証 > 認証 > パラメータ）
+    // パラメータのuserIdがUUID形式の場合は無視
+    let paramUserId: number | null = null;
+    if (userId && !userId.includes('-')) {
+      // UUID形式でない場合のみパースを試みる
+      paramUserId = parseInt(userId, 10);
+      if (isNaN(paramUserId)) {
+        paramUserId = null;
+      }
+    }
+    
+    const finalUserId = verifiedUserId || authenticatedUserId || paramUserId;
     
     if (!finalUserId || isNaN(finalUserId)) {
+      console.error('ユーザーIDが無効:', { 
+        sessionId, 
+        verifiedUserId, 
+        authenticatedUserId, 
+        paramUserId, 
+        userId 
+      });
       return res.status(400).json({
         success: false,
         error: 'INVALID_USER_ID',
-        message: 'ユーザーIDが無効です'
+        message: 'ユーザーIDが無効です。セッションIDからユーザーIDを取得できませんでした。'
       });
     }
     
