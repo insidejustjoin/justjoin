@@ -38,8 +38,8 @@ app.use(cors({
 }));
 
 // JSONパースミドルウェア
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // IPアドレスを取得するミドルウェア
 app.use((req, res, next) => {

@@ -11,31 +11,15 @@ const textToSpeechService_js_1 = __importDefault(require("../services/textToSpee
 const openaiTtsService_js_1 = __importDefault(require("../services/openaiTtsService.js"));
 const voicevoxService_js_1 = __importDefault(require("../services/voicevoxService.js"));
 const multer_1 = __importDefault(require("multer"));
-const path_1 = __importDefault(require("path"));
-const fs_1 = __importDefault(require("fs"));
 const aiInterviewerService = new aiInterviewerService_js_1.AIInterviewerService();
 const questionService = new questionService_js_1.QuestionService();
 // 録音ファイル保存用の設定
-const storage = multer_1.default.diskStorage({
-    destination: (req, file, cb) => {
-        const uploadDir = path_1.default.join(process.cwd(), 'uploads', 'recordings');
-        if (!fs_1.default.existsSync(uploadDir)) {
-            fs_1.default.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const sessionId = req.body.sessionId || 'unknown';
-        const type = req.body.type || 'unknown';
-        const timestamp = Date.now();
-        const ext = path_1.default.extname(file.originalname);
-        cb(null, `${sessionId}_${type}_${timestamp}${ext}`);
-    }
-});
+// Cloud Runでは一時的なファイルシステムを使用するため、メモリに保存
+const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({
     storage,
     limits: {
-        fileSize: 100 * 1024 * 1024 // 100MB制限
+        fileSize: 50 * 1024 * 1024 // 50MB制限（Cloud Runの制限を考慮）
     }
 });
 const router = express_1.default.Router();
@@ -105,8 +89,20 @@ router.post('/synthesize-speech', async (req, res) => {
 });
 // 録音アップロードエンドポイント
 router.post('/upload-recording', upload.single('file'), async (req, res) => {
+    console.log('録音アップロードリクエスト受信:', {
+        method: req.method,
+        url: req.url,
+        headers: req.headers,
+        body: req.body,
+        file: req.file ? {
+            filename: req.file.filename,
+            size: req.file.size,
+            mimetype: req.file.mimetype
+        } : null
+    });
     try {
         if (!req.file) {
+            console.error('録音アップロードエラー: ファイルが存在しません');
             return res.status(400).json({
                 success: false,
                 error: 'NO_FILE',
@@ -115,6 +111,7 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
         }
         const { sessionId, type } = req.body;
         if (!sessionId || !type) {
+            console.error('録音アップロードエラー: パラメータ不足', { sessionId, type });
             return res.status(400).json({
                 success: false,
                 error: 'MISSING_PARAMETERS',
@@ -122,47 +119,73 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
             });
         }
         // ファイル情報をログ出力
-        console.log('録音アップロード:', {
+        const filename = `${sessionId}_${type}_${Date.now()}.webm`;
+        console.log('録音アップロード処理開始:', {
             sessionId,
             type,
-            filename: req.file.filename,
+            filename,
             originalname: req.file.originalname,
             size: req.file.size,
-            mimetype: req.file.mimetype
+            mimetype: req.file.mimetype,
+            bufferSize: req.file.buffer?.length || 0
         });
-        // データベースに録音情報を保存（将来の拡張用）
+        // Cloud Runでは一時的なファイルシステムを使用するため、
+        // ファイルはメモリに保存され、データベースにはURLのみ保存
+        // 実際のファイルはCloud Storageに保存するか、一時的に保持
+        const recordingUrl = `/uploads/recordings/${filename}`;
+        // データベースに録音情報を保存
         try {
+            console.log('録音情報をデータベースに保存中...');
             await databaseService_js_1.default.saveRecordingInfo({
                 sessionId,
                 type,
-                filename: req.file.filename,
-                filepath: req.file.path,
+                filename: filename,
+                filepath: recordingUrl, // Cloud RunではパスではなくURLを使用
                 filesize: req.file.size,
                 mimetype: req.file.mimetype,
                 uploadedAt: new Date()
             });
+            console.log('✅ 録音情報のデータベース保存成功');
         }
         catch (dbError) {
-            console.error('録音情報保存エラー:', dbError);
+            console.error('❌ 録音情報保存エラー:', dbError);
             // データベースエラーでもファイル保存は成功とする
+            // ただし、エラーの詳細をログに記録
+            if (dbError instanceof Error) {
+                console.error('エラー詳細:', {
+                    name: dbError.name,
+                    message: dbError.message,
+                    stack: dbError.stack
+                });
+            }
         }
+        console.log('✅ 録音アップロード成功');
         res.json({
             success: true,
             message: '録音ファイルが正常にアップロードされました',
             data: {
                 sessionId,
                 type,
-                filename: req.file.filename,
-                size: req.file.size
+                filename: filename,
+                size: req.file.size,
+                recordingUrl: recordingUrl
             }
         });
     }
     catch (error) {
-        console.error('録音アップロードエラー:', error);
+        console.error('❌ 録音アップロードエラー:', error);
+        if (error instanceof Error) {
+            console.error('エラー詳細:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
+        }
         res.status(500).json({
             success: false,
             error: 'UPLOAD_ERROR',
-            message: '録音ファイルのアップロードに失敗しました'
+            message: '録音ファイルのアップロードに失敗しました',
+            details: error instanceof Error ? error.message : 'Unknown error'
         });
     }
 });

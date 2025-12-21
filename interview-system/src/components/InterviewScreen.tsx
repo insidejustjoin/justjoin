@@ -396,19 +396,46 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
             ? 'http://localhost:3002' 
             : window.location.origin;
           
+          console.log('録音ファイルアップロード開始:', {
+            apiBaseUrl,
+            sessionId: activeSessionId,
+            fileSize: audioBlob.size,
+            fileType: audioBlob.type
+          });
+
           const uploadResponse = await fetch(`${apiBaseUrl}/api/interview/upload-recording`, {
             method: 'POST',
             body: formData
           });
 
+          console.log('録音ファイルアップロードレスポンス:', {
+            status: uploadResponse.status,
+            statusText: uploadResponse.statusText,
+            ok: uploadResponse.ok
+          });
+
           if (uploadResponse.ok) {
             const uploadResult = await uploadResponse.json();
-            console.log('録音ファイルアップロード成功:', uploadResult);
+            console.log('✅ 録音ファイルアップロード成功:', uploadResult);
           } else {
-            console.error('録音ファイルアップロード失敗:', await uploadResponse.text());
+            const errorText = await uploadResponse.text();
+            console.error('❌ 録音ファイルアップロード失敗:', {
+              status: uploadResponse.status,
+              statusText: uploadResponse.statusText,
+              errorText: errorText
+            });
+            // エラーをユーザーに表示しない（面接を継続できるように）
           }
         } catch (uploadError) {
-          console.error('録音ファイルアップロードエラー:', uploadError);
+          console.error('❌ 録音ファイルアップロードエラー:', uploadError);
+          if (uploadError instanceof Error) {
+            console.error('エラー詳細:', {
+              name: uploadError.name,
+              message: uploadError.message,
+              stack: uploadError.stack
+            });
+          }
+          // エラーをユーザーに表示しない（面接を継続できるように）
         }
       };
 

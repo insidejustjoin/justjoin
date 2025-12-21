@@ -37,8 +37,8 @@ app.use((0, cors_1.default)({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 // JSONパースミドルウェア
-app.use(express_1.default.json({ limit: '10mb' }));
-app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express_1.default.json({ limit: '50mb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '50mb' }));
 // IPアドレスを取得するミドルウェア
 app.use((req, res, next) => {
     const clientIp = req.headers['x-forwarded-for'] ||
