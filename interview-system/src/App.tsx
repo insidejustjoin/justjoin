@@ -173,14 +173,27 @@ function App() {
       // 面接開始をメインプラットフォームに通知
       if (tokenData?.userId) {
         try {
-          await fetch(`https://justjoin.jp/api/documents/interview-start/${encodeURIComponent(btoa(JSON.stringify(tokenData)))}`, {
+          const response = await fetch(`https://justjoin.jp/api/documents/interview-start/${encodeURIComponent(btoa(JSON.stringify(tokenData)))}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             }
           });
+          
+          if (!response.ok) {
+            const errorResult = await response.json();
+            if (errorResult.error === 'INTERVIEW_ALREADY_TAKEN') {
+              setError('面接は1度しかできません');
+              setCurrentState('error');
+              return;
+            }
+            throw new Error(errorResult.message || '面接を開始できませんでした');
+          }
         } catch (error) {
-          console.warn('面接開始通知エラー:', error);
+          console.error('面接開始通知エラー:', error);
+          setError(error instanceof Error ? error.message : '面接を開始できませんでした');
+          setCurrentState('error');
+          return;
         }
       }
       

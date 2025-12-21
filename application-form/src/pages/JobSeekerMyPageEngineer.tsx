@@ -131,7 +131,7 @@ export function JobSeekerMyPageEngineer() {
       } else {
         const errorResult = await response.json();
         if (errorResult.error === 'INTERVIEW_ALREADY_TAKEN') {
-          toast.error('1次面接は既に受験済みです');
+          toast.error('面接は1度しかできません');
           fetchInterviewHistory(); // 最新状態を取得
         } else {
           toast.error(t('myPage.failedToStartInterview'));

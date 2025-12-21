@@ -1042,7 +1042,7 @@ router.post('/interview-token/:userId', authenticate, async (req, res) => {
             return res.status(400).json({
                 success: false,
                 error: 'INTERVIEW_ALREADY_TAKEN',
-                message: '1次面接は既に受験済みです'
+                message: '面接は1度しかできません'
             });
         }
         // 面接開始用のセッショントークンを生成
@@ -1441,6 +1441,30 @@ router.post('/interview-start/:token', async (req, res) => {
                 message: '無効なトークンです'
             });
         }
+        // 面接が既に完了しているかチェック
+        if (decodedToken?.userId) {
+            try {
+                const urlCheckQuery = `
+          SELECT is_used
+          FROM interview_urls
+          WHERE user_id = $1
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+                const urlCheckResult = await query(urlCheckQuery, [decodedToken.userId]);
+                if (urlCheckResult.rows.length > 0 && urlCheckResult.rows[0].is_used) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'INTERVIEW_ALREADY_TAKEN',
+                        message: '面接は1度しかできません'
+                    });
+                }
+            }
+            catch (dbError) {
+                // テーブルが存在しない場合は警告を出して続行
+                console.warn('interview_urlsテーブルが存在しない可能性:', dbError.message);
+            }
+        }
         // 面接URLを使用済みにする（テーブルが存在しない場合はスキップ）
         try {
             const updateUrlQuery = `
@@ -1474,6 +1498,139 @@ router.post('/interview-start/:token', async (req, res) => {
             success: false,
             error: 'INTERNAL_ERROR',
             message: '面接を開始できませんでした'
+        });
+    }
+});
+// 管理者用：面接録音取得エンドポイント
+router.get('/admin/interview-recordings/:userId', authenticate, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        // 管理者権限チェック
+        const adminCheckQuery = `
+      SELECT u.user_type
+      FROM users u
+      WHERE u.id = $1
+    `;
+        const adminResult = await query(adminCheckQuery, [req.user.id]);
+        if (adminResult.rows.length === 0 || !['admin', 'super_admin'].includes(adminResult.rows[0].user_type)) {
+            return res.status(403).json({
+                success: false,
+                error: 'UNAUTHORIZED',
+                message: '管理者権限が必要です'
+            });
+        }
+        // ユーザーのemailを取得
+        const userQuery = `
+      SELECT email
+      FROM users
+      WHERE id = $1
+    `;
+        const userResult = await query(userQuery, [userId]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'USER_NOT_FOUND',
+                message: 'ユーザーが見つかりません'
+            });
+        }
+        const userEmail = userResult.rows[0].email;
+        // interview_recordingsテーブルから録音情報を取得
+        // user_idまたはapplicant_id経由で取得を試みる
+        let recordings = [];
+        try {
+            // まずuser_idで直接取得を試みる
+            const recordingsByUserIdQuery = `
+        SELECT 
+          ir.id,
+          ir.session_id,
+          ir.applicant_id,
+          ir.user_id,
+          ir.recording_url,
+          ir.recording_type,
+          ir.file_size,
+          ir.duration,
+          ir.storage_path,
+          ir.created_at,
+          isess.status as session_status,
+          isess.completed_at as session_completed_at
+        FROM interview_recordings ir
+        LEFT JOIN interview_sessions isess ON ir.session_id = isess.id
+        WHERE ir.user_id = $1::text
+        ORDER BY ir.created_at DESC
+      `;
+            const recordingsByUserIdResult = await query(recordingsByUserIdQuery, [userId]);
+            recordings = recordingsByUserIdResult.rows;
+            // user_idで見つからない場合、email経由で取得を試みる
+            if (recordings.length === 0) {
+                const recordingsByEmailQuery = `
+          SELECT 
+            ir.id,
+            ir.session_id,
+            ir.applicant_id,
+            ir.user_id,
+            ir.recording_url,
+            ir.recording_type,
+            ir.file_size,
+            ir.duration,
+            ir.storage_path,
+            ir.created_at,
+            isess.status as session_status,
+            isess.completed_at as session_completed_at
+          FROM interview_recordings ir
+          INNER JOIN interview_sessions isess ON ir.session_id = isess.id
+          INNER JOIN interview_applicants ia ON isess.applicant_id = ia.id
+          WHERE ia.email = $1
+          ORDER BY ir.created_at DESC
+        `;
+                const recordingsByEmailResult = await query(recordingsByEmailQuery, [userEmail]);
+                recordings = recordingsByEmailResult.rows;
+            }
+        }
+        catch (dbError) {
+            // テーブルが存在しない場合やエラーが発生した場合
+            console.warn('録音情報取得エラー:', dbError.message);
+            // エラーを返さず、空の配列を返す
+            recordings = [];
+        }
+        // 録音ファイルのダウンロードURLを生成
+        const recordingsWithUrls = recordings.map(recording => {
+            let downloadUrl = null;
+            if (recording.storage_path) {
+                // ストレージパスがある場合、それをそのまま使用
+                downloadUrl = recording.storage_path;
+            }
+            else if (recording.recording_url) {
+                // recording_urlがある場合、それをそのまま使用
+                downloadUrl = recording.recording_url;
+            }
+            return {
+                id: recording.id,
+                sessionId: recording.session_id,
+                applicantId: recording.applicant_id,
+                userId: recording.user_id,
+                recordingUrl: downloadUrl,
+                recordingType: recording.recording_type || 'audio',
+                fileSize: recording.file_size,
+                duration: recording.duration,
+                createdAt: recording.created_at,
+                sessionStatus: recording.session_status,
+                sessionCompletedAt: recording.session_completed_at
+            };
+        });
+        res.json({
+            success: true,
+            data: {
+                recordings: recordingsWithUrls,
+                count: recordingsWithUrls.length
+            }
+        });
+    }
+    catch (error) {
+        console.error('録音情報取得エラー:', error);
+        res.status(500).json({
+            success: false,
+            error: 'INTERNAL_ERROR',
+            message: '録音情報の取得に失敗しました'
         });
     }
 });
