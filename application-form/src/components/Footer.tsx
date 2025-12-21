@@ -16,9 +16,14 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* 会社情報 */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Application Form of Recruit
-            </h3>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="text-2xl font-bold text-blue-600">
+                just join
+              </div>
+            </div>
+            <p className="text-sm text-gray-600">
+              {t('footer.companyDescription') || 'Application Form of Recruit'}
+            </p>
           </div>
         </div>
 

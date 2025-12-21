@@ -187,13 +187,13 @@ router.post('/verify-email', async (req, res) => {
                 }
                 else {
                     await query(`UPDATE email_verifications 
-             SET first_name = $1,
-                 last_name = $2,
-                 verification_code = $3,
-                 expires_at = $4,
-                 verified = false,
-                 updated_at = NOW()
-             WHERE email = $5`, [firstName, lastName, verificationCode, expiresAt, email]);
+           SET first_name = $1,
+               last_name = $2,
+               verification_code = $3,
+               expires_at = $4,
+               verified = false,
+               updated_at = NOW()
+           WHERE email = $5`, [firstName, lastName, verificationCode, expiresAt, email]);
                 }
             }
             else {
@@ -205,7 +205,7 @@ router.post('/verify-email', async (req, res) => {
                 }
                 else {
                     await query(`INSERT INTO email_verifications (email, first_name, last_name, verification_code, expires_at, created_at)
-             VALUES ($1, $2, $3, $4, $5, NOW())`, [email, firstName, lastName, verificationCode, expiresAt]);
+           VALUES ($1, $2, $3, $4, $5, NOW())`, [email, firstName, lastName, verificationCode, expiresAt]);
                 }
             }
             console.log('email_verifications テーブルへの保存完了');
