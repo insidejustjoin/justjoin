@@ -2344,6 +2344,10 @@ const translations: Translations = {
     'loadingData': 'Загрузка данных...',
     'backToMyPage': 'Вернуться на мою страницу',
     
+    // Documents - Title and description
+    'documents.title': 'Создание документов',
+    'documents.description': 'Создайте резюме, историю работы и лист навыков!',
+    
     // Documents - Form labels
     'documents.lastName': 'Фамилия',
     'documents.firstName': 'Имя',
@@ -2381,6 +2385,9 @@ const translations: Translations = {
     'documents.addEducation': 'Добавить образование',
     'documents.addWorkHistory': 'Добавить историю работы',
     'documents.addQualification': 'Добавить квалификацию',
+    'documents.skillSheet': 'Лист навыков',
+    'documents.educationPlaceholder': 'например, Токийский университет, факультет инженерии, информационная инженерия',
+    'documents.workContentPlaceholder': 'Планирование уроков, проведение уроков, поддержка обучения студентов',
     'documents.noEducationCheck': 'Отметьте, если у вас нет образования',
     'documents.noWorkExperienceCheck': 'Отметьте, если у вас нет опыта работы',
     'documents.noQualificationsCheck': 'Отметьте, если у вас нет квалификаций',
@@ -2843,6 +2850,10 @@ const translations: Translations = {
     'loadingData': 'Ma\'lumotlar yuklanmoqda...',
     'backToMyPage': 'Mening sahifamga qaytish',
     
+    // Documents - Title and description
+    'documents.title': 'Hujjatlar yaratish',
+    'documents.description': 'Rezyume, ish tarixi va ko\'nikmalar ro\'yxatini yarating!',
+    
     // Documents - Form labels
     'documents.lastName': 'Familiya',
     'documents.firstName': 'Ism',
@@ -2880,6 +2891,9 @@ const translations: Translations = {
     'documents.addEducation': 'Ta\'lim qo\'shish',
     'documents.addWorkHistory': 'Ish tarixini qo\'shish',
     'documents.addQualification': 'Malaka qo\'shish',
+    'documents.skillSheet': 'Ko\'nikmalar ro\'yxati',
+    'documents.educationPlaceholder': 'masalan, Tokio universiteti, muhandislik fakulteti, axborot muhandisligi',
+    'documents.workContentPlaceholder': 'Dars rejalashtirish, dars o\'tkazish, talabalar o\'qitishni qo\'llab-quvvatlash',
     'documents.noEducationCheck': 'Agar ta\'limingiz bo\'lmasa, belgilang',
     'documents.noWorkExperienceCheck': 'Agar ish tajribangiz bo\'lmasa, belgilang',
     'documents.noQualificationsCheck': 'Agar malakangiz bo\'lmasa, belgilang',
