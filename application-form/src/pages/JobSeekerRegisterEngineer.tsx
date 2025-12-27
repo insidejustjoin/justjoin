@@ -121,8 +121,8 @@ const JobSeekerRegisterEngineer: React.FC = () => {
       
       if (data.success) {
         // 登録成功を通知
-        toast.success('登録が完了しました！', {
-          description: 'マイページに移動します',
+        toast.success(t('register.registrationComplete'), {
+          description: t('register.redirectingToMyPage'),
           duration: 3000,
         });
         

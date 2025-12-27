@@ -766,6 +766,8 @@ const translations: Translations = {
     'register.generalRegister.passwordConfirm.placeholder': 'パスワードを再入力',
     'register.generalRegister.passwordStep.submitting': '登録処理中...',
     'register.generalRegister.passwordStep.submit': '登録を完了する',
+    'register.registrationComplete': '登録が完了しました！',
+    'register.redirectingToMyPage': 'マイページに移動します',
     
     'auth.error': 'エラー',
     'auth.passwordResetFailed': 'パスワード再発行に失敗しました。',
@@ -1769,6 +1771,8 @@ const translations: Translations = {
     'register.generalRegister.passwordConfirm.placeholder': 'Re-enter your password',
     'register.generalRegister.passwordStep.submitting': 'Registering...',
     'register.generalRegister.passwordStep.submit': 'Complete Registration',
+    'register.registrationComplete': 'Registration completed!',
+    'register.redirectingToMyPage': 'Redirecting to My Page',
     
     'auth.error': 'Error',
     'auth.passwordResetFailed': 'Failed to reset password.',
@@ -1965,6 +1969,10 @@ const translations: Translations = {
     'profileCompletion.modalTitle': 'Profile Completion',
     'profileCompletion.modalMessagePrefix': 'Your current profile completion rate is ',
     'profileCompletion.modalMessageSuffix': '%. Completing your profile will enable better job matching.',
+    'profileCompletion.modalMessageNotComplete': 'Your profile completion rate has not reached 100%. To use the interview system, you need to complete your profile to 100%.',
+    'profileCompletion.interviewNotAvailable': 'The interview system is not available until your profile completion rate reaches 100%.',
+    'profileCompletion.completeProfileFirst': 'Complete your profile first',
+    'profileCompletion.later': 'Later',
     'profileCompletion.completeNow': 'Complete Now',
     
     // Error & Messages
@@ -2264,6 +2272,8 @@ const translations: Translations = {
     'register.typeSelection.general.alreadyRegistered': 'Общая регистрация уже завершена',
     'register.typeSelection.existingTypes': 'Текущие зарегистрированные типы: {types}',
     'register.typeSelection.back': 'Назад',
+    'register.registrationComplete': 'Регистрация завершена!',
+    'register.redirectingToMyPage': 'Переход на мою страницу',
     
     // Profile Completion
     'profileCompletion.rate': 'Завершённость профиля',
@@ -2844,6 +2854,8 @@ const translations: Translations = {
     'register.typeSelection.general.alreadyRegistered': 'Umumiy ro\'yxatdan o\'tish allaqachon yakunlangan',
     'register.typeSelection.existingTypes': 'Hozirgi ro\'yxatdan o\'tgan turlar: {types}',
     'register.typeSelection.back': 'Orqaga',
+    'register.registrationComplete': 'Ro\'yxatdan o\'tish yakunlandi!',
+    'register.redirectingToMyPage': 'Mening sahifamga o\'tish',
     
     // Profile Completion
     'profileCompletion.rate': 'Profil toʻliqligi',
