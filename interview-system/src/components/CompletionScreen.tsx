@@ -143,7 +143,7 @@ const CompletionScreen: React.FC<CompletionScreenProps> = ({
     window.close();
     // ウィンドウが閉じられない場合（ポップアップでない場合）はホームページにリダイレクト
     if (!window.closed) {
-      window.location.href = 'https://justjoin.jp/jobseeker/my-page';
+    window.location.href = 'https://justjoin.jp/jobseeker/my-page';
     }
   };
 

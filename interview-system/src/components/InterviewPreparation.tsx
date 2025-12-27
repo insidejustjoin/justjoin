@@ -1174,19 +1174,19 @@ Press "OK" to complete audio check, "Cancel" to retry.`;
           <div className="flex items-center space-x-3">
             <ClockIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
             <span className="text-sm text-blue-800 font-medium">{t.step4.duration}</span>
-          </div>
+            </div>
           <div className="flex items-center space-x-3">
             <UserIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
             <span className="text-sm text-blue-800 font-medium">{t.step4.questions}</span>
-          </div>
+            </div>
           <div className="flex items-center space-x-3">
             <GlobeIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
             <span className="text-sm text-blue-800 font-medium">{t.step4.language}</span>
-          </div>
+            </div>
           <div className="flex items-center space-x-3">
             <AlertTriangleIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
             <span className="text-sm text-blue-800 font-medium">{t.step4.oneTimeOnly}</span>
-          </div>
+            </div>
           <div className="flex items-center space-x-3">
             <CheckIcon className="w-5 h-5 text-blue-600 flex-shrink-0" />
             <span className="text-sm text-blue-800 font-medium">{t.step4.results}</span>

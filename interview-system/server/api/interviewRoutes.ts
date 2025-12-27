@@ -391,13 +391,13 @@ router.post('/answer', async (req, res) => {
 
     // 回答オブジェクトを作成
     const answer: Answer = {
-      id: `answer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      questionId,
-      sessionId,
-      applicantId: session.applicantId,
+        id: `answer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        questionId,
+        sessionId,
+        applicantId: session.applicantId,
       text: answerText,
-      responseTime: responseTime || 0,
-      timestamp: new Date(),
+        responseTime: responseTime || 0,
+        timestamp: new Date(),
       wordCount: answerText.split(/\s+/).filter((w: string) => w.length > 0).length || 0
     };
 

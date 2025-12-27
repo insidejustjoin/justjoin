@@ -11,12 +11,13 @@ import { PasswordChangeForm } from '@/components/PasswordChangeForm';
 import { useToast } from '@/hooks/use-toast';
 import { User, Mail, Calendar, Shield, ArrowLeft, LogOut, Trash2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { ja, ru, uz } from 'date-fns/locale';
 import { Helmet } from 'react-helmet-async';
+import { LanguageToggle } from '@/components/LanguageToggle';
 
 export function Settings() {
   const { user, deleteAccount } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -122,7 +123,7 @@ export function Settings() {
       
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center justify-between gap-4 mb-4">
             <Button
               variant="outline"
               onClick={() => navigate('/jobseeker/my-page')}
@@ -131,6 +132,7 @@ export function Settings() {
               <ArrowLeft className="h-4 w-4" />
               {t('backToMyPage')}
             </Button>
+            <LanguageToggle />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">{t('settings.title')}</h1>
           <p className="text-gray-600 mt-2">
@@ -167,7 +169,14 @@ export function Settings() {
                   <div>
                     <p className="text-sm font-medium">{t('settings.registrationDate')}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(new Date(user.created_at), 'yyyy年MM月dd日', { locale: ja })}
+                      {language === 'ja' 
+                        ? format(new Date(user.created_at), 'yyyy年MM月dd日', { locale: ja })
+                        : language === 'ru'
+                        ? format(new Date(user.created_at), 'dd.MM.yyyy', { locale: ru })
+                        : language === 'uz'
+                        ? format(new Date(user.created_at), 'dd.MM.yyyy', { locale: uz })
+                        : format(new Date(user.created_at), 'MMM dd, yyyy')
+                      }
                     </p>
                   </div>
                 </div>
