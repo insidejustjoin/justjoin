@@ -346,6 +346,13 @@ export function JobSeekerMyPage()
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
               <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <img 
+                    src="/logo.svg" 
+                    alt="just join" 
+                    className="h-10 w-auto"
+                  />
+                </div>
                 <h1 className="text-3xl font-bold text-gray-900">
                   {getMultilingualText('myPageTitle')}
                 </h1>
