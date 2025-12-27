@@ -617,6 +617,8 @@ const translations: Translations = {
     'documents.saveError': '保存に失敗しました',
     'documents.loadError': '読み込みに失敗しました',
     'documents.generateSuccess': 'Excelファイルの生成が完了しました',
+    'documents.savedToDatabase': 'データベースに保存済み',
+    'documents.lastSavedDateTime': '最終保存日時',
     'documents.generateError': 'Excelファイルの生成に失敗しました',
     
     // 認証関連
@@ -1622,6 +1624,8 @@ const translations: Translations = {
     'documents.loadError': 'Load failed',
     'documents.generateSuccess': 'Excel file generation completed successfully',
     'documents.generateError': 'Excel file generation failed',
+    'documents.savedToDatabase': 'Saved to database',
+    'documents.lastSavedDateTime': 'Last saved date and time',
     
     // Authentication
     'auth.title': 'Job Seeker Login & Registration',
@@ -2423,6 +2427,8 @@ const translations: Translations = {
     'documents.saveToDatabase': 'Сохранить в базу данных',
     'documents.generateResume': 'Создать резюме и историю работы (Excel)',
     'documents.nextToPasswordSetting': 'Далее (Настройка пароля)',
+    'documents.savedToDatabase': 'Сохранено в базу данных',
+    'documents.lastSavedDateTime': 'Дата и время последнего сохранения',
     
     // Documents - Placeholders
     'documents.postalCodePlaceholder': 'например, 123-4567',
@@ -3005,6 +3011,8 @@ const translations: Translations = {
     'documents.saveToDatabase': 'Ma\'lumotlar bazasiga saqlash',
     'documents.generateResume': 'Rezyume va ish tarixini yaratish (Excel)',
     'documents.nextToPasswordSetting': 'Keyingisi (Parol sozlash)',
+    'documents.savedToDatabase': 'Ma\'lumotlar bazasiga saqlangan',
+    'documents.lastSavedDateTime': 'Oxirgi saqlash sanasi va vaqti',
     
     // Documents - Placeholders
     'documents.postalCodePlaceholder': 'masalan, 123-4567',

@@ -9,13 +9,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { User, Mail, Calendar, Edit, FileText, Building, Briefcase, Star, Trophy, AlertTriangle, MessageSquare, Clock, CheckCircle, XCircle, ExternalLink, Globe, Bell, Copy } from 'lucide-react';
 import { LanguageToggle } from '@/components/LanguageToggle';
-import { FuriganaText } from '@/components/FuriganaText';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-export function JobSeekerMyPage() {
+export function JobSeekerMyPage() 
   const { user, logout, deleteAccount, getProfile } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
@@ -30,83 +29,73 @@ export function JobSeekerMyPage() {
   const [isStartingInterview, setIsStartingInterview] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   
-  // ふりがな表示設定（デフォルトで表示）
-  const [showFurigana, setShowFurigana] = useState(true);
-
   // 多言語表示用のヘルパー関数
-  const getMultilingualText = (key: string): string => {
+  const getMultilingualText = (key: string): string => 
     return t(`myPage.${key}`);
   };
 
 
 
   // 未読通知数を取得
-  const fetchUnreadNotificationCount = async () => {
+  const fetchUnreadNotificationCount = async () => 
     if (!user) return;
     
-    try {
+    try 
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
-      const response = await fetch(`${apiUrl}/api/notifications/unread-count/${user.id}`, {
-        headers: {
+      const response = await fetch(`${apiUrl}/api/notifications/unread-count/${user.id}`, 
+        headers: 
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
+        });
 
-      if (response.ok) {
+      if (response.ok) 
         const result = await response.json();
-        if (result.success) {
+        if (result.success) 
           setUnreadNotificationCount(result.data.count);
-        }
-      }
-    } catch (error) {
+
+    } catch (error) 
       // エラーは静かに処理
-    }
-  };
+    };
 
   // 面接履歴を取得
-  const fetchInterviewHistory = async () => {
+  const fetchInterviewHistory = async () => 
     if (!user) return;
     
     setIsLoadingInterview(true);
-    try {
+    try 
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
-      const response = await fetch(`${apiUrl}/api/documents/interview-history/${user.id}`, {
-        headers: {
+      const response = await fetch(`${apiUrl}/api/documents/interview-history/${user.id}`, 
+        headers: 
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
+        });
 
-      if (response.ok) {
+      if (response.ok) 
         const result = await response.json();
-        if (result.success) {
+        if (result.success) 
           setInterviewData(result.data);
-        }
-      }
-    } catch (error) {
+
+    } catch (error) 
       // エラーは静かに処理
-    } finally {
+    } finally 
       setIsLoadingInterview(false);
-    }
-  };
+    };
 
   // AI面接開始
-  const startAIInterview = async () => {
+  const startAIInterview = async () => 
     if (!user || !interviewData?.canTakeInterview) return;
     
     setIsStartingInterview(true);
-    try {
+    try 
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
-      const response = await fetch(`${apiUrl}/api/documents/interview-token/${user.id}`, {
+      const response = await fetch(`${apiUrl}/api/documents/interview-token/${user.id}`, 
         method: 'POST',
-        headers: {
+        headers: 
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'
-        }
-      });
+        });
 
-      if (response.ok) {
+      if (response.ok) 
         const result = await response.json();
-        if (result.success) {
+        if (result.success) 
           // 面接システムを新しいタブで開く
           const interviewUrl = process.env.NODE_ENV === 'development' 
             ? `http://localhost:8080/interview?token=${result.data.token}`
@@ -117,69 +106,63 @@ export function JobSeekerMyPage() {
           toast.success(t('aiInterviewStarted'));
           
           // 面接履歴を再取得
-          setTimeout(() => {
+          setTimeout(() => 
             fetchInterviewHistory();
           }, 2000);
-        }
-      } else {
+        } else 
         const errorResult = await response.json();
-        if (errorResult.error === 'INTERVIEW_ALREADY_TAKEN') {
+        if (errorResult.error === 'INTERVIEW_ALREADY_TAKEN') 
           toast.error('面接は1度しかできません');
           fetchInterviewHistory(); // 最新状態を取得
-        } else {
+        } else 
           toast.error('面接を開始できませんでした');
-        }
-      }
-    } catch (error) {
+
+    } catch (error) 
       toast.error('面接を開始できませんでした');
-    } finally {
+    } finally 
       setIsStartingInterview(false);
-    }
-  };
+    };
 
   // 面接ステータスのバッジを表示
-  const getInterviewStatusBadge = (status: string) => {
-    switch (status) {
+  const getInterviewStatusBadge = (status: string) => 
+    switch (status) 
       case 'completed':
-        return <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.completed')} showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="default" className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" />{t('myPage.completed')}</Badge>;
       case 'in_progress':
-        return <Badge variant="default" className="bg-blue-500"><Clock className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.inProgress')} showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="default" className="bg-blue-500"><Clock className="h-3 w-3 mr-1" />{t('myPage.inProgress')}</Badge>;
       case 'cancelled':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /><FuriganaText text={t('myPage.cancelled')} showFurigana={showFurigana} /></Badge>;
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />{t('myPage.cancelled')}</Badge>;
       default:
-        return <Badge variant="outline"><FuriganaText text={t('myPage.notTaken')} showFurigana={showFurigana} /></Badge>;
-    }
-  };
+        return <Badge variant="outline">{t('myPage.notTaken')}</Badge>;
+    };
 
   // 面接推奨レベルのバッジを表示
-  const getRecommendationBadge = (recommendation: string) => {
-    switch (recommendation) {
+  const getRecommendationBadge = (recommendation: string) => 
+    switch (recommendation) 
       case 'strong_yes':
-        return <Badge className="bg-emerald-500"><FuriganaText text="強く推薦" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-emerald-500">強く推薦</Badge>;
       case 'yes':
-        return <Badge className="bg-green-500"><FuriganaText text="推薦" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-green-500">推薦</Badge>;
       case 'maybe':
-        return <Badge className="bg-yellow-500"><FuriganaText text="要検討" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-yellow-500">要検討</Badge>;
       case 'no':
-        return <Badge className="bg-red-500"><FuriganaText text="非推薦" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-red-500">非推薦</Badge>;
       case 'strong_no':
-        return <Badge className="bg-red-700"><FuriganaText text="強く非推薦" showFurigana={showFurigana} /></Badge>;
+        return <Badge className="bg-red-700">強く非推薦</Badge>;
       default:
         return null;
-    }
-  };
+    };
 
   // ユーザーデータ読み込み
-  const loadUserData = async () => {
-    if (!user) {
+  const loadUserData = async () => 
+    if (!user) 
       setIsLoading(false);
       return;
-    }
-    
+
     setIsLoading(true);
-    try {
+    try 
       // 基本的なユーザー情報を設定（プロフィール情報が既にある場合は使用）
-      const basicUserData = {
+      const basicUserData = 
         id: user.id,
         email: user.email,
         full_name: user.profile?.full_name || '',
@@ -192,40 +175,38 @@ export function JobSeekerMyPage() {
       setUserData(basicUserData);
       
       // 求職者の場合は常にAPIから取得（interview_enabledを含む）
-      if (user.user_type === 'job_seeker') {
-        try {
+      if (user.user_type === 'job_seeker') 
+        try 
           const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
-          const response = await fetch(`${apiUrl}/api/jobseekers/${user.id}`, {
+          const response = await fetch(`${apiUrl}/api/jobseekers/${user.id}`, 
             method: 'GET',
-            headers: {
+            headers: 
               'Content-Type': 'application/json',
-            }
-          });
+            });
           
-          if (response.ok) {
+          if (response.ok) 
             const result = await response.json();
             
-            if (result.success && result.data) {
+            if (result.success && result.data) 
               const profileData = result.data;
               
               // ユーザーデータを更新
-              const updatedUserData = {
+              const updatedUserData = 
                 ...basicUserData,
                 full_name: profileData.full_name || '',
                 interview_enabled: profileData.interview_enabled || false,
                 profile_photo: profileData.profile_photo || null
               };
               setUserData(updatedUserData);
-            }
-          } else {
+            } else 
             // 404時はby-emailでID再取得→自己修復
-            if (response.status === 404) {
-              try {
+            if (response.status === 404) 
+              try 
                 const r = await fetch(`${apiUrl}/api/jobseekers/by-email/${encodeURIComponent(String(user.email))}`);
-                if (r.ok) {
+                if (r.ok) 
                   const j = await r.json();
                   const resolvedId = j?.data?.userId ? String(j.data.userId) : null;
-                  if (resolvedId && resolvedId !== String(user.id)) {
+                  if (resolvedId && resolvedId !== String(user.id)) 
                     const updatedUser: any = { ...user, id: resolvedId };
                     // localStorage更新
                     const userForStorage = { ...updatedUser, id: resolvedId };
@@ -233,74 +214,63 @@ export function JobSeekerMyPage() {
                     // 再読込
                     window.location.reload();
                     return;
-                  }
-                }
+
               } catch {}
-            }
-          }
-        } catch (error) {
+          } catch (error) 
           // Profile fetch エラーは静かに処理
-        }
-      }
-      
+
       // 完成度と面接履歴を並行して取得
       await Promise.all([
         fetchCompletionRate(),
         fetchInterviewHistory()
       ]);
-    } catch (error) {
+    } catch (error) 
       // ユーザーデータ読み込みエラーは静かに処理
-    } finally {
+    } finally 
       setIsLoading(false);
-    }
-  };
+    };
 
 
 
   // 入力率取得関数
-  const fetchCompletionRate = async () => {
+  const fetchCompletionRate = async () => 
     if (!user) return;
     
-    try {
+    try 
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : 'https://justjoin.jp';
       const url = `${apiUrl}/api/jobseekers/completion-rate/${user.id}`;
       
       const response = await fetch(url);
       
-      if (response.ok) {
+      if (response.ok) 
         const result = await response.json();
-        if (result.success) {
+        if (result.success) 
           const rate = result.completionRate || 0;
           setCompletionRate(rate);
           
           // 入力率が100%未満の場合はモーダルを表示
-          if (rate < 100) {
+          if (rate < 100) 
             setShowCompletionModal(true);
-          }
-        }
-              } else {
+
+              } else 
         // APIエラーは静かに処理
-      }
-    } catch (error) {
+      } catch (error) 
       // 入力率取得エラーは静かに処理
-    }
-  };
+    };
 
   // コンポーネントマウント時にデータを読み込み
-  useEffect(() => {
-    if (user && !userData) {
+  useEffect(() => 
+    if (user && !userData) 
       loadUserData();
-    }
-  }, [user]); // userDataを依存配列から削除
+    }, [user]); // userDataを依存配列から削除
 
   // 通知と面接データを取得
-  useEffect(() => {
-    if (user) {
+  useEffect(() => 
+    if (user) 
       fetchInterviewHistory();
       fetchCompletionRate();
       fetchUnreadNotificationCount();
-    }
-  }, [user]);
+    }, [user]);
 
 
 
@@ -308,21 +278,20 @@ export function JobSeekerMyPage() {
   const { isLoading: authLoading, isInitialized } = useAuth();
 
   // 認証状態の初期化が完了していない場合は待機
-  if (!isInitialized || authLoading) {
+  if (!isInitialized || authLoading) 
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">
-            <FuriganaText text={t('loadingData')} showFurigana={showFurigana} />
+            
           </p>
         </div>
       </div>
     );
-  }
 
   // 認証が完了してユーザーが存在しない場合はリダイレクト
-  if (!user) {
+  if (!user) 
     window.location.href = '/jobseeker';
     
     return (
@@ -330,36 +299,33 @@ export function JobSeekerMyPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">
-            <FuriganaText text="ログインページにリダイレクト中..." showFurigana={showFurigana} />
+            ログインページにリダイレクト中...
           </p>
         </div>
       </div>
     );
-  }
 
   // ローディング表示
-  if (isLoading) {
+  if (isLoading) 
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">
-            <FuriganaText text={t('loadingData')} showFurigana={showFurigana} />
+            
           </p>
         </div>
       </div>
     );
-  }
 
-  if (user.user_type !== 'job_seeker') {
+  if (user.user_type !== 'job_seeker') 
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">
-          <FuriganaText text="求職者アカウントでログインしてください。" showFurigana={showFurigana} />
+          求職者アカウントでログインしてください。
         </div>
       </div>
     );
-  }
 
   return (
     <>
@@ -381,18 +347,10 @@ export function JobSeekerMyPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">
-                  <FuriganaText 
-                    text={getMultilingualText('myPageTitle')} 
-                    showFurigana={showFurigana}
-                    onToggleFurigana={setShowFurigana}
-                    showToggleButton={true}
-                  />
+                  {getMultilingualText('myPageTitle')}
                 </h1>
                 <p className="text-gray-600 mt-2">
-                  <FuriganaText 
-                    text={t('myPage.myPageDescription')} 
-                    showFurigana={showFurigana}
-                  />
+                  {t('myPage.myPageDescription')}
                 </p>
               </div>
               {/* 通知ベルと言語切り替えを右上に配置 */}
@@ -426,10 +384,7 @@ export function JobSeekerMyPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                <FuriganaText 
-                  text={getMultilingualText('documentCreation')} 
-                  showFurigana={showFurigana}
-                />
+                {getMultilingualText('documentCreation')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -439,39 +394,16 @@ export function JobSeekerMyPage() {
                   <div className="flex items-center gap-2">
                     <Trophy className="h-5 w-5 text-blue-600" />
                     <h3 className="text-lg font-semibold text-blue-800">
-                      <FuriganaText 
-                        text={t('profileCompletion.rate')} 
-                        showFurigana={showFurigana}
-                      />
+                      {t('profileCompletion.rate')}
                     </h3>
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-blue-600">{completionRate}%</div>
                     <div className="text-sm text-blue-600">
-                      {completionRate < 30 && (
-                        <FuriganaText 
-                          text={t('profileCompletion.initialEntry')} 
-                          showFurigana={showFurigana}
-                        />
-                      )}
-                      {completionRate >= 30 && completionRate < 70 && (
-                        <FuriganaText 
-                          text={t('profileCompletion.incomplete')} 
-                          showFurigana={showFurigana}
-                        />
-                      )}
-                      {completionRate >= 70 && completionRate < 100 && (
-                        <FuriganaText 
-                          text={t('profileCompletion.almostComplete')} 
-                          showFurigana={showFurigana}
-                        />
-                      )}
-                      {completionRate === 100 && (
-                        <FuriganaText 
-                          text={t('profileCompletion.complete')} 
-                          showFurigana={showFurigana}
-                        />
-                      )}
+                      {completionRate < 30 && t('profileCompletion.initialEntry')}
+                      {completionRate >= 30 && completionRate < 70 && t('profileCompletion.incomplete')}
+                      {completionRate >= 70 && completionRate < 100 && t('profileCompletion.almostComplete')}
+                      {completionRate === 100 && t('profileCompletion.complete')}
                     </div>
                   </div>
                 </div>
@@ -481,35 +413,23 @@ export function JobSeekerMyPage() {
                     <div className="flex items-center gap-2">
                       <Star className="h-4 w-4 text-yellow-500" />
                       <span>
-                        <FuriganaText 
-                          text={t('profileCompletion.encourageCompletion')} 
-                          showFurigana={showFurigana}
-                        />
+                        {t('profileCompletion.encourageCompletion')}
                       </span>
                     </div>
                   )}
                   {completionRate >= 30 && completionRate < 70 && (
                     <span>
-                      <FuriganaText 
-                        text={t('profileCompletion.basicComplete')} 
-                        showFurigana={showFurigana}
-                      />
+                      {t('profileCompletion.basicComplete')}
                     </span>
                   )}
                   {completionRate >= 70 && completionRate < 100 && (
                     <span>
-                      <FuriganaText 
-                        text={t('profileCompletion.almostDone')} 
-                        showFurigana={showFurigana}
-                      />
+                      {t('profileCompletion.almostDone')}
                     </span>
                   )}
                   {completionRate === 100 && (
                     <span>
-                      <FuriganaText 
-                        text={t('profileCompletion.perfect')} 
-                        showFurigana={showFurigana}
-                      />
+                      {t('profileCompletion.perfect')}
                     </span>
                   )}
                 </div>
@@ -521,10 +441,7 @@ export function JobSeekerMyPage() {
                 className="w-full h-12 text-lg"
               >
                 <FileText className="h-5 w-5 mr-2" />
-                <FuriganaText 
-                  text={t('createEditDocuments')} 
-                  showFurigana={showFurigana}
-                />
+                {t('createEditDocuments')}
               </Button>
             </CardContent>
           </Card>
@@ -535,16 +452,10 @@ export function JobSeekerMyPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" />
-                  <FuriganaText 
-                    text={getMultilingualText('aiInterview')} 
-                    showFurigana={showFurigana}
-                  />
+                  {getMultilingualText('aiInterview')}
                 </CardTitle>
                 <CardDescription>
-                  <FuriganaText 
-                    text={getMultilingualText('aiInterviewDescription')} 
-                    showFurigana={showFurigana}
-                  />
+                  {getMultilingualText('aiInterviewDescription')}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -552,10 +463,7 @@ export function JobSeekerMyPage() {
                   <div className="text-center py-4">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
                     <p className="text-sm text-gray-600">
-                      <FuriganaText 
-                        text="面接情報を読み込み中..." 
-                        showFurigana={showFurigana}
-                      />
+                      面接情報を読み込み中...
                     </p>
                   </div>
                 ) : interviewData ? (
@@ -565,10 +473,7 @@ export function JobSeekerMyPage() {
                         <MessageSquare className="h-6 w-6 text-blue-500" />
                         <div>
                           <p className="text-sm font-medium">
-                            <FuriganaText 
-                              text={t('myPage.interviewStatus')} 
-                              showFurigana={showFurigana}
-                            />
+                            {t('myPage.interviewStatus')}
                           </p>
                           <div className="flex items-center gap-2 mt-1">
                             {getInterviewStatusBadge(interviewData.status)}
@@ -578,10 +483,7 @@ export function JobSeekerMyPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-gray-600">
-                          <FuriganaText 
-                            text={t('myPage.examCount')} 
-                            showFurigana={showFurigana}
-                          />
+                          {t('myPage.examCount')}
                         </p>
                         <p className="text-lg font-semibold">{interviewData.totalInterviews}/1</p>
                       </div>
@@ -590,28 +492,19 @@ export function JobSeekerMyPage() {
                     {interviewData.hasInterview && interviewData.latestCompletion && (
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <h4 className="text-sm font-medium mb-2">
-                          <FuriganaText 
-                            text={t('myPage.latestInterviewResults')} 
-                            showFurigana={showFurigana}
-                          />
+                          {t('myPage.latestInterviewResults')}
                         </h4>
                         <div className="space-y-2 text-sm">
                           <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                             <span className="text-gray-600">
-                              <FuriganaText 
-                                text={t('myPage.completionDateTime')} 
-                                showFurigana={showFurigana}
-                              />
+                              {t('myPage.completionDateTime')}
                             </span>
                             <span>{format(new Date(interviewData.latestCompletion), 'yyyy年MM月dd日 HH:mm', { locale: ja })}</span>
                           </div>
                           {interviewData.latestScore && (
                             <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                               <span className="text-gray-600">
-                                <FuriganaText 
-                                  text={t('myPage.totalScore')} 
-                                  showFurigana={showFurigana}
-                                />
+                                {t('myPage.totalScore')}
                               </span>
                               <span className="font-medium">{Math.round(interviewData.latestScore)}/100</span>
                             </div>
@@ -630,18 +523,12 @@ export function JobSeekerMyPage() {
                         {isStartingInterview ? (
                           <>
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                            <FuriganaText 
-                              text="面接を開始中..." 
-                              showFurigana={showFurigana}
-                            />
+                            面接を開始中...
                           </>
                         ) : (
                           <>
                             <MessageSquare className="h-5 w-5 mr-2" />
-                            <FuriganaText 
-                              text={getMultilingualText('startAIInterview')} 
-                              showFurigana={showFurigana}
-                            />
+                            {getMultilingualText('startAIInterview')}
                           </>
                         )}
                       </Button>
@@ -654,16 +541,10 @@ export function JobSeekerMyPage() {
                           <CheckCircle className="h-6 w-6 text-green-600" />
                         </div>
                         <p className="text-sm text-gray-600 mb-3">
-                          <FuriganaText 
-                            text={getMultilingualText('aiInterviewCompleted')} 
-                            showFurigana={showFurigana}
-                          />
+                          {getMultilingualText('aiInterviewCompleted')}
                         </p>
                         <p className="text-xs text-gray-500">
-                          <FuriganaText 
-                            text={getMultilingualText('aiInterviewOneTimeOnly')} 
-                            showFurigana={showFurigana}
-                          />
+                          {getMultilingualText('aiInterviewOneTimeOnly')}
                         </p>
                       </div>
                     )}
@@ -675,10 +556,7 @@ export function JobSeekerMyPage() {
                           <Clock className="h-6 w-6 text-yellow-600" />
                         </div>
                         <p className="text-sm text-gray-600">
-                          <FuriganaText 
-                            text={getMultilingualText('interviewPreparing')} 
-                            showFurigana={showFurigana}
-                          />
+                          {getMultilingualText('interviewPreparing')}
                         </p>
                       </div>
                     )}
@@ -689,20 +567,14 @@ export function JobSeekerMyPage() {
                       <AlertTriangle className="h-6 w-6 text-red-600" />
                     </div>
                     <p className="text-sm text-gray-600 mb-3">
-                      <FuriganaText 
-                        text={getMultilingualText('interviewLoadError')} 
-                        showFurigana={showFurigana}
-                      />
+                      {getMultilingualText('interviewLoadError')}
                     </p>
                     <Button
                       onClick={fetchInterviewHistory}
                       variant="outline"
                       size="sm"
                     >
-                      <FuriganaText 
-                        text={getMultilingualText('reload')} 
-                        showFurigana={showFurigana}
-                      />
+                      {getMultilingualText('reload')}
                     </Button>
                   </div>
                 )}
@@ -716,16 +588,10 @@ export function JobSeekerMyPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" />
-                  <FuriganaText 
-                    text="テスト用面接システム" 
-                    showFurigana={showFurigana}
-                  />
+                  テスト用面接システム
                 </CardTitle>
                 <CardDescription>
-                  <FuriganaText 
-                    text="開発・テスト環境での面接システム動作確認用" 
-                    showFurigana={showFurigana}
-                  />
+                  開発・テスト環境での面接システム動作確認用
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -734,10 +600,7 @@ export function JobSeekerMyPage() {
                   className="w-full h-12 text-lg bg-green-600 hover:bg-green-700"
                 >
                   <ExternalLink className="h-5 w-5 mr-2" />
-                  <FuriganaText 
-                    text="テスト用面接システムを開く" 
-                    showFurigana={showFurigana}
-                  />
+                  テスト用面接システムを開く
                 </Button>
               </CardContent>
             </Card>
@@ -750,25 +613,16 @@ export function JobSeekerMyPage() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <User className="h-5 w-5" />
-                    <FuriganaText 
-                      text={getMultilingualText('profileInformation')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('profileInformation')}
                   </CardTitle>
                   <CardDescription>
-                    <FuriganaText 
-                      text={getMultilingualText('profileDescription')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('profileDescription')}
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild>
                   <Link to="/settings">
                     <Edit className="h-4 w-4 mr-2" />
-                    <FuriganaText 
-                      text={getMultilingualText('edit')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('edit')}
                   </Link>
                 </Button>
               </div>
@@ -795,10 +649,7 @@ export function JobSeekerMyPage() {
                 <User className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    <FuriganaText 
-                      text={getMultilingualText('fullName')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('fullName')}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {userData?.full_name || user.profile?.full_name || getMultilingualText('notSet')}
@@ -812,10 +663,7 @@ export function JobSeekerMyPage() {
                 <Mail className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    <FuriganaText 
-                      text={getMultilingualText('email')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('email')}
                   </p>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                 </div>
@@ -827,10 +675,7 @@ export function JobSeekerMyPage() {
                 <Calendar className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    <FuriganaText 
-                      text={getMultilingualText('registrationDate')} 
-                      showFurigana={showFurigana}
-                    />
+                    {getMultilingualText('registrationDate')}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {format(new Date(user.created_at), 'yyyy年MM月dd日', { locale: ja })}
@@ -848,10 +693,7 @@ export function JobSeekerMyPage() {
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <div className="flex items-start justify-between mb-2">
               <h3 className="text-lg font-semibold">
-                <FuriganaText 
-                  text={t('profileCompletion.modalTitle')} 
-                  showFurigana={showFurigana}
-                />
+                {t('profileCompletion.modalTitle')}
               </h3>
               <div className="ml-2">
                 <LanguageToggle />
@@ -862,10 +704,7 @@ export function JobSeekerMyPage() {
                 <User className="h-6 w-6 text-blue-600" />
               </div>
               <p className="text-sm text-gray-600 mb-4">
-                <FuriganaText 
-                  text={`${t('profileCompletion.modalMessagePrefix')}${completionRate}%${t('profileCompletion.modalMessageSuffix')}`}
-                  showFurigana={showFurigana}
-                />
+                {`${t('profileCompletion.modalMessagePrefix')}${completionRate}%${t('profileCompletion.modalMessageSuffix')}`}
               </p>
               <div className="flex gap-3">
                 <Button
@@ -873,22 +712,16 @@ export function JobSeekerMyPage() {
                   variant="outline"
                   className="flex-1"
                 >
-                  <FuriganaText 
-                    text={t('profileCompletion.later')}
-                    showFurigana={showFurigana}
-                  />
+                  {t('profileCompletion.later')}
                 </Button>
                 <Button
-                  onClick={() => {
+                  onClick={() => 
                     setShowCompletionModal(false);
                     navigate('/jobseeker/documents');
-                  }}
+
                   className="flex-1"
                 >
-                  <FuriganaText 
-                    text={t('profileCompletion.completeNow')}
-                    showFurigana={showFurigana}
-                  />
+                  {t('profileCompletion.completeNow')}
                 </Button>
               </div>
             </div>
@@ -899,4 +732,3 @@ export function JobSeekerMyPage() {
 
     </>
   );
-}

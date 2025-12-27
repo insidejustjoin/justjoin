@@ -4327,9 +4327,9 @@ whiteCells.forEach(cell => {
               <div className="md:col-span-2 flex items-center gap-3 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
                 <CheckCircle className="h-5 w-5 flex-shrink-0" />
                 <div className="flex flex-col">
-                  <span className="font-semibold">データベースに保存済み</span>
+                  <span className="font-semibold">{t('documents.savedToDatabase')}</span>
                   <span className="text-xs text-green-800">
-                    最終保存日時: {formatLastSavedAt(lastSavedAt)}
+                    {t('documents.lastSavedDateTime')}: {formatLastSavedAt(lastSavedAt)}
                   </span>
                 </div>
               </div>
