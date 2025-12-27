@@ -121,9 +121,11 @@ export function JobSeekerLogin() {
           <div className="w-full space-y-8">
             <div className="text-center">
               <div className="flex justify-center mb-6">
-                <div className="bg-blue-100 p-3 rounded-full">
-                  <Briefcase className="h-8 w-8 text-blue-600" />
-                </div>
+                <img 
+                  src="/logo.svg" 
+                  alt="just join" 
+                  className="h-12 w-auto"
+                />
               </div>
               <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
                 {t('auth.title')}

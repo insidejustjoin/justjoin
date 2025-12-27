@@ -17,9 +17,11 @@ export const Footer: React.FC = () => {
           {/* 会社情報 */}
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="text-2xl font-bold text-blue-600">
-                just join
-              </div>
+              <img 
+                src="/logo.svg" 
+                alt="just join" 
+                className="h-8 w-auto"
+              />
             </div>
             <p className="text-sm text-gray-600">
               {t('footer.companyDescription') || 'Application Form of Recruit'}

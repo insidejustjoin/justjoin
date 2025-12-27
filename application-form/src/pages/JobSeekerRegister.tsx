@@ -57,9 +57,11 @@ const JobSeekerRegister: React.FC = () => {
             {/* タイトルセクション - ログイン画面と同じスタイル */}
             <div className="text-center">
               <div className="flex justify-center mb-6">
-                <div className="bg-blue-100 p-3 rounded-full">
-                  <Briefcase className="h-8 w-8 text-blue-600" />
-                </div>
+                <img 
+                  src="/logo.svg" 
+                  alt="just join" 
+                  className="h-12 w-auto"
+                />
               </div>
               <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
                 {t('register.title')}
