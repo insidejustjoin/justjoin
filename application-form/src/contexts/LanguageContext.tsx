@@ -969,6 +969,7 @@ const translations: Translations = {
     
     // Footer
     'footer.description': '求人プラットフォーム just join は、求職者と企業をつなぐ革新的なサービスです。',
+    'footer.companyDescription': '求人プラットフォーム just join は、求職者と企業をつなぐ革新的なサービスです。',
     'footer.privacyPolicy': 'プライバシーポリシー',
     'footer.termsOfService': '利用規約',
     'footer.commercialTransaction': '特定商取引法に基づく表記',
@@ -2041,6 +2042,7 @@ const translations: Translations = {
     
     // Footer
     'footer.description': 'just join is an innovative job platform connecting job seekers and companies.',
+    'footer.companyDescription': 'just join is an innovative job platform connecting job seekers and companies.',
     'footer.privacyPolicy': 'Privacy Policy',
     'footer.termsOfService': 'Terms of Service',
     'footer.commercialTransaction': 'Commercial Transaction Law',
@@ -2758,6 +2760,14 @@ const translations: Translations = {
     'auth.newPasswordMin': 'Пароль должен содержать не менее 6 символов',
     'auth.confirmPasswordRequired': 'Пожалуйста, подтвердите пароль',
     'auth.passwordFromEmail': 'Введите пароль, отправленный на вашу почту',
+    
+    // Footer
+    'footer.description': 'just join - это инновационная платформа для поиска работы, соединяющая соискателей и компании.',
+    'footer.companyDescription': 'just join - это инновационная платформа для поиска работы, соединяющая соискателей и компании.',
+    'footer.privacyPolicy': 'Политика конфиденциальности',
+    'footer.termsOfService': 'Условия использования',
+    'footer.commercialTransaction': 'Закон о коммерческих сделках',
+    'footer.allRightsReserved': 'Все права защищены.',
   },
   uz: {
     // Common (subset used on login)
@@ -3140,6 +3150,14 @@ const translations: Translations = {
     'auth.newPasswordMin': 'Parol kamida 6 ta belgidan iborat bo\'lishi kerak',
     'auth.confirmPasswordRequired': 'Iltimos, parolni tasdiqlang',
     'auth.passwordFromEmail': 'Emailingizga yuborilgan parolni kiriting',
+    
+    // Footer
+    'footer.description': 'just join - ish izlovchilar va kompaniyalarni bog\'laydigan innovatsion ish platformasi.',
+    'footer.companyDescription': 'just join - ish izlovchilar va kompaniyalarni bog\'laydigan innovatsion ish platformasi.',
+    'footer.privacyPolicy': 'Maxfiylik siyosati',
+    'footer.termsOfService': 'Foydalanish shartlari',
+    'footer.commercialTransaction': 'Savdo qonuni',
+    'footer.allRightsReserved': 'Barcha huquqlar himoyalangan.',
   }
 };
 
