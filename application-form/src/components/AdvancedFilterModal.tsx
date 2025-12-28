@@ -557,7 +557,7 @@ export function AdvancedFilterModal({
                     '農業・漁業系',
                     'サービス・接客系',
                     '物流・運輸系',
-                    'その他/他になし'
+                    'その他・他になし'
                   ].map((jobType) => (
                     <div key={jobType} className="flex items-center space-x-2">
                       <Checkbox
