@@ -490,6 +490,7 @@ router.post('/', async (req, res) => {
                         }
                     }
                     else {
+                        console.warn('[HubSpot] メールアドレスが見つかりません。連携をスキップします。', { userId: userIdStr, queryResult: userEmailResult.rows.length });
                         logger.warn('HubSpot連携スキップ: メールアドレスが見つかりません', { userId: userIdStr, queryResult: userEmailResult.rows.length }, undefined, 'hubspot_warning');
                     }
                 }

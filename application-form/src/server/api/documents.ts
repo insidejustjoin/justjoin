@@ -517,9 +517,10 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
 
       // HubSpot連携（非同期で実行、エラーが発生しても処理を続行）
       // 注意: この処理は非同期で実行されるため、エラーが発生してもレスポンスは返される
+      console.log('[HubSpot] 連携処理を開始します（非同期実行）', { userId: userIdStr, registrationType: normalizedRegistrationType });
       (async () => {
         try {
-          console.log('[HubSpot] 連携処理開始（非同期）', { userId: userIdStr, registrationType: normalizedRegistrationType });
+          console.log('[HubSpot] 連携処理開始（非同期関数内）', { userId: userIdStr, registrationType: normalizedRegistrationType });
           logger.info(
             'HubSpot連携処理開始',
             { userId: userIdStr, registrationType: normalizedRegistrationType },

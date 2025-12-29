@@ -1451,6 +1451,10 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
         throw new Error(documentsResult.message || '書類保存に失敗しました');
       }
 
+      // HubSpot連携はサーバー側で非同期実行されるため、フロントエンドではログを出力しない
+      // サーバーログ（GCP Console）で確認可能
+      console.log('✅ 書類データをデータベースに保存しました。HubSpot連携はサーバー側で実行中です。');
+
       if (documentsResult.data?.updated_at) {
         setLastSavedAt(new Date(documentsResult.data.updated_at));
       } else {
