@@ -65,9 +65,10 @@ export class HubSpotClient {
         // 新しい連絡先を作成
         return await this.createContact(contact);
       }
-    } catch (error) {
-      console.error('HubSpot連絡先の作成/更新エラー:', error);
-      throw error;
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      console.error('HubSpot連絡先の作成/更新エラー:', errorMessage);
+      throw new Error(`HubSpot連絡先の作成/更新に失敗しました: ${errorMessage}`);
     }
   }
 
@@ -115,8 +116,8 @@ export class HubSpotClient {
         return { id: data.results[0].id };
       }
       return null;
-    } catch (error) {
-      console.error('HubSpot連絡先検索エラー:', error);
+    } catch (error: any) {
+      console.error('HubSpot連絡先検索エラー:', error?.message || error);
       return null;
     }
   }

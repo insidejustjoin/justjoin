@@ -49,8 +49,22 @@ export interface DocumentData {
   selfIntroduction?: string;
   spouse?: string;
   spouseSupport?: string;
+  personalPreference?: string;
+  // 日本語関連情報
+  certificateStatus?: {
+    date: string;
+    name: string;
+  };
   japaneseLevel?: string;
+  qualificationDate?: string;
+  nextJapaneseTestDate?: string;
+  nextJapaneseTestLevel?: string;
+  whyJapan?: string;
+  whyInterestJapan?: string;
+  // 日本の在留資格関連
   residencyStatus?: string;
+  technicalTrainingIndustry?: string;
+  technicalTrainingJobType?: string;
   desiredJobTypes?: string[];
 }
 
@@ -156,12 +170,46 @@ export function mapDocumentDataToHubSpot(
   if (documentData.spouseSupport) {
     properties.spouse_support = documentData.spouseSupport;
   }
+  // 日本語資格関連
+  if (documentData.certificateStatus && documentData.certificateStatus.name) {
+    properties.current_japanese_qualification = documentData.certificateStatus.name;
+  }
+  if (documentData.qualificationDate) {
+    properties.qualification_date = documentData.qualificationDate;
+  }
   if (documentData.japaneseLevel) {
     properties.japanese_level = documentData.japaneseLevel;
   }
+  if (documentData.nextJapaneseTestLevel) {
+    properties.planned_japanese_qualification = documentData.nextJapaneseTestLevel;
+  }
+  if (documentData.nextJapaneseTestDate) {
+    properties.next_exam_date = documentData.nextJapaneseTestDate;
+  }
+  
+  // 在留資格関連
   if (documentData.residencyStatus) {
     properties.residency_status = documentData.residencyStatus;
   }
+  if (documentData.technicalTrainingIndustry) {
+    properties.technical_training_industry = documentData.technicalTrainingIndustry;
+  }
+  if (documentData.technicalTrainingJobType) {
+    properties.technical_training_job_type = documentData.technicalTrainingJobType;
+  }
+  
+  // 理由・要望関連
+  if (documentData.whyJapan) {
+    properties.why_japan = documentData.whyJapan;
+  }
+  if (documentData.whyInterestJapan) {
+    properties.why_interest_japan = documentData.whyInterestJapan;
+  }
+  if (documentData.personalPreference) {
+    properties.personal_preference = documentData.personalPreference;
+  }
+  
+  // 希望職種（複数選択をカンマ区切りで保存）
   if (documentData.desiredJobTypes && documentData.desiredJobTypes.length > 0) {
     properties.desired_job_types = documentData.desiredJobTypes.join(', ');
   }
@@ -394,6 +442,30 @@ export const HUBSPOT_CUSTOM_PROPERTIES = [
     ],
   },
   {
+    name: 'current_japanese_qualification',
+    label: '現在の日本語資格',
+    type: 'enumeration' as const,
+    fieldType: 'select' as const,
+    groupName: 'contactinformation',
+    description: '求職者の現在の日本語資格',
+    options: [
+      { label: 'なし', value: 'なし' },
+      { label: 'N1', value: 'N1' },
+      { label: 'N2', value: 'N2' },
+      { label: 'N3', value: 'N3' },
+      { label: 'N4', value: 'N4' },
+      { label: 'N5', value: 'N5' },
+    ],
+  },
+  {
+    name: 'qualification_date',
+    label: '取得日',
+    type: 'date' as const,
+    fieldType: 'date' as const,
+    groupName: 'contactinformation',
+    description: '日本語資格の取得日',
+  },
+  {
     name: 'japanese_level',
     label: '日本語レベル',
     type: 'enumeration' as const,
@@ -408,6 +480,30 @@ export const HUBSPOT_CUSTOM_PROPERTIES = [
       { label: 'N4', value: 'N4' },
       { label: 'N5', value: 'N5' },
     ],
+  },
+  {
+    name: 'planned_japanese_qualification',
+    label: '予定の日本語資格',
+    type: 'enumeration' as const,
+    fieldType: 'select' as const,
+    groupName: 'contactinformation',
+    description: '求職者の予定の日本語資格',
+    options: [
+      { label: '未定', value: '未定' },
+      { label: 'N1', value: 'N1' },
+      { label: 'N2', value: 'N2' },
+      { label: 'N3', value: 'N3' },
+      { label: 'N4', value: 'N4' },
+      { label: 'N5', value: 'N5' },
+    ],
+  },
+  {
+    name: 'next_exam_date',
+    label: '次回受験予定日',
+    type: 'date' as const,
+    fieldType: 'date' as const,
+    groupName: 'contactinformation',
+    description: '次回の日本語試験受験予定日',
   },
   {
     name: 'residency_status',
@@ -425,12 +521,67 @@ export const HUBSPOT_CUSTOM_PROPERTIES = [
     ],
   },
   {
+    name: 'technical_training_industry',
+    label: '技能実習の業種',
+    type: 'enumeration' as const,
+    fieldType: 'select' as const,
+    groupName: 'contactinformation',
+    description: '技能実習の業種',
+    options: [
+      { label: '農業', value: '農業' },
+      { label: '漁業', value: '漁業' },
+      { label: '建設', value: '建設' },
+      { label: '食品製造', value: '食品製造' },
+      { label: '繊維・縫製', value: '繊維・縫製' },
+      { label: '機械金属', value: '機械金属' },
+      { label: '電気電子', value: '電気電子' },
+      { label: '自動車', value: '自動車' },
+      { label: '化学・プラ', value: '化学・プラ' },
+      { label: '印刷', value: '印刷' },
+      { label: '木材家具', value: '木材家具' },
+      { label: '介護', value: '介護' },
+      { label: '清掃', value: '清掃' },
+    ],
+  },
+  {
+    name: 'technical_training_job_type',
+    label: '技能実習の職種',
+    type: 'string' as const,
+    fieldType: 'text' as const,
+    groupName: 'contactinformation',
+    description: '技能実習の職種',
+  },
+  {
+    name: 'why_japan',
+    label: '日本で働きたい理由',
+    type: 'string' as const,
+    fieldType: 'textarea' as const,
+    groupName: 'contactinformation',
+    description: '日本で働きたい理由',
+  },
+  {
+    name: 'why_interest_japan',
+    label: '日本に興味を持った理由',
+    type: 'string' as const,
+    fieldType: 'textarea' as const,
+    groupName: 'contactinformation',
+    description: '日本に興味を持った理由',
+  },
+  {
+    name: 'personal_preference',
+    label: '希望・要望',
+    type: 'string' as const,
+    fieldType: 'textarea' as const,
+    groupName: 'contactinformation',
+    description: '求職者の希望・要望',
+  },
+  {
     name: 'desired_job_types',
     label: '希望職種',
     type: 'string' as const,
     fieldType: 'text' as const,
     groupName: 'contactinformation',
-    description: '求職者の希望職種（カンマ区切り）',
+    description: '求職者の希望職種（複数選択、カンマ区切り）',
   },
   // スキルプロパティ（すべてのスキルを個別に作成、評価はA-Eの選択肢）
   ...ALL_SKILLS.map(skillName => ({

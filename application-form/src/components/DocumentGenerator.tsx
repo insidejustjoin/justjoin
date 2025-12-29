@@ -490,10 +490,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     const missingFields = [];
     
     // デバッグログ
-    console.log('=== バリデーション デバッグ ===');
-    console.log('japaneseLevel:', documentData.japaneseLevel);
-    console.log('qualificationDate:', documentData.qualificationDate);
-    console.log('certificateStatus:', documentData.certificateStatus);
+    // バリデーション処理
     
     // 基本情報の必須項目
     if (!documentData.lastName) missingFields.push(t('documents.validation.lastName'));
@@ -555,8 +552,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       missingFields.push(t('documents.validation.desiredJobTypes'));
     }
     
-    console.log('チェック後の値:', { japaneseLevel, qualificationDate, certName, isNone });
-    console.log('missingFields:', missingFields);
+    // バリデーション完了
     
     return missingFields;
   };
@@ -3622,7 +3618,6 @@ whiteCells.forEach(cell => {
                 <div>
                   <Label className="text-sm font-medium">{t('documents.currentJapaneseQualification')} <span className="text-red-500">*</span></Label>
                   <Select value={documentData.certificateStatus.name} onValueChange={(value) => {
-                    console.log('日本語資格変更:', value);
                     setDocumentData(prev => ({ 
                       ...prev, 
                       certificateStatus: { 

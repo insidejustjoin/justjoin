@@ -537,11 +537,18 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
           const hubspotClient = new HubSpotClient(hubspotApiKey);
           const hubspotProperties = mapDocumentDataToHubSpot(normalizedData, userEmail, normalizedRegistrationType);
           
-          console.log('🔗 HubSpot連携開始:', { 
-            email: userEmail, 
-            registrationType: normalizedRegistrationType,
-            propertiesCount: Object.keys(hubspotProperties).length 
-          });
+          logger.info(
+            'HubSpot連携開始',
+            { 
+              userId: userIdStr,
+              email: userEmail, 
+              registrationType: normalizedRegistrationType,
+              propertiesCount: Object.keys(hubspotProperties).length,
+              properties: Object.keys(hubspotProperties)
+            },
+            undefined,
+            'hubspot_start'
+          );
           
           const hubspotResult = await hubspotClient.createOrUpdateContact(hubspotProperties);
           
@@ -557,11 +564,10 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
               undefined,
               'hubspot_success'
             );
-            console.log('✅ HubSpot連携成功:', { contactId: hubspotResult.id });
           } else {
             logger.warn(
-              'HubSpot連携スキップ: APIキーが設定されていません',
-              { userId: userIdStr },
+              'HubSpot連携失敗: 結果が返されませんでした',
+              { userId: userIdStr, email: userEmail },
               undefined,
               'hubspot_warning'
             );
