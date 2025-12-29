@@ -1454,6 +1454,7 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       // HubSpot連携はサーバー側で非同期実行されるため、フロントエンドではログを出力しない
       // サーバーログ（GCP Console）で確認可能
       console.log('✅ 書類データをデータベースに保存しました。HubSpot連携はサーバー側で実行中です。');
+      console.log('📋 HubSpotログ確認方法: GCP Console → ログエクスプローラー → 検索クエリ: "HubSpot" または "=== HubSpot連携開始 ==="');
 
       if (documentsResult.data?.updated_at) {
         setLastSavedAt(new Date(documentsResult.data.updated_at));
