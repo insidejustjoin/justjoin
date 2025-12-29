@@ -1,28 +1,36 @@
 # HubSpot APIキーの環境変数設定手順
 
-## 方法1: env.gcp.yamlに追加（推奨）
+## 方法1: env.gcp.yamlに追加（推奨・次回デプロイ時に自動適用）
 
-`env.gcp.yaml`ファイルに以下の行を追加してください：
+`application-form/env.gcp.yaml`ファイルを開き、以下の行を追加してください：
 
 ```yaml
 HUBSPOT_API_KEY: "your-hubspot-api-key-here"
 ```
 
-**注意**: `env.gcp.yaml`は`.gitignore`に含まれているため、APIキーがリポジトリにコミットされることはありません。
+**注意**: 
+- `env.gcp.yaml`は`.gitignore`に含まれていないため、APIキーがリポジトリにコミットされます
+- セキュリティのため、GitHubのSecret Scanningで検出される可能性があります
+- 次回`./deploy-gcp.sh`を実行すると、自動的に環境変数が設定されます
 
-## 方法2: GCP Consoleから直接設定
+## 方法2: GCP Consoleから直接設定（即座に反映）
 
 1. [GCP Console](https://console.cloud.google.com/)にログイン
-2. **Cloud Run** > **justjoin** サービスを選択
-3. **「編集と新しいリビジョンをデプロイ」**をクリック
-4. **「変数とシークレット」**タブを開く
-5. **「変数を追加」**をクリック
-6. 以下を入力：
+2. プロジェクトを`justjoin-platform`に切り替え
+3. **Cloud Run** > **justjoin** サービスを選択
+4. **「編集と新しいリビジョンをデプロイ」**をクリック
+5. **「変数とシークレット」**タブを開く
+6. **「変数を追加」**をクリック
+7. 以下を入力：
    - **名前**: `HUBSPOT_API_KEY`
-   - **値**: `your-hubspot-api-key-here`（実際のAPIキーを入力）
-7. **「デプロイ」**をクリック
+   - **値**: `your-hubspot-api-key-here`（実際のAPIキーを入力してください）
+8. **「デプロイ」**をクリック
 
-## 方法3: gcloudコマンドで設定
+**この方法が最も簡単で即座に反映されます！**
+
+## 方法3: gcloudコマンドで設定（即座に反映）
+
+適切な権限がある場合、以下のコマンドで設定できます：
 
 ```bash
 gcloud run services update justjoin \
@@ -30,6 +38,8 @@ gcloud run services update justjoin \
   --region=asia-northeast1 \
   --project=justjoin-platform
 ```
+
+**権限エラーが発生する場合は、方法2（GCP Console）を使用してください。**
 
 ## 確認方法
 
