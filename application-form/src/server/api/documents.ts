@@ -516,13 +516,16 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
       await upsertJobSeekerProfile(userIdStr, normalizedRegistrationType, completionRate, normalizedData);
 
       // HubSpot連携（非同期で実行、エラーが発生しても処理を続行）
-      try {
-        logger.info(
-          'HubSpot連携処理開始',
-          { userId: userIdStr, registrationType: normalizedRegistrationType },
-          undefined,
-          'hubspot_init'
-        );
+      // 注意: この処理は非同期で実行されるため、エラーが発生してもレスポンスは返される
+      (async () => {
+        try {
+          console.log('[HubSpot] 連携処理開始（非同期）', { userId: userIdStr, registrationType: normalizedRegistrationType });
+          logger.info(
+            'HubSpot連携処理開始',
+            { userId: userIdStr, registrationType: normalizedRegistrationType },
+            undefined,
+            'hubspot_init'
+          );
 
         const { HubSpotClient } = await import('../../integrations/hubspot/client.js');
         const { mapDocumentDataToHubSpot } = await import('../../integrations/hubspot/mapper.js');
@@ -647,8 +650,9 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
           undefined,
           'hubspot_error'
         );
-        console.error('HubSpot連携エラー（処理は続行）:', errorDetails);
-      }
+          console.error('[HubSpot] 連携エラー（処理は続行）:', errorDetails);
+        }
+      })(); // 非同期関数を即座に実行（レスポンスをブロックしない）
 
       logger.info(
         '書類保存成功（データベース）',
