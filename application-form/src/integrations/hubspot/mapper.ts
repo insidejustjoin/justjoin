@@ -82,13 +82,8 @@ export function mapDocumentDataToHubSpot(
     properties.birth_date = documentData.birthDate;
   }
   if (documentData.gender) {
-    // 性別の値を変換（男性→male、女性→female、その他→other）
-    const genderMap: { [key: string]: string } = {
-      '男性': 'male',
-      '女性': 'female',
-      'その他': 'other',
-    };
-    properties.gender = genderMap[documentData.gender] || documentData.gender;
+    // 性別はそのまま使用（HubSpotのプロパティは「男性」「女性」「その他」を期待）
+    properties.gender = documentData.gender;
   }
   if (documentData.nationality) {
     properties.nationality = documentData.nationality;
