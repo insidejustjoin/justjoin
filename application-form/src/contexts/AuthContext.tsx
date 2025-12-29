@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { toast } from 'sonner';
+import { useLanguage } from './LanguageContext';
 
 // API設定
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://justjoin.jp';
@@ -70,6 +71,7 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
+  const { t } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -351,12 +353,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return true;
       } else {
         console.error('Login failed:', result);
-        toast.error(result.message || 'ログインに失敗しました');
+        // エラーメッセージを翻訳
+        let errorMessage = result.message || t('error.loginFailed');
+        if (result.message === 'メールアドレスまたはパスワードが正しくありません') {
+          errorMessage = t('error.invalidCredentials');
+        }
+        toast.error(errorMessage);
         return false;
       }
     } catch (error) {
       console.error('Login error:', error);
-      toast.error('ログインに失敗しました');
+      toast.error(t('error.loginFailed'));
       return false;
     }
   };

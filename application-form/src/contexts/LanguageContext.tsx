@@ -2359,6 +2359,10 @@ const translations: Translations = {
     'myPage.profileInformation': 'Информация о профиле',
     'myPage.profileDescription': 'Здесь вы можете проверить и отредактировать свою основную информацию',
     
+    // エラー・メッセージ
+    'error.loginFailed': 'Не удалось войти в систему',
+    'error.invalidCredentials': 'Неверный адрес электронной почты или пароль',
+    
     // Common
     'createEditDocuments': 'Создать/Редактировать документы',
     'loadingData': 'Загрузка данных...',
