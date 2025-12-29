@@ -28,7 +28,7 @@ export function JobSeekerMyPage()
   const [isLoadingInterview, setIsLoadingInterview] = useState(false);
   const [isStartingInterview, setIsStartingInterview] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  
+
   // 多言語表示用のヘルパー関数
   const getMultilingualText = (key: string): string => 
     return t(`myPage.${key}`);
@@ -45,7 +45,7 @@ export function JobSeekerMyPage()
       const response = await fetch(`${apiUrl}/api/notifications/unread-count/${user.id}`, 
         headers: 
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        });
+      });
 
       if (response.ok) 
         const result = await response.json();
@@ -54,7 +54,7 @@ export function JobSeekerMyPage()
 
     } catch (error) 
       // エラーは静かに処理
-    };
+  };
 
   // 面接履歴を取得
   const fetchInterviewHistory = async () => 
@@ -66,7 +66,7 @@ export function JobSeekerMyPage()
       const response = await fetch(`${apiUrl}/api/documents/interview-history/${user.id}`, 
         headers: 
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        });
+      });
 
       if (response.ok) 
         const result = await response.json();
@@ -77,7 +77,7 @@ export function JobSeekerMyPage()
       // エラーは静かに処理
     } finally 
       setIsLoadingInterview(false);
-    };
+  };
 
   // AI面接開始
   const startAIInterview = async () => 
@@ -91,7 +91,7 @@ export function JobSeekerMyPage()
         headers: 
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           'Content-Type': 'application/json'
-        });
+      });
 
       if (response.ok) 
         const result = await response.json();
@@ -121,7 +121,7 @@ export function JobSeekerMyPage()
       toast.error('面接を開始できませんでした');
     } finally 
       setIsStartingInterview(false);
-    };
+  };
 
   // 面接ステータスのバッジを表示
   const getInterviewStatusBadge = (status: string) => 
@@ -134,7 +134,7 @@ export function JobSeekerMyPage()
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />{t('myPage.cancelled')}</Badge>;
       default:
         return <Badge variant="outline">{t('myPage.notTaken')}</Badge>;
-    };
+  };
 
   // 面接推奨レベルのバッジを表示
   const getRecommendationBadge = (recommendation: string) => 
@@ -151,14 +151,14 @@ export function JobSeekerMyPage()
         return <Badge className="bg-red-700">強く非推薦</Badge>;
       default:
         return null;
-    };
+  };
 
   // ユーザーデータ読み込み
   const loadUserData = async () => 
     if (!user) 
       setIsLoading(false);
       return;
-
+    
     setIsLoading(true);
     try 
       // 基本的なユーザー情報を設定（プロフィール情報が既にある場合は使用）
@@ -182,7 +182,7 @@ export function JobSeekerMyPage()
             method: 'GET',
             headers: 
               'Content-Type': 'application/json',
-            });
+          });
           
           if (response.ok) 
             const result = await response.json();
@@ -218,7 +218,7 @@ export function JobSeekerMyPage()
               } catch {}
           } catch (error) 
           // Profile fetch エラーは静かに処理
-
+      
       // 完成度と面接履歴を並行して取得
       await Promise.all([
         fetchCompletionRate(),
@@ -228,7 +228,7 @@ export function JobSeekerMyPage()
       // ユーザーデータ読み込みエラーは静かに処理
     } finally 
       setIsLoading(false);
-    };
+  };
 
 
 
@@ -256,13 +256,13 @@ export function JobSeekerMyPage()
         // APIエラーは静かに処理
       } catch (error) 
       // 入力率取得エラーは静かに処理
-    };
+  };
 
   // コンポーネントマウント時にデータを読み込み
   useEffect(() => 
     if (user && !userData) 
       loadUserData();
-    }, [user]); // userDataを依存配列から削除
+  }, [user]); // userDataを依存配列から削除
 
   // 通知と面接データを取得
   useEffect(() => 
@@ -270,7 +270,7 @@ export function JobSeekerMyPage()
       fetchInterviewHistory();
       fetchCompletionRate();
       fetchUnreadNotificationCount();
-    }, [user]);
+  }, [user]);
 
 
 

@@ -3097,6 +3097,17 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 const PORT = parseInt(process.env.PORT || '8080');
 
+// HubSpotプロパティのセットアップ（非同期で実行、エラーが発生してもサーバーは起動）
+(async () => {
+  try {
+    const { setupHubSpotProperties } = await import('../integrations/hubspot/setup.js');
+    await setupHubSpotProperties();
+  } catch (error) {
+    console.warn('⚠️ HubSpotプロパティのセットアップに失敗しました（サーバーは起動します）:', error);
+    logger.warn('HubSpotプロパティセットアップエラー', { error: error instanceof Error ? error.message : String(error) }, undefined, 'hubspot_setup_warning');
+  }
+})();
+
 app.listen(PORT, '0.0.0.0', () => {
   logger.info(`サーバーがポート${PORT}で起動しました`);
   console.log(`🚀 サーバーがポート${PORT}で起動しました`);

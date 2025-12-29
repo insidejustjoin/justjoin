@@ -515,6 +515,55 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
       }
       await upsertJobSeekerProfile(userIdStr, normalizedRegistrationType, completionRate, normalizedData);
 
+      // HubSpot連携（非同期で実行、エラーが発生しても処理を続行）
+      try {
+        const { HubSpotClient } = await import('../../integrations/hubspot/client.js');
+        const { mapDocumentDataToHubSpot } = await import('../../integrations/hubspot/mapper.js');
+        
+        // ユーザーのメールアドレスを取得
+        const userEmailResult = await query('SELECT email FROM users WHERE id = $1 LIMIT 1', [userIdStr]);
+        if (userEmailResult.rows.length > 0 && userEmailResult.rows[0].email) {
+          const userEmail = userEmailResult.rows[0].email;
+          const hubspotApiKey = process.env.HUBSPOT_API_KEY;
+          if (!hubspotApiKey) {
+            logger.warn(
+              'HubSpot連携スキップ: HUBSPOT_API_KEYが設定されていません',
+              { userId: userIdStr },
+              undefined,
+              'hubspot_warning'
+            );
+            return;
+          }
+          const hubspotClient = new HubSpotClient(hubspotApiKey);
+          const hubspotProperties = mapDocumentDataToHubSpot(normalizedData, userEmail, normalizedRegistrationType);
+          
+          await hubspotClient.createOrUpdateContact(hubspotProperties);
+          
+          logger.info(
+            'HubSpot連携成功',
+            { userId: userIdStr, email: userEmail, registrationType: normalizedRegistrationType },
+            undefined,
+            'hubspot_success'
+          );
+        } else {
+          logger.warn(
+            'HubSpot連携スキップ: メールアドレスが見つかりません',
+            { userId: userIdStr },
+            undefined,
+            'hubspot_warning'
+          );
+        }
+      } catch (hubspotError: any) {
+        // HubSpot連携エラーはログに記録するが、処理は続行
+        logger.error(
+          'HubSpot連携エラー',
+          { userId: userIdStr, error: hubspotError.message, registrationType: normalizedRegistrationType },
+          undefined,
+          'hubspot_error'
+        );
+        console.error('HubSpot連携エラー（処理は続行）:', hubspotError);
+      }
+
       logger.info(
         '書類保存成功（データベース）',
         { userId: userIdStr, documentType, completionRate, registrationType: normalizedRegistrationType },
