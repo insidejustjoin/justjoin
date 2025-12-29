@@ -554,15 +554,18 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
           undefined,
           'hubspot_email_lookup'
         );
-        const userEmailResult = await query('SELECT email FROM users WHERE id = $1 LIMIT 1', [userIdStr]);
-        console.log('[HubSpot] メールアドレス取得結果', JSON.stringify({ 
+        // メールアドレスとHubSpotコンタクトIDを取得
+        const userResult = await query('SELECT email, hubspot_contact_id FROM users WHERE id = $1 LIMIT 1', [userIdStr]);
+        console.log('[HubSpot] ユーザー情報取得結果', JSON.stringify({ 
           userId: userIdStr, 
-          found: userEmailResult.rows.length > 0,
-          email: userEmailResult.rows.length > 0 ? userEmailResult.rows[0].email : 'not found'
+          found: userResult.rows.length > 0,
+          email: userResult.rows.length > 0 ? userResult.rows[0].email : 'not found',
+          hubspotContactId: userResult.rows.length > 0 ? userResult.rows[0].hubspot_contact_id : 'not found'
         }));
         
-        if (userEmailResult.rows.length > 0 && userEmailResult.rows[0].email) {
-          const userEmail = userEmailResult.rows[0].email;
+        if (userResult.rows.length > 0 && userResult.rows[0].email) {
+          const userEmail = userResult.rows[0].email;
+          const existingHubspotContactId = userResult.rows[0].hubspot_contact_id;
           logger.info(
             'HubSpot: メールアドレス取得成功',
             { userId: userIdStr, email: userEmail },
@@ -614,21 +617,43 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
           
           logger.info(
             'HubSpot: createOrUpdateContact呼び出し開始',
-            { userId: userIdStr, email: userEmail },
+            { userId: userIdStr, email: userEmail, existingContactId: existingHubspotContactId },
             undefined,
             'hubspot_api_call_start'
           );
-          const hubspotResult = await hubspotClient.createOrUpdateContact(hubspotProperties);
+          // 保存されたコンタクトIDがあれば使用（メール検索をスキップ）
+          const hubspotResult = await hubspotClient.createOrUpdateContact(
+            hubspotProperties,
+            existingHubspotContactId || undefined
+          );
           
           if (hubspotResult) {
+            const contactId = hubspotResult.id;
+            
+            // コンタクトIDをデータベースに保存（まだ保存されていない場合、または変更された場合）
+            if (contactId !== existingHubspotContactId) {
+              console.log('[HubSpot] コンタクトIDをデータベースに保存', { userId: userIdStr, contactId });
+              await query(
+                'UPDATE users SET hubspot_contact_id = $1, updated_at = NOW() WHERE id = $2',
+                [contactId, userIdStr]
+              );
+              logger.info(
+                'HubSpot: コンタクトIDをデータベースに保存',
+                { userId: userIdStr, contactId },
+                undefined,
+                'hubspot_contact_id_saved'
+              );
+            }
+            
             logger.info(
               'HubSpot連携成功',
               { 
                 userId: userIdStr, 
                 email: userEmail, 
                 registrationType: normalizedRegistrationType,
-                contactId: hubspotResult.id,
-                resultType: 'id' in hubspotResult ? 'update' : 'create'
+                contactId: contactId,
+                resultType: 'id' in hubspotResult ? 'update' : 'create',
+                usedExistingContactId: !!existingHubspotContactId
               },
               undefined,
               'hubspot_success'
