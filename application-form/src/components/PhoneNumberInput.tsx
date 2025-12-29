@@ -29,7 +29,6 @@ const COUNTRY_CODES = [
   { code: '+63', country: 'PH', name: 'フィリピン', flag: '🇵🇭' },
   { code: '+880', country: 'BD', name: 'バングラデシュ', flag: '🇧🇩' },
   { code: '+92', country: 'PK', name: 'パキスタン', flag: '🇵🇰' },
-  { code: '+880', country: 'BD', name: 'バングラデシュ', flag: '🇧🇩' },
 ];
 
 interface PhoneNumberInputProps {
@@ -179,18 +178,16 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
         </div>
       </div>
 
-      {showFormatOption && (
+      {showFormatOption && showFormatted && (
         <div className="flex items-center gap-2">
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="h-auto p-0 text-xs text-blue-600 hover:text-blue-700"
-            onClick={() => setShowFormatted(!showFormatted)}
+            className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+            onClick={() => setShowFormatted(false)}
           >
-            <Info className="h-3 w-3 mr-1" />
+            <Info className="h-3 w-3" />
             番号の書式を削除
-          </Button>
+          </button>
         </div>
       )}
     </div>
