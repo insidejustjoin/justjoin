@@ -173,12 +173,15 @@ export function mapDocumentDataToHubSpot(
   // 日本語資格関連
   if (documentData.certificateStatus && documentData.certificateStatus.name) {
     properties.current_japanese_qualification = documentData.certificateStatus.name;
+  } else if (documentData.japaneseLevel) {
+    // japaneseLevelはcertificateStatus.nameのフォールバック
+    properties.current_japanese_qualification = documentData.japaneseLevel;
   }
   if (documentData.qualificationDate) {
     properties.qualification_date = documentData.qualificationDate;
-  }
-  if (documentData.japaneseLevel) {
-    properties.japanese_level = documentData.japaneseLevel;
+  } else if (documentData.certificateStatus && documentData.certificateStatus.date) {
+    // certificateStatus.dateをqualification_dateのフォールバックとして使用
+    properties.qualification_date = documentData.certificateStatus.date;
   }
   if (documentData.nextJapaneseTestLevel) {
     properties.planned_japanese_qualification = documentData.nextJapaneseTestLevel;
@@ -464,22 +467,6 @@ export const HUBSPOT_CUSTOM_PROPERTIES = [
     fieldType: 'date' as const,
     groupName: 'contactinformation',
     description: '日本語資格の取得日',
-  },
-  {
-    name: 'japanese_level',
-    label: '日本語レベル',
-    type: 'enumeration' as const,
-    fieldType: 'select' as const,
-    groupName: 'contactinformation',
-    description: '求職者の日本語レベル',
-    options: [
-      { label: 'なし', value: 'なし' },
-      { label: 'N1', value: 'N1' },
-      { label: 'N2', value: 'N2' },
-      { label: 'N3', value: 'N3' },
-      { label: 'N4', value: 'N4' },
-      { label: 'N5', value: 'N5' },
-    ],
   },
   {
     name: 'planned_japanese_qualification',
