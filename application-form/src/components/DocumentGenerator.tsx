@@ -1378,20 +1378,46 @@ const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
 
     const finalRate = Math.min(100, Math.round(baseRate + bonus));
 
-    // デバッグログ
-    console.log('=== 入力率計算（新ロジック）===');
-    console.log('registrationType:', regType, 'baseRate:', Math.round(baseRate) + '%', 'bonus:', bonus + '%', 'final:', finalRate + '%');
-
     return finalRate;
   };
 
   // 入力率を更新
   useEffect(() => {
     const rate = calculateCompletionRate(documentData, effectiveRegistrationType);
-    console.log('入力率計算結果:', rate + '%', 'registrationType:', effectiveRegistrationType);
-    console.log('現在のデータ:', documentData);
     setCompletionRate(rate);
-  }, [documentData, effectiveRegistrationType]);
+  }, [
+    documentData.lastName,
+    documentData.firstName,
+    documentData.birthDate,
+    documentData.gender,
+    documentData.livePostNumber,
+    documentData.liveAddress,
+    documentData.livePhoneNumber,
+    documentData.liveMail,
+    documentData.nationality,
+    documentData.contactPostNumber,
+    documentData.contactAddress,
+    documentData.contactPhoneNumber,
+    documentData.contactMail,
+    documentData.residencyStatus,
+    documentData.technicalTrainingIndustry,
+    documentData.technicalTrainingJobType,
+    documentData.desiredJobTypes,
+    documentData.selfIntroduction,
+    documentData.spouse,
+    documentData.spouseSupport,
+    documentData.whyJapan,
+    documentData.whyInterestJapan,
+    documentData.personalPreference,
+    documentData.certificateStatus,
+    documentData.japaneseLevel,
+    documentData.qualificationDate,
+    documentData.nextJapaneseTestDate,
+    documentData.nextJapaneseTestLevel,
+    documentData.workHistory,
+    documentData.skills,
+    effectiveRegistrationType
+  ]);
 
   // データベース保存機能
   const saveToDatabase = async () => {

@@ -54,6 +54,12 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
 
   // 既存の値から国コードと電話番号を分離
   useEffect(() => {
+    // 現在の内部状態から生成される値と比較して、実際に変更があった場合のみ更新
+    const currentFullNumber = phoneNumber ? `${countryCode}${phoneNumber}` : '';
+    if (value === currentFullNumber) {
+      return; // 値が同じ場合は更新しない（無限ループ防止）
+    }
+
     if (value) {
       // +から始まる国際形式の場合
       if (value.startsWith('+')) {
@@ -81,17 +87,18 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
       setCountryCode('+81');
       setPhoneNumber('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   // 国コードまたは電話番号が変更されたときに親コンポーネントに通知
   useEffect(() => {
-    if (phoneNumber) {
-      const fullNumber = `${countryCode}${phoneNumber}`;
+    const fullNumber = phoneNumber ? `${countryCode}${phoneNumber}` : '';
+    // 現在の値と異なる場合のみ更新（無限ループ防止）
+    if (fullNumber !== value) {
       onChange(fullNumber);
-    } else {
-      onChange('');
     }
-  }, [countryCode, phoneNumber, onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countryCode, phoneNumber]);
 
   // 電話番号のフォーマット（スペースを追加）
   const formatPhoneNumber = (num: string): string => {
