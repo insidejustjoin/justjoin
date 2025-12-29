@@ -22,6 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '@/constants/api';
 import ExcelJS from 'exceljs';
 import { cn } from '@/lib/utils';
+import { PhoneNumberInput } from './PhoneNumberInput';
 
 interface DocumentData {
   // 基本情報
@@ -3047,27 +3048,15 @@ whiteCells.forEach(cell => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium">{t('documents.phoneNumber')} <span className="text-red-500">*</span></Label>
-                  <Input
+                  <PhoneNumberInput
                     value={documentData.livePhoneNumber}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      // 入力中は検証を緩和（削除可能にするため）
-                      if (value === '' || validatePhoneNumber(value)) {
-                        const formatted = formatPhoneNumber(value);
-                        setDocumentData(prev => ({ ...prev, livePhoneNumber: formatted }));
-                      } else if (value.length > 0 && !value.startsWith('+')) {
-                        // +がない場合は+を自動追加（ユーザビリティ向上）
-                        const withPlus = `+${value.replace(/[^\d]/g, '')}`;
-                        if (validatePhoneNumber(withPlus)) {
-                          setDocumentData(prev => ({ ...prev, livePhoneNumber: withPlus }));
-                        }
-                      }
+                    onChange={(value) => {
+                      setDocumentData(prev => ({ ...prev, livePhoneNumber: value }));
                     }}
                     placeholder={t('documents.phoneNumberPlaceholder')}
-                    className="h-10"
                     required
+                    showFormatOption={true}
                   />
-                  <p className="text-xs text-gray-500 mt-1">{t('documents.phoneHelp')}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">{t('documents.emailAddress')} <span className="text-red-500">*</span></Label>
@@ -3189,27 +3178,15 @@ whiteCells.forEach(cell => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm font-medium">{t('documents.contactPhone')} <span className="text-red-500">*</span></Label>
-                      <Input
+                      <PhoneNumberInput
                         value={documentData.contactPhoneNumber}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          // 入力中は検証を緩和（削除可能にするため）
-                          if (value === '' || validatePhoneNumber(value)) {
-                            const formatted = formatPhoneNumber(value);
-                            setDocumentData(prev => ({ ...prev, contactPhoneNumber: formatted }));
-                          } else if (value.length > 0 && !value.startsWith('+')) {
-                            // +がない場合は+を自動追加（ユーザビリティ向上）
-                            const withPlus = `+${value.replace(/[^\d]/g, '')}`;
-                            if (validatePhoneNumber(withPlus)) {
-                              setDocumentData(prev => ({ ...prev, contactPhoneNumber: withPlus }));
-                            }
-                          }
+                        onChange={(value) => {
+                          setDocumentData(prev => ({ ...prev, contactPhoneNumber: value }));
                         }}
                         placeholder={t('documents.contactPhonePlaceholder')}
-                        className="h-10"
                         required
+                        showFormatOption={true}
                       />
-                      <p className="text-xs text-gray-500 mt-1">{t('documents.phoneFormatHelp')}</p>
                     </div>
                     <div>
                       <Label className="text-sm font-medium">{t('documents.contactEmail')} <span className="text-red-500">*</span></Label>
