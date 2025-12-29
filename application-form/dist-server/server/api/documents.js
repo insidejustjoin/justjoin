@@ -444,16 +444,31 @@ router.post('/', async (req, res) => {
             await upsertJobSeekerProfile(userIdStr, normalizedRegistrationType, completionRate, normalizedData);
             // HubSpot連携（非同期で実行、エラーが発生しても処理を続行）
             // 注意: この処理は非同期で実行されるため、エラーが発生してもレスポンスは返される
-            console.log('[HubSpot] 連携処理を開始します（非同期実行）', { userId: userIdStr, registrationType: normalizedRegistrationType });
+            console.log('=== HubSpot連携開始 ===', JSON.stringify({
+                userId: userIdStr,
+                registrationType: normalizedRegistrationType,
+                timestamp: new Date().toISOString()
+            }));
+            logger.info('HubSpot連携処理を開始します', { userId: userIdStr, registrationType: normalizedRegistrationType }, undefined, 'hubspot_init_start');
             (async () => {
                 try {
-                    console.log('[HubSpot] 連携処理開始（非同期関数内）', { userId: userIdStr, registrationType: normalizedRegistrationType });
+                    console.log('[HubSpot] 非同期関数内で処理開始', JSON.stringify({
+                        userId: userIdStr,
+                        registrationType: normalizedRegistrationType,
+                        timestamp: new Date().toISOString()
+                    }));
                     logger.info('HubSpot連携処理開始', { userId: userIdStr, registrationType: normalizedRegistrationType }, undefined, 'hubspot_init');
                     const { HubSpotClient } = await import('../../integrations/hubspot/client.js');
                     const { mapDocumentDataToHubSpot } = await import('../../integrations/hubspot/mapper.js');
                     // ユーザーのメールアドレスを取得
+                    console.log('[HubSpot] メールアドレス取得開始', JSON.stringify({ userId: userIdStr }));
                     logger.info('HubSpot: メールアドレス取得開始', { userId: userIdStr }, undefined, 'hubspot_email_lookup');
                     const userEmailResult = await query('SELECT email FROM users WHERE id = $1 LIMIT 1', [userIdStr]);
+                    console.log('[HubSpot] メールアドレス取得結果', JSON.stringify({
+                        userId: userIdStr,
+                        found: userEmailResult.rows.length > 0,
+                        email: userEmailResult.rows.length > 0 ? userEmailResult.rows[0].email : 'not found'
+                    }));
                     if (userEmailResult.rows.length > 0 && userEmailResult.rows[0].email) {
                         const userEmail = userEmailResult.rows[0].email;
                         logger.info('HubSpot: メールアドレス取得成功', { userId: userIdStr, email: userEmail }, undefined, 'hubspot_email_found');

@@ -133,7 +133,6 @@ export const jobSeekersRepository = {
             ]);
             return result.rows[0] || null;
         }
-        return result.rows[0] || null;
     },
     // 求職者プロフィールを削除
     async delete(userId) {

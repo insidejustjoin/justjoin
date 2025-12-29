@@ -1614,6 +1614,7 @@ app.put('/api/jobseekers/:id', async (req, res) => {
     }
     res.json({ success: true, data: updated });
   } catch (error: any) {
+    const { id } = req.params;
     console.error('/api/jobseekers/:id 更新エラー:', {
       error: error.message,
       stack: error.stack,
