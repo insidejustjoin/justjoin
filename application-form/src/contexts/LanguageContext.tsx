@@ -2917,6 +2917,10 @@ const translations: Translations = {
     'profileCompletion.later': 'Keyinroq',
     'profileCompletion.completeNow': "Hozir yakunlash",
     
+    // エラー・メッセージ
+    'error.loginFailed': 'Kirish muvaffaqiyatsiz bo\'ldi',
+    'error.invalidCredentials': 'Noto\'g\'ri elektron pochta yoki parol',
+    
     // My Page
     'myPage.profile': 'Profil',
     'myPage.applications': 'Ariza tarixi',
