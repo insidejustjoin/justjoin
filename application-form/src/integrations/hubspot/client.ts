@@ -51,23 +51,38 @@ export class HubSpotClient {
    */
   async createOrUpdateContact(contact: HubSpotContact): Promise<HubSpotCreateContactResponse | HubSpotUpdateContactResponse | null> {
     if (!this.apiKey) {
+      console.error('[HubSpot] APIキーが設定されていません');
       return null;
     }
 
     try {
+      console.log(`[HubSpot] 連絡先の作成/更新開始: email=${contact.email}`);
+      
       // まずメールアドレスで既存の連絡先を検索
+      console.log(`[HubSpot] 既存連絡先を検索中: email=${contact.email}`);
       const existingContact = await this.findContactByEmail(contact.email);
       
       if (existingContact) {
+        console.log(`[HubSpot] 既存連絡先が見つかりました: contactId=${existingContact.id}`);
         // 既存の連絡先を更新
-        return await this.updateContact(existingContact.id, contact);
+        console.log(`[HubSpot] 連絡先を更新中: contactId=${existingContact.id}`);
+        const result = await this.updateContact(existingContact.id, contact);
+        console.log(`[HubSpot] 連絡先更新成功: contactId=${existingContact.id}`);
+        return result;
       } else {
+        console.log(`[HubSpot] 既存連絡先が見つかりませんでした。新規作成します: email=${contact.email}`);
         // 新しい連絡先を作成
-        return await this.createContact(contact);
+        const result = await this.createContact(contact);
+        console.log(`[HubSpot] 連絡先作成成功: contactId=${result.id}`);
+        return result;
       }
     } catch (error: any) {
       const errorMessage = error?.message || String(error);
-      console.error('HubSpot連絡先の作成/更新エラー:', errorMessage);
+      console.error('[HubSpot] 連絡先の作成/更新エラー:', {
+        email: contact.email,
+        error: errorMessage,
+        stack: error?.stack
+      });
       throw new Error(`HubSpot連絡先の作成/更新に失敗しました: ${errorMessage}`);
     }
   }
@@ -77,6 +92,7 @@ export class HubSpotClient {
    */
   private async findContactByEmail(email: string): Promise<{ id: string } | null> {
     try {
+      console.log(`[HubSpot] 連絡先検索API呼び出し: email=${email}`);
       const response = await fetch(
         `${this.baseUrl}/crm/v3/objects/contacts/search`,
         {
@@ -103,21 +119,32 @@ export class HubSpotClient {
         }
       );
 
+      console.log(`[HubSpot] 検索APIレスポンス: status=${response.status}, ok=${response.ok}`);
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error(`[HubSpot] 検索APIエラー: status=${response.status}, error=${JSON.stringify(errorData)}`);
         if (response.status === 404) {
+          console.log(`[HubSpot] 連絡先が見つかりませんでした: email=${email}`);
           return null; // 連絡先が見つからない
         }
         throw new Error(`HubSpot検索エラー: ${response.status} - ${JSON.stringify(errorData)}`);
       }
 
       const data = await response.json();
+      console.log(`[HubSpot] 検索結果: results=${data.results?.length || 0}`);
       if (data.results && data.results.length > 0) {
+        console.log(`[HubSpot] 連絡先が見つかりました: contactId=${data.results[0].id}`);
         return { id: data.results[0].id };
       }
+      console.log(`[HubSpot] 連絡先が見つかりませんでした: email=${email}`);
       return null;
     } catch (error: any) {
-      console.error('HubSpot連絡先検索エラー:', error?.message || error);
+      console.error('[HubSpot] 連絡先検索エラー:', {
+        email,
+        error: error?.message || error,
+        stack: error?.stack
+      });
       return null;
     }
   }
@@ -126,6 +153,7 @@ export class HubSpotClient {
    * 新しい連絡先を作成
    */
   private async createContact(contact: HubSpotContact): Promise<HubSpotCreateContactResponse> {
+    console.log(`[HubSpot] 連絡先作成API呼び出し: email=${contact.email}, propertiesCount=${Object.keys(contact).length}`);
     const response = await fetch(
       `${this.baseUrl}/crm/v3/objects/contacts`,
       {
@@ -140,6 +168,8 @@ export class HubSpotClient {
       }
     );
 
+    console.log(`[HubSpot] 作成APIレスポンス: status=${response.status}, ok=${response.ok}`);
+
     if (!response.ok) {
       const errorData: HubSpotError = await response.json().catch(() => ({
         status: 'ERROR',
@@ -147,16 +177,20 @@ export class HubSpotClient {
         correlationId: '',
         category: 'UNKNOWN',
       }));
+      console.error(`[HubSpot] 作成APIエラー: status=${response.status}, error=${JSON.stringify(errorData)}`);
       throw new Error(`HubSpot連絡先作成エラー: ${response.status} - ${errorData.message}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log(`[HubSpot] 連絡先作成成功: contactId=${result.id}`);
+    return result;
   }
 
   /**
    * 既存の連絡先を更新
    */
   private async updateContact(contactId: string, contact: HubSpotContact): Promise<HubSpotUpdateContactResponse> {
+    console.log(`[HubSpot] 連絡先更新API呼び出し: contactId=${contactId}, email=${contact.email}, propertiesCount=${Object.keys(contact).length}`);
     const response = await fetch(
       `${this.baseUrl}/crm/v3/objects/contacts/${contactId}`,
       {
@@ -171,6 +205,8 @@ export class HubSpotClient {
       }
     );
 
+    console.log(`[HubSpot] 更新APIレスポンス: status=${response.status}, ok=${response.ok}`);
+
     if (!response.ok) {
       const errorData: HubSpotError = await response.json().catch(() => ({
         status: 'ERROR',
@@ -178,10 +214,13 @@ export class HubSpotClient {
         correlationId: '',
         category: 'UNKNOWN',
       }));
+      console.error(`[HubSpot] 更新APIエラー: status=${response.status}, error=${JSON.stringify(errorData)}`);
       throw new Error(`HubSpot連絡先更新エラー: ${response.status} - ${errorData.message}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log(`[HubSpot] 連絡先更新成功: contactId=${contactId}`);
+    return result;
   }
 
   /**
