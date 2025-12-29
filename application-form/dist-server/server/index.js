@@ -1415,8 +1415,15 @@ app.put('/api/jobseekers/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const updateData = req.body;
-        // 年齢も受け取る
-        const { full_name, date_of_birth, gender, address, phone, email, self_introduction, age } = updateData;
+        // フロントエンドから送られてくる可能性のあるフィールド名を正規化
+        const full_name = updateData.full_name || (updateData.firstName && updateData.lastName ? `${updateData.lastName} ${updateData.firstName}`.trim() : undefined);
+        const date_of_birth = updateData.date_of_birth || updateData.dateOfBirth || updateData.birthDate;
+        const gender = updateData.gender;
+        const address = updateData.address;
+        const phone = updateData.phone;
+        const email = updateData.email;
+        const self_introduction = updateData.self_introduction || updateData.selfIntroduction;
+        const age = updateData.age;
         // jobSeekersRepository.updateにageも渡す
         const { jobSeekersRepository } = await import('../integrations/postgres/jobSeekers.js');
         const updated = await jobSeekersRepository.update(id, {
@@ -1435,8 +1442,17 @@ app.put('/api/jobseekers/:id', async (req, res) => {
         res.json({ success: true, data: updated });
     }
     catch (error) {
-        console.error('/api/jobseekers/:id 更新エラー:', error);
-        res.status(500).json({ success: false, message: '求職者情報の更新に失敗しました' });
+        console.error('/api/jobseekers/:id 更新エラー:', {
+            error: error.message,
+            stack: error.stack,
+            userId: id,
+            updateData: req.body
+        });
+        res.status(500).json({
+            success: false,
+            message: '求職者情報の更新に失敗しました',
+            error: error.message
+        });
     }
 });
 // --- 管理者用：求職者削除API（registration_type対応版） ---
@@ -2779,6 +2795,17 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: '内部サーバーエラーが発生しました' });
 });
 const PORT = parseInt(process.env.PORT || '8080');
+// HubSpotプロパティのセットアップ（非同期で実行、エラーが発生してもサーバーは起動）
+(async () => {
+    try {
+        const { setupHubSpotProperties } = await import('../integrations/hubspot/setup.js');
+        await setupHubSpotProperties();
+    }
+    catch (error) {
+        console.warn('⚠️ HubSpotプロパティのセットアップに失敗しました（サーバーは起動します）:', error);
+        logger.warn('HubSpotプロパティセットアップエラー', { error: error instanceof Error ? error.message : String(error) }, undefined, 'hubspot_setup_warning');
+    }
+})();
 app.listen(PORT, '0.0.0.0', () => {
     logger.info(`サーバーがポート${PORT}で起動しました`);
     console.log(`🚀 サーバーがポート${PORT}で起動しました`);

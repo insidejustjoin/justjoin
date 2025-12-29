@@ -550,13 +550,14 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
 
           const hubspotApiKey = process.env.HUBSPOT_API_KEY;
           if (!hubspotApiKey) {
+            console.warn('[HubSpot] APIキーが設定されていません。連携をスキップします。', { userId: userIdStr, email: userEmail });
             logger.warn(
               'HubSpot連携スキップ: HUBSPOT_API_KEYが設定されていません',
               { userId: userIdStr, email: userEmail },
               undefined,
               'hubspot_warning'
             );
-            return;
+            return; // 非同期関数から抜ける
           }
           logger.info(
             'HubSpot: APIキー確認完了',
@@ -619,6 +620,7 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
             );
           }
         } else {
+          console.warn('[HubSpot] メールアドレスが見つかりません。連携をスキップします。', { userId: userIdStr, queryResult: userEmailResult.rows.length });
           logger.warn(
             'HubSpot連携スキップ: メールアドレスが見つかりません',
             { userId: userIdStr, queryResult: userEmailResult.rows.length },

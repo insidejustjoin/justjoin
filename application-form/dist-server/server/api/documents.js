@@ -442,6 +442,78 @@ router.post('/', async (req, res) => {
                 completionRate = calculateCompletionRate(normalizedData, normalizedRegistrationType);
             }
             await upsertJobSeekerProfile(userIdStr, normalizedRegistrationType, completionRate, normalizedData);
+            // HubSpot連携（非同期で実行、エラーが発生しても処理を続行）
+            // 注意: この処理は非同期で実行されるため、エラーが発生してもレスポンスは返される
+            (async () => {
+                try {
+                    console.log('[HubSpot] 連携処理開始（非同期）', { userId: userIdStr, registrationType: normalizedRegistrationType });
+                    logger.info('HubSpot連携処理開始', { userId: userIdStr, registrationType: normalizedRegistrationType }, undefined, 'hubspot_init');
+                    const { HubSpotClient } = await import('../../integrations/hubspot/client.js');
+                    const { mapDocumentDataToHubSpot } = await import('../../integrations/hubspot/mapper.js');
+                    // ユーザーのメールアドレスを取得
+                    logger.info('HubSpot: メールアドレス取得開始', { userId: userIdStr }, undefined, 'hubspot_email_lookup');
+                    const userEmailResult = await query('SELECT email FROM users WHERE id = $1 LIMIT 1', [userIdStr]);
+                    if (userEmailResult.rows.length > 0 && userEmailResult.rows[0].email) {
+                        const userEmail = userEmailResult.rows[0].email;
+                        logger.info('HubSpot: メールアドレス取得成功', { userId: userIdStr, email: userEmail }, undefined, 'hubspot_email_found');
+                        const hubspotApiKey = process.env.HUBSPOT_API_KEY;
+                        if (!hubspotApiKey) {
+                            console.warn('[HubSpot] APIキーが設定されていません。連携をスキップします。', { userId: userIdStr, email: userEmail });
+                            logger.warn('HubSpot連携スキップ: HUBSPOT_API_KEYが設定されていません', { userId: userIdStr, email: userEmail }, undefined, 'hubspot_warning');
+                            return; // 非同期関数から抜ける
+                        }
+                        logger.info('HubSpot: APIキー確認完了', { userId: userIdStr, email: userEmail, apiKeyLength: hubspotApiKey.length }, undefined, 'hubspot_api_key_ok');
+                        const hubspotClient = new HubSpotClient(hubspotApiKey);
+                        logger.info('HubSpot: プロパティマッピング開始', { userId: userIdStr, email: userEmail }, undefined, 'hubspot_mapping_start');
+                        const hubspotProperties = mapDocumentDataToHubSpot(normalizedData, userEmail, normalizedRegistrationType);
+                        logger.info('HubSpot連携開始', {
+                            userId: userIdStr,
+                            email: userEmail,
+                            registrationType: normalizedRegistrationType,
+                            propertiesCount: Object.keys(hubspotProperties).length,
+                            properties: Object.keys(hubspotProperties),
+                            sampleProperties: Object.fromEntries(Object.entries(hubspotProperties).slice(0, 10))
+                        }, undefined, 'hubspot_start');
+                        logger.info('HubSpot: createOrUpdateContact呼び出し開始', { userId: userIdStr, email: userEmail }, undefined, 'hubspot_api_call_start');
+                        const hubspotResult = await hubspotClient.createOrUpdateContact(hubspotProperties);
+                        if (hubspotResult) {
+                            logger.info('HubSpot連携成功', {
+                                userId: userIdStr,
+                                email: userEmail,
+                                registrationType: normalizedRegistrationType,
+                                contactId: hubspotResult.id,
+                                resultType: 'id' in hubspotResult ? 'update' : 'create'
+                            }, undefined, 'hubspot_success');
+                        }
+                        else {
+                            logger.warn('HubSpot連携失敗: 結果が返されませんでした', { userId: userIdStr, email: userEmail }, undefined, 'hubspot_warning');
+                        }
+                    }
+                    else {
+                        logger.warn('HubSpot連携スキップ: メールアドレスが見つかりません', { userId: userIdStr, queryResult: userEmailResult.rows.length }, undefined, 'hubspot_warning');
+                    }
+                }
+                catch (hubspotError) {
+                    // HubSpot連携エラーはログに記録するが、処理は続行
+                    const errorDetails = {
+                        message: hubspotError?.message || String(hubspotError),
+                        stack: hubspotError?.stack,
+                        name: hubspotError?.name,
+                        code: hubspotError?.code,
+                        response: hubspotError?.response ? {
+                            status: hubspotError.response.status,
+                            statusText: hubspotError.response.statusText,
+                            data: hubspotError.response.data
+                        } : undefined
+                    };
+                    logger.error('HubSpot連携エラー', {
+                        userId: userIdStr,
+                        error: errorDetails,
+                        registrationType: normalizedRegistrationType
+                    }, undefined, 'hubspot_error');
+                    console.error('[HubSpot] 連携エラー（処理は続行）:', errorDetails);
+                }
+            })(); // 非同期関数を即座に実行（レスポンスをブロックしない）
             logger.info('書類保存成功（データベース）', { userId: userIdStr, documentType, completionRate, registrationType: normalizedRegistrationType }, undefined, 'api_success');
         }
         catch (dbError) {
