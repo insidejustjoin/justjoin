@@ -1597,7 +1597,7 @@ app.put('/api/jobseekers/:id', async (req, res) => {
     const self_introduction = updateData.self_introduction || updateData.selfIntroduction;
     const age = updateData.age;
     
-    // jobSeekersRepository.updateにageも渡す
+    // jobSeekersRepository.updateに渡す（emailはjob_seekersテーブルには保存しない）
     const { jobSeekersRepository } = await import('../integrations/postgres/jobSeekers.js');
     const updated = await jobSeekersRepository.update(id, {
       full_name,
@@ -1605,9 +1605,9 @@ app.put('/api/jobseekers/:id', async (req, res) => {
       gender,
       address,
       phone,
-      email,
+      // emailはjob_seekersテーブルには保存しない（usersテーブルに保存される）
       self_introduction,
-      age // 追加
+      age // ageカラムが存在しない場合は無視される
     });
     if (!updated) {
       return res.status(404).json({ success: false, message: '求職者が見つかりません' });

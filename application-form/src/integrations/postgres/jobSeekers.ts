@@ -130,26 +130,68 @@ export const jobSeekersRepository = {
     }
 
     const { query } = await import('./client.js');
-    const result = await query(`
-      UPDATE job_seekers SET
-        full_name = COALESCE($2, full_name),
-        date_of_birth = COALESCE($3, date_of_birth),
-        gender = COALESCE($4, gender),
-        phone = COALESCE($5, phone),
-        address = COALESCE($6, address),
-        nationality = COALESCE($7, nationality),
-        desired_job_title = COALESCE($8, desired_job_title),
-        experience_years = COALESCE($9, experience_years),
-        skills = COALESCE($10, skills),
-        self_introduction = COALESCE($11, self_introduction),
-        age = COALESCE($12, age)
-      WHERE user_id = $1
-      RETURNING *
-    `, [
-      userId, data.full_name, data.date_of_birth, data.gender,
-      data.phone, data.address, data.nationality, data.desired_job_title,
-      data.experience_years, data.skills, data.self_introduction, data.age
-    ]);
+    
+    // ageカラムが存在するか確認してから更新
+    // まず、ageカラムの存在を確認（エラーを避けるため）
+    let hasAgeColumn = false;
+    try {
+      const checkResult = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'job_seekers' AND column_name = 'age'
+      `);
+      hasAgeColumn = checkResult.rows.length > 0;
+    } catch (e) {
+      // カラムチェックに失敗した場合はageカラムなしとみなす
+      hasAgeColumn = false;
+    }
+    
+    // ageカラムがある場合とない場合でSQLを分ける
+    if (hasAgeColumn) {
+      const result = await query(`
+        UPDATE job_seekers SET
+          full_name = COALESCE($2, full_name),
+          date_of_birth = COALESCE($3, date_of_birth),
+          gender = COALESCE($4, gender),
+          phone = COALESCE($5, phone),
+          address = COALESCE($6, address),
+          nationality = COALESCE($7, nationality),
+          desired_job_title = COALESCE($8, desired_job_title),
+          experience_years = COALESCE($9, experience_years),
+          skills = COALESCE($10, skills),
+          self_introduction = COALESCE($11, self_introduction),
+          age = COALESCE($12, age)
+        WHERE user_id = $1
+        RETURNING *
+      `, [
+        userId, data.full_name, data.date_of_birth, data.gender,
+        data.phone, data.address, data.nationality, data.desired_job_title,
+        data.experience_years, data.skills, data.self_introduction, data.age
+      ]);
+      return result.rows[0] || null;
+    } else {
+      // ageカラムがない場合はageを除外
+      const result = await query(`
+        UPDATE job_seekers SET
+          full_name = COALESCE($2, full_name),
+          date_of_birth = COALESCE($3, date_of_birth),
+          gender = COALESCE($4, gender),
+          phone = COALESCE($5, phone),
+          address = COALESCE($6, address),
+          nationality = COALESCE($7, nationality),
+          desired_job_title = COALESCE($8, desired_job_title),
+          experience_years = COALESCE($9, experience_years),
+          skills = COALESCE($10, skills),
+          self_introduction = COALESCE($11, self_introduction)
+        WHERE user_id = $1
+        RETURNING *
+      `, [
+        userId, data.full_name, data.date_of_birth, data.gender,
+        data.phone, data.address, data.nationality, data.desired_job_title,
+        data.experience_years, data.skills, data.self_introduction
+      ]);
+      return result.rows[0] || null;
+    }
     
     return result.rows[0] || null;
   },
