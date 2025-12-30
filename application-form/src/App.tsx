@@ -51,6 +51,7 @@ import { Settings } from "./pages/Settings";
 import ForgotPassword from "./pages/ForgotPassword";
 import JobSeekerForgotPassword from "./pages/JobSeekerForgotPassword";
 import CompanyForgotPassword from "./pages/CompanyForgotPassword";
+import { GoogleAuthCallback } from "./pages/GoogleAuthCallback";
 
 import Documents from "./pages/Documents";
 import DocumentsEngineer from "./pages/DocumentsEngineer";
@@ -97,6 +98,8 @@ function App() {
               {/* メール本人確認 */}
               <Route path="/register/verify/:token" element={<EmailVerificationPage />} />
               <Route path="/jobseeker/auth" element={<JobSeekerAuth />} />
+              {/* Google OAuth コールバック */}
+              <Route path="/auth/google/success" element={<GoogleAuthCallback />} />
               <Route path="/jobseeker/dashboard" element={<JobSeekerDashboard />} />
               <Route path="/jobseeker/my-page" element={
                 <AuthGuard requiredUserType="job_seeker">

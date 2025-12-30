@@ -1,3 +1,9 @@
+// 環境変数の読み込み（開発環境用）
+import dotenv from 'dotenv';
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -12,6 +18,7 @@ import interviewRoutes from './api/interview.js';
 import directRegistrationRoutes from './api/directRegistration.js';
 import emailVerificationRoutes from './api/emailVerification.js';
 import jobSeekerStatusRoutes from './api/jobSeekerStatus.js';
+import googleAuthRoutes from './api/googleAuth.js';
 
 import uploadImageRoutes from './api/uploadImage.js';
 import { generateHeadings } from './api/generateHeadings.js';
@@ -45,6 +52,8 @@ app.use('/api/interview', interviewRoutes);
 app.use('/api/register', directRegistrationRoutes);
 // メール本人確認システム
 app.use('/api/email-verification', emailVerificationRoutes);
+// Google OAuth認証
+app.use('/api/auth', googleAuthRoutes);
 
 // リマインドAPI: 書類入力率が100%未満の求職者にメール送信（登録から指定日数経過）
 app.post('/api/reminders/incomplete-documents', async (req, res) => {

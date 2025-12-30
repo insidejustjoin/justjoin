@@ -667,10 +667,10 @@ router.post('/', async (req: express.Request, res: express.Response): Promise<an
             );
           }
         } else {
-          console.warn('[HubSpot] メールアドレスが見つかりません。連携をスキップします。', { userId: userIdStr, queryResult: userEmailResult.rows.length });
+          console.warn('[HubSpot] メールアドレスが見つかりません。連携をスキップします。', { userId: userIdStr, queryResult: userResult.rows.length });
           logger.warn(
             'HubSpot連携スキップ: メールアドレスが見つかりません',
-            { userId: userIdStr, queryResult: userEmailResult.rows.length },
+            { userId: userIdStr, queryResult: userResult.rows.length },
             undefined,
             'hubspot_warning'
           );
