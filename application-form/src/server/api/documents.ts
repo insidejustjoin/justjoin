@@ -1170,9 +1170,12 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
 
     console.log('[入力率取得API] registrationTypeFilter:', registrationTypeFilter);
 
+    // registration_typeが指定されている場合は、そのタイプのレコードのみを取得
+    // 指定されていない場合は、すべてのレコードを取得（後方互換性のため）
     let sql = 'SELECT completion_rate, registration_type FROM job_seekers WHERE user_id = $1';
     const params: any[] = [userId];
     if (registrationTypeFilter) {
+      // registration_typeを厳密にフィルタリング（NULLは除外）
       sql += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${params.length + 1})`;
       params.push(registrationTypeFilter);
     }
@@ -1182,18 +1185,21 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
       params
     );
 
-    console.log('[入力率取得API] job_seekers query result:', result.rows.length, 'rows');
-
-    let completionRate: number | null = result.rows.length > 0 ? result.rows[0].completion_rate : null;
-    let recalculated = false;
-
-    if (completionRate === null || typeof completionRate !== 'number' || Number.isNaN(completionRate)) {
-      completionRate = 0;
+    console.log('[入力率取得API] job_seekers query result:', result.rows.length, 'rows', 'registrationTypeFilter:', registrationTypeFilter);
+    if (result.rows.length > 0) {
+      console.log('[入力率取得API] job_seekers rows:', result.rows.map((r: any) => ({ 
+        completion_rate: r.completion_rate, 
+        registration_type: r.registration_type 
+      })));
     }
+
+    let completionRate: number | null = null; // 常にuser_documentsから再計算する
+    let recalculated = false;
     
-    console.log('[入力率取得API] initial completionRate:', completionRate);
+    console.log('[入力率取得API] initial completionRate (will be recalculated):', completionRate);
 
     try {
+      // user_documentsから書類を取得（registration_typeで厳密にフィルタリング）
       const docParams: any[] = [userId];
       let docSql = `
         SELECT document_data, registration_type
@@ -1202,7 +1208,8 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
           AND registration_type IS NOT NULL
       `;
       if (registrationTypeFilter) {
-        docSql += ` AND registration_type IS NOT NULL AND LOWER(registration_type) = LOWER($${docParams.length + 1})`;
+        // registration_typeを厳密にフィルタリング
+        docSql += ` AND LOWER(registration_type) = LOWER($${docParams.length + 1})`;
         docParams.push(registrationTypeFilter);
       }
       docSql += ' ORDER BY updated_at DESC LIMIT 1';
@@ -1216,21 +1223,22 @@ router.get('/jobseekers/completion-rate/:userId', async (req: express.Request, r
         );
         console.log('[入力率取得API] docRegistrationType:', docRegistrationType);
         
-        const calculated = calculateCompletionRate(docResult.rows[0].document_data, docRegistrationType);
-        console.log('[入力率取得API] calculated rate:', calculated, 'current rate:', completionRate);
+        // 常にuser_documentsから再計算した値を使用
+        completionRate = calculateCompletionRate(docResult.rows[0].document_data, docRegistrationType);
+        recalculated = true;
+        console.log('[入力率取得API] calculated rate from documents:', completionRate);
         
-        if (calculated !== completionRate) {
-          completionRate = calculated;
-          recalculated = true;
-          console.log('[入力率取得API] rate updated to:', completionRate);
-        }
+        // job_seekersテーブルに保存（常に最新の計算結果を保存）
         await upsertJobSeekerProfile(String(userId), docRegistrationType, completionRate, docResult.rows[0].document_data);
       } else if (registrationTypeFilter) {
-        // ドキュメントが存在しない場合でも、レコードがなければ作成しておく
-        console.log('[入力率取得API] no document found, creating profile with rate:', completionRate);
+        // ドキュメントが存在しない場合は0%として扱う
+        completionRate = 0;
+        console.log('[入力率取得API] no document found, setting rate to 0');
         await upsertJobSeekerProfile(String(userId), registrationTypeFilter, completionRate, null);
       } else {
-        console.log('[入力率取得API] no document found and no registrationTypeFilter');
+        // registrationTypeFilterが指定されていない場合は0%
+        completionRate = 0;
+        console.log('[入力率取得API] no document found and no registrationTypeFilter, setting rate to 0');
       }
     } catch (recalcError) {
       console.warn('completion rate recalculation skipped:', recalcError);
@@ -1348,12 +1356,13 @@ router.post('/interview-token/:userId', authenticate, async (req: AuthenticatedR
   try {
     const { userId } = req.params;
     
-    // ユーザー情報を取得
+    // ユーザー情報を取得（first_nameとlast_nameも取得）
     const userQuery = `
-      SELECT u.id, u.email, js.full_name, js.desired_job_title, js.experience_years, js.skills
+      SELECT u.id, u.email, js.full_name, js.first_name, js.last_name, js.desired_job_title, js.experience_years, js.skills
       FROM users u
       LEFT JOIN job_seekers js ON u.id = js.user_id
       WHERE u.id = $1 AND u.user_type = 'job_seeker'
+      LIMIT 1
     `;
     
     const userResult = await query(userQuery, [userId]);
@@ -1368,7 +1377,20 @@ router.post('/interview-token/:userId', authenticate, async (req: AuthenticatedR
 
     const user = userResult.rows[0];
     
+    // full_nameを構築（first_nameとlast_nameから、または既存のfull_nameから）
+    let fullName = user.full_name;
+    if (!fullName && user.first_name && user.last_name) {
+      fullName = `${user.last_name} ${user.first_name}`.trim();
+    } else if (!fullName && user.first_name) {
+      fullName = user.first_name;
+    } else if (!fullName && user.last_name) {
+      fullName = user.last_name;
+    } else if (!fullName) {
+      fullName = user.email || '求職者';
+    }
+    
     // 既に面接を受けているかチェック（テーブルが存在しない場合はスキップ）
+    // userIdはUUID形式
     let isInterviewAlreadyTaken = false;
     try {
       const urlCheckQuery = `
@@ -1420,36 +1442,47 @@ router.post('/interview-token/:userId', authenticate, async (req: AuthenticatedR
       console.error('AI面接開始通知送信エラー:', notificationError);
     }
 
-    // Base64エンコードしてトークンとして返す
-    const tokenString = Buffer.from(JSON.stringify({
+    // Base64エンコードしてトークンとして返す（UTF-8でエンコード）
+    const tokenData = {
       userId: user.id,
       email: user.email,
-      name: user.full_name,
-      position: user.desired_job_title,
+      name: fullName,
+      firstName: user.first_name || '',
+      lastName: user.last_name || '',
+      position: user.desired_job_title || '未設定',
       timestamp: Date.now()
-    })).toString('base64');
+    };
+    const tokenString = Buffer.from(JSON.stringify(tokenData), 'utf8').toString('base64');
 
     // 面接URLを生成
     const interviewUrl = `https://interview.justjoin.jp?token=${tokenString}`;
 
     // 面接URLをデータベースに保存（テーブルが存在しない場合はスキップ）
     try {
-      // まず既存のレコードを確認
+      // まず既存のレコードを確認（is_usedの状態も含める）
       const checkExistingQuery = `
-        SELECT id FROM interview_urls WHERE user_id = $1 LIMIT 1
+        SELECT id, is_used FROM interview_urls WHERE user_id = $1 LIMIT 1
       `;
       const existingResult = await query(checkExistingQuery, [user.id]);
       
       if (existingResult.rows.length > 0) {
-        // 既存レコードを更新
+        const existingRecord = existingResult.rows[0];
+        // 既に面接が完了している場合は、新しいトークンを生成しない（上のチェックで既にエラーを返しているが、念のため）
+        if (existingRecord.is_used) {
+          return res.status(400).json({
+            success: false,
+            error: 'INTERVIEW_ALREADY_TAKEN',
+            message: '面接は1度しかできません'
+          });
+        }
+        // 既存レコードが存在し、is_used = FALSEの場合のみ更新（新しいトークンで上書き）
         const updateUrlQuery = `
           UPDATE interview_urls 
           SET interview_token = $1,
               interview_url = $2,
               expires_at = NULL,
-              is_used = FALSE,
               updated_at = NOW()
-          WHERE user_id = $3
+          WHERE user_id = $3 AND is_used = FALSE
         `;
         await query(updateUrlQuery, [tokenString, interviewUrl, user.id]);
       } else {
@@ -1501,9 +1534,9 @@ router.post('/interview-token/:userId', authenticate, async (req: AuthenticatedR
         token: tokenString,
         interviewUrl: interviewUrl,
         userData: {
-          name: user.full_name,
+          name: fullName,
           email: user.email,
-          position: user.desired_job_title
+          position: user.desired_job_title || '未設定'
         }
       }
     });
@@ -1682,7 +1715,8 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
     const { sessionId, duration, questionsAnswered } = req.body;
     
     // セッションIDからユーザーIDを検証（セキュリティのため、最優先）
-    let verifiedUserId: number | null = null;
+    // user_idはUUID形式なので、string | null型
+    let verifiedUserId: string | null = null;
     
     if (sessionId) {
       try {
@@ -1700,8 +1734,9 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
         const sessionResult = await query(sessionQuery, [sessionId]);
         
         if (sessionResult.rows.length > 0 && sessionResult.rows[0].user_id) {
-          verifiedUserId = parseInt(sessionResult.rows[0].user_id, 10);
-          console.log('セッションIDからユーザーIDを取得:', { sessionId, verifiedUserId });
+          // user_idはUUID形式なので、そのまま使用（parseIntしない）
+          verifiedUserId = sessionResult.rows[0].user_id;
+          console.log('セッションIDからユーザーIDを取得:', { sessionId, verifiedUserId, type: typeof verifiedUserId });
         } else {
           console.warn('セッションIDからユーザーIDを取得できませんでした:', { sessionId, rows: sessionResult.rows });
         }
@@ -1711,7 +1746,8 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
     }
     
     // 認証トークンがある場合は、それを使用してuserIdを検証
-    let authenticatedUserId: number | null = null;
+    // user_idはUUID形式なので、string | null型
+    let authenticatedUserId: string | null = null;
     try {
       const token = req.headers.authorization?.replace('Bearer ', '');
       if (token) {
@@ -1719,7 +1755,8 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'justjoin-jwt-secret-2024');
         authenticatedUserId = decoded.userId || decoded.id;
         if (authenticatedUserId) {
-          authenticatedUserId = parseInt(authenticatedUserId.toString(), 10);
+          // UUID形式の場合はそのまま使用、数値の場合は文字列に変換
+          authenticatedUserId = String(authenticatedUserId);
         }
       }
     } catch (authError) {
@@ -1728,19 +1765,21 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
     }
     
     // 使用するuserIdを決定（セッションID検証 > 認証 > パラメータ）
-    // パラメータのuserIdがUUID形式の場合は無視
-    let paramUserId: number | null = null;
-    if (userId && !userId.includes('-')) {
-      // UUID形式でない場合のみパースを試みる
-      paramUserId = parseInt(userId, 10);
-      if (isNaN(paramUserId)) {
-        paramUserId = null;
+    // usersテーブルのidはUUID形式
+    let paramUserId: string | null = null;
+    if (userId) {
+      // UUID形式かどうかをチェック
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(userId)) {
+        // UUID形式の場合はそのまま使用
+        paramUserId = userId;
       }
     }
     
-    const finalUserId = verifiedUserId || authenticatedUserId || paramUserId;
+    // finalUserIdは文字列（UUID形式）
+    const finalUserId: string | null = verifiedUserId || authenticatedUserId || paramUserId;
     
-    if (!finalUserId || isNaN(finalUserId)) {
+    if (!finalUserId) {
       console.error('ユーザーIDが無効:', { 
         sessionId, 
         verifiedUserId, 
@@ -1763,23 +1802,33 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
       authMethod: authenticatedUserId ? 'token' : (verifiedUserId ? 'session' : 'param')
     });
     
-    // 面接URLを使用済みに設定
-    const updateUrlQuery = `
-      UPDATE interview_urls 
-      SET is_used = TRUE, updated_at = NOW()
-      WHERE user_id = $1 AND is_used = FALSE
-    `;
-    
-    await query(updateUrlQuery, [finalUserId.toString()]);
+    // 面接URLを使用済みに設定（user_idはUUID形式）
+    try {
+      const updateUrlQuery = `
+        UPDATE interview_urls 
+        SET is_used = TRUE, updated_at = NOW()
+        WHERE user_id = $1 AND (is_used IS NULL OR is_used = FALSE)
+      `;
+      
+      const updateResult = await query(updateUrlQuery, [finalUserId]);
+      console.log('面接URL更新結果:', { userId: finalUserId, rowCount: updateResult.rowCount });
+    } catch (updateError: any) {
+      console.error('面接URL更新エラー:', updateError);
+      // エラーが発生しても続行（テーブルが存在しない可能性があるため）
+    }
     
     // 面接受験回数を更新（完了時）
-    const updateAttemptsQuery = `
-      UPDATE interview_attempts 
-      SET last_attempt_at = NOW(), updated_at = NOW()
-      WHERE user_id = $1
-    `;
-    
-    await query(updateAttemptsQuery, [finalUserId.toString()]);
+    // 注意: interview_attemptsテーブルは現在使用していないため、スキップ
+    // try {
+    //   const updateAttemptsQuery = `
+    //     UPDATE interview_attempts 
+    //     SET last_attempt_at = NOW(), updated_at = NOW()
+    //     WHERE user_id = $1
+    //   `;
+    //   await query(updateAttemptsQuery, [finalUserId]);
+    // } catch (attemptsError: any) {
+    //   console.error('面接受験回数更新エラー:', attemptsError);
+    // }
     
     // 面接完了通知を送信（重複防止付き）
     try {
@@ -1789,7 +1838,7 @@ router.post('/interview-completed/:userId', async (req: express.Request, res: ex
       const registrationType = jobSeekerQuery.rows[0]?.registration_type || null;
       
       await sendNotificationToUser(
-        finalUserId.toString(),
+        String(finalUserId),
         'AI面接が完了しました！',
         `AI面接が完了しました！結果は管理者に送信されました。`,
         'success',
@@ -1923,7 +1972,7 @@ router.post('/interview-start/:token', async (req: express.Request, res: express
       });
     }
     
-    // 面接が既に完了しているかチェック
+    // 面接が既に完了しているかチェック（userIdはUUID形式）
     if (decodedToken?.userId) {
       try {
         const urlCheckQuery = `
@@ -2031,7 +2080,10 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req: Auth
     
     try {
       // まずuser_idで直接取得を試みる
-      const recordingsByUserIdQuery = `
+      // 注意: usersテーブルのidはUUID形式、interview_recordingsテーブルのuser_idはINTEGER型またはUUID型の可能性がある
+      // UUID形式の場合は文字列として、INTEGER型の場合は数値として試す
+      // まず文字列（UUID）として試す
+      let recordingsByUserIdQuery = `
         SELECT 
           ir.id,
           ir.session_id,
@@ -2042,20 +2094,34 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req: Auth
           ir.file_size,
           ir.duration,
           ir.storage_path,
+          ir.question_id,
+          ir.transcription_text,
           ir.created_at,
           isess.status as session_status,
           isess.completed_at as session_completed_at
         FROM interview_recordings ir
         LEFT JOIN interview_sessions isess ON ir.session_id = isess.id
-        WHERE ir.user_id = $1::text
-        ORDER BY ir.created_at DESC
+        WHERE ir.user_id::text = $1
+        ORDER BY ir.question_id ASC NULLS LAST, ir.created_at DESC
       `;
       
-      const recordingsByUserIdResult = await query(recordingsByUserIdQuery, [userId]);
-      recordings = recordingsByUserIdResult.rows;
+      try {
+        const recordingsByUserIdResult = await query(recordingsByUserIdQuery, [userId]);
+        recordings = recordingsByUserIdResult.rows;
+        console.log(`✅ user_id (${userId}) で ${recordings.length} 件の録音を取得しました`);
+      } catch (userIdQueryError: any) {
+        // エラーの詳細をログに記録
+        console.warn('user_idでの録音取得に失敗、email経由で試します:', {
+          userId,
+          error: userIdQueryError.message,
+          stack: userIdQueryError.stack
+        });
+        recordings = [];
+      }
       
       // user_idで見つからない場合、email経由で取得を試みる
       if (recordings.length === 0) {
+        console.log(`🔍 user_id (${userId}) で録音が見つからなかったため、email (${userEmail}) 経由で検索します`);
         const recordingsByEmailQuery = `
           SELECT 
             ir.id,
@@ -2067,27 +2133,48 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req: Auth
             ir.file_size,
             ir.duration,
             ir.storage_path,
+            ir.question_id,
+            ir.transcription_text,
             ir.created_at,
             isess.status as session_status,
-            isess.completed_at as session_completed_at
+            isess.completed_at as session_completed_at,
+            ia.email as applicant_email
           FROM interview_recordings ir
           INNER JOIN interview_sessions isess ON ir.session_id = isess.id
           INNER JOIN interview_applicants ia ON isess.applicant_id = ia.id
           WHERE ia.email = $1
-          ORDER BY ir.created_at DESC
+          ORDER BY ir.question_id ASC, ir.created_at DESC
         `;
         
-        const recordingsByEmailResult = await query(recordingsByEmailQuery, [userEmail]);
-        recordings = recordingsByEmailResult.rows;
+        try {
+          const recordingsByEmailResult = await query(recordingsByEmailQuery, [userEmail]);
+          recordings = recordingsByEmailResult.rows;
+          console.log(`✅ email (${userEmail}) で ${recordings.length} 件の録音を取得しました`);
+          if (recordings.length > 0) {
+            console.log('📋 取得した録音のuser_id:', recordings.map(r => r.user_id));
+            console.log('📋 取得した録音のapplicant_email:', recordings.map(r => r.applicant_email));
+          }
+        } catch (emailQueryError: any) {
+          console.error('❌ email経由の録音取得エラー:', {
+            error: emailQueryError.message,
+            stack: emailQueryError.stack,
+            userEmail
+          });
+        }
       }
     } catch (dbError: any) {
       // テーブルが存在しない場合やエラーが発生した場合
-      console.warn('録音情報取得エラー:', dbError.message);
+      console.error('録音情報取得エラー:', {
+        message: dbError.message,
+        stack: dbError.stack,
+        userId,
+        userEmail
+      });
       // エラーを返さず、空の配列を返す
       recordings = [];
     }
     
-    // 録音ファイルのダウンロードURLを生成
+    // 録音ファイルのダウンロードURLを生成（コンポーネントが期待するスネークケース形式で返す）
     const recordingsWithUrls = recordings.map(recording => {
       let downloadUrl = null;
       
@@ -2100,19 +2187,22 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req: Auth
       }
       
       return {
-        id: recording.id,
-        sessionId: recording.session_id,
-        applicantId: recording.applicant_id,
-        userId: recording.user_id,
-        recordingUrl: downloadUrl,
-        recordingType: recording.recording_type || 'audio',
-        fileSize: recording.file_size,
-        duration: recording.duration,
-        createdAt: recording.created_at,
-        sessionStatus: recording.session_status,
-        sessionCompletedAt: recording.session_completed_at
+        id: recording.id.toString(),
+        session_id: recording.session_id,
+        recording_url: downloadUrl,
+        recording_type: recording.recording_type || 'audio',
+        file_size: recording.file_size || 0,
+        duration: recording.duration || undefined,
+        question_id: recording.question_id || undefined,
+        transcription_text: recording.transcription_text || undefined,
+        created_at: recording.created_at,
+        session_status: recording.session_status || 'completed',
+        started_at: recording.session_completed_at ? undefined : recording.created_at,
+        completed_at: recording.session_completed_at || undefined
       };
     });
+    
+    console.log(`✅ 録音情報取得完了: ${recordingsWithUrls.length}件 (userId: ${userId}, email: ${userEmail})`);
     
     res.json({
       success: true,
@@ -2123,7 +2213,11 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req: Auth
     });
     
   } catch (error) {
-    console.error('録音情報取得エラー:', error);
+    console.error('録音情報取得エラー:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.params.userId
+    });
     res.status(500).json({
       success: false,
       error: 'INTERNAL_ERROR',
@@ -2190,6 +2284,65 @@ router.get('/admin/interview-recording/:recordingId', authenticate, async (req: 
       });
     }
     
+    // Cloud Storage URLの場合（https://storage.googleapis.com/...）
+    if (filePath.startsWith('https://storage.googleapis.com/') || filePath.startsWith('gs://')) {
+      try {
+        const { Storage } = await import('@google-cloud/storage');
+        const storage = new Storage({
+          projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'justjoin-platform',
+        });
+        const bucketName = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || 'justjoin-platform-match-job-documents';
+        
+        // URLからファイルパスを抽出
+        let gcsFilePath = filePath;
+        if (filePath.startsWith('https://storage.googleapis.com/')) {
+          const urlParts = filePath.replace('https://storage.googleapis.com/', '').split('/');
+          // バケット名は環境変数から取得するため、URLからはファイルパスのみ抽出
+          gcsFilePath = urlParts.slice(1).join('/');
+        } else if (filePath.startsWith('gs://')) {
+          const urlParts = filePath.replace('gs://', '').split('/');
+          // バケット名は環境変数から取得するため、URLからはファイルパスのみ抽出
+          gcsFilePath = urlParts.slice(1).join('/');
+        }
+        
+        const bucket = storage.bucket(bucketName);
+        const file = bucket.file(gcsFilePath);
+        
+        // ファイルの存在確認
+        const [exists] = await file.exists();
+        if (!exists) {
+          return res.status(404).json({
+            success: false,
+            error: 'FILE_NOT_FOUND',
+            message: '録音ファイルがCloud Storageに見つかりません'
+          });
+        }
+        
+        // ファイルのメタデータを取得
+        const [metadata] = await file.getMetadata();
+        
+        // ファイルをダウンロードしてストリームで送信
+        const fileStream = file.createReadStream();
+        
+        res.setHeader('Content-Type', recording.recording_type === 'video' ? 'video/webm' : 'audio/webm');
+        res.setHeader('Content-Length', metadata.size);
+        res.setHeader('Content-Disposition', `attachment; filename="${path.basename(gcsFilePath)}"`);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        
+        fileStream.pipe(res);
+        return;
+      } catch (gcsError) {
+        console.error('Cloud Storageからのファイル取得エラー:', gcsError);
+        return res.status(500).json({
+          success: false,
+          error: 'STORAGE_ERROR',
+          message: 'Cloud Storageからのファイル取得に失敗しました',
+          details: gcsError instanceof Error ? gcsError.message : 'Unknown error'
+        });
+      }
+    }
+    
+    // ローカルファイルパスの場合（従来の処理）
     // ファイルパスが相対パスの場合、絶対パスに変換
     // 面接システムのuploads/recordingsディレクトリを参照
     if (!path.isAbsolute(filePath)) {
@@ -2395,7 +2548,7 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
     }
 
     const { id } = req.params;
-    const { interviewEnabled } = req.body;
+    const { interviewEnabled, registrationType } = req.body;
     
     if (typeof interviewEnabled !== 'boolean') {
       return res.status(400).json({
@@ -2404,16 +2557,65 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
       });
     }
 
-    // 求職者の面接表示設定を更新（user_idでも動作するように修正）
+    // 求職者の面接表示設定を更新
     // idはjob_seekers.idまたはuser_idの可能性がある
-    const updateQuery = `
-      UPDATE job_seekers 
-      SET interview_enabled = $1, updated_at = NOW()
-      WHERE id = $2 OR user_id = $2
-      RETURNING id, user_id, interview_enabled
-    `;
+    // registrationTypeが指定されている場合は、それも条件に含める
+    let updateQuery: string;
+    let params: any[];
     
-    const result = await query(updateQuery, [interviewEnabled, id]);
+    if (registrationType) {
+      // registration_typeも条件に含める（複数の登録タイプがある場合に対応）
+      // idがUUID形式かどうかをチェック
+      if (id.includes('-')) {
+        // UUID形式の場合（user_idとして扱う）
+        updateQuery = `
+          UPDATE job_seekers 
+          SET interview_enabled = $1, updated_at = NOW()
+          WHERE user_id::text = $2::text
+            AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
+          RETURNING id, user_id, registration_type, interview_enabled
+        `;
+        params = [interviewEnabled, id, registrationType];
+      } else {
+        // 数値IDの場合（job_seekers.idとして扱う可能性もある）
+        updateQuery = `
+          UPDATE job_seekers 
+          SET interview_enabled = $1, updated_at = NOW()
+          WHERE (id = $2::integer OR user_id::text = $2::text)
+            AND LOWER(COALESCE(registration_type, 'engineer')) = LOWER($3)
+          RETURNING id, user_id, registration_type, interview_enabled
+        `;
+        params = [interviewEnabled, id, registrationType];
+      }
+    } else {
+      // registration_typeが指定されていない場合は、idまたはuser_idで更新
+      // より確実にするため、idがUUID形式の場合はuser_idで検索
+      if (id.includes('-')) {
+        // UUID形式の場合（user_idとして扱う）
+        updateQuery = `
+          UPDATE job_seekers 
+          SET interview_enabled = $1, updated_at = NOW()
+          WHERE user_id::text = $2::text
+          RETURNING id, user_id, registration_type, interview_enabled
+          LIMIT 1
+        `;
+        params = [interviewEnabled, id];
+      } else {
+        // 数値IDの場合
+        updateQuery = `
+          UPDATE job_seekers 
+          SET interview_enabled = $1, updated_at = NOW()
+          WHERE id = $2::integer OR user_id::text = $2::text
+          RETURNING id, user_id, registration_type, interview_enabled
+          LIMIT 1
+        `;
+        params = [interviewEnabled, id];
+      }
+    }
+    
+    console.log('面接表示設定更新:', { id, interviewEnabled, registrationType, query: updateQuery });
+    
+    const result = await query(updateQuery, params);
     
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -2422,20 +2624,44 @@ router.put('/admin/jobseekers/:id/interview-visibility', authenticate, async (re
       });
     }
 
+    const updatedJobSeeker = result.rows[0];
+    const userIdForReset = updatedJobSeeker.user_id;
+
+    console.log('面接表示設定更新成功:', updatedJobSeeker);
+
+    // 面接を再度有効化する場合（interviewEnabled = true）、interview_urlsテーブルのis_usedをfalseにリセット
+    if (interviewEnabled === true && userIdForReset) {
+      try {
+        const resetInterviewUrlQuery = `
+          UPDATE interview_urls
+          SET is_used = FALSE, updated_at = NOW()
+          WHERE user_id = $1
+        `;
+        await query(resetInterviewUrlQuery, [userIdForReset]);
+        console.log('面接URLのis_usedをリセットしました:', { userId: userIdForReset });
+      } catch (dbError: any) {
+        // テーブルが存在しない場合は警告を出して続行
+        console.warn('interview_urlsテーブルのリセットエラー（テーブルが存在しない可能性）:', dbError.message);
+      }
+    }
+
     res.json({
       success: true,
       data: {
-        id: result.rows[0].id,
-        interviewEnabled: result.rows[0].interview_enabled
+        id: updatedJobSeeker.id,
+        userId: updatedJobSeeker.user_id,
+        registrationType: updatedJobSeeker.registration_type,
+        interviewEnabled: updatedJobSeeker.interview_enabled
       },
-      message: `面接表示設定を${interviewEnabled ? '有効' : '無効'}にしました`
+      message: `面接表示設定を${interviewEnabled ? '有効' : '無効'}にしました${interviewEnabled ? '（面接を再度受験可能にリセットしました）' : ''}`
     });
 
   } catch (error) {
     console.error('面接表示設定更新エラー:', error);
     res.status(500).json({
       success: false,
-      error: '面接表示設定の更新に失敗しました'
+      error: '面接表示設定の更新に失敗しました',
+      details: error instanceof Error ? error.message : String(error)
     });
   }
 });

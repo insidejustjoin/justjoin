@@ -5,6 +5,7 @@ import { QuestionService } from '../services/questionService.js';
 import textToSpeechService from '../services/textToSpeechService.js';
 import openaiTtsService from '../services/openaiTtsService.js';
 import voicevoxService from '../services/voicevoxService.js';
+import { uploadRecordingToGCS } from '../services/storageService.js';
 import { Language, InterviewStatus, Answer } from '../../src/types/interview.js';
 import multer from 'multer';
 import path from 'path';
@@ -119,7 +120,7 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
       });
     }
 
-    const { sessionId, type } = req.body;
+    const { sessionId, type, questionId, transcriptionText } = req.body;
     
     if (!sessionId || !type) {
       console.error('録音アップロードエラー: パラメータ不足', { sessionId, type });
@@ -131,10 +132,13 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
     }
 
     // ファイル情報をログ出力
-    const filename = `${sessionId}_${type}_${Date.now()}.webm`;
+    const filename = questionId 
+      ? `${sessionId}_${questionId}_${type}_${Date.now()}.webm`
+      : `${sessionId}_${type}_${Date.now()}.webm`;
     console.log('録音アップロード処理開始:', {
       sessionId,
       type,
+      questionId,
       filename,
       originalname: req.file.originalname,
       size: req.file.size,
@@ -142,24 +146,52 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
       bufferSize: req.file.buffer?.length || 0
     });
 
-    // Cloud Runでは一時的なファイルシステムを使用するため、
-    // ファイルはメモリに保存され、データベースにはURLのみ保存
-    // 実際のファイルはCloud Storageに保存するか、一時的に保持
-    const recordingUrl = `/uploads/recordings/${filename}`;
-
-    // データベースに録音情報を保存
+    // Cloud Storageに録音ファイルをアップロード
+    let recordingUrl = '';
+    let storagePath = '';
     try {
-      console.log('録音情報をデータベースに保存中...');
-      await databaseService.saveRecordingInfo({
-        sessionId,
-        type,
-        filename: filename,
-        filepath: recordingUrl, // Cloud RunではパスではなくURLを使用
-        filesize: req.file.size,
-        mimetype: req.file.mimetype,
-        uploadedAt: new Date()
+      if (!req.file.buffer) {
+        throw new Error('ファイルバッファが存在しません');
+      }
+      const gcsUrl = await uploadRecordingToGCS(
+        req.file.buffer,
+        filename,
+        req.file.mimetype
+      );
+      storagePath = gcsUrl;
+      recordingUrl = gcsUrl;
+      console.log('✅ 録音ファイルをCloud Storageにアップロードしました:', gcsUrl);
+    } catch (storageError) {
+      console.error('❌ Cloud Storageアップロードエラー:', storageError);
+      // Cloud Storageへの保存に失敗した場合、エラーを返す
+      return res.status(500).json({
+        success: false,
+        error: 'STORAGE_ERROR',
+        message: '録音ファイルの保存に失敗しました',
+        details: storageError instanceof Error ? storageError.message : 'Unknown error'
       });
-      console.log('✅ 録音情報のデータベース保存成功');
+    }
+
+      // データベースに録音情報を保存（質問IDと文字起こしテキストも含む）
+      try {
+        console.log('録音情報をデータベースに保存中...', {
+          sessionId,
+          questionId,
+          hasTranscription: !!transcriptionText,
+          storagePath
+        });
+        await databaseService.saveRecordingInfo({
+          sessionId,
+          type,
+          filename: filename,
+          filepath: storagePath, // Cloud StorageのURLを使用
+          filesize: req.file.size,
+          mimetype: req.file.mimetype,
+          uploadedAt: new Date(),
+          questionId: questionId || undefined,
+          transcriptionText: transcriptionText || undefined
+        });
+        console.log('✅ 録音情報のデータベース保存成功');
     } catch (dbError) {
       console.error('❌ 録音情報保存エラー:', dbError);
       // データベースエラーでもファイル保存は成功とする

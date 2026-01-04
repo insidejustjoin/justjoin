@@ -12,6 +12,8 @@ interface InterviewRecording {
   recording_type: 'video' | 'audio';
   file_size: number;
   duration?: number;
+  question_id?: string; // 質問ID（q1, q2, ..., q10）
+  transcription_text?: string; // 文字起こしテキスト
   created_at: string;
   session_id: string;
   session_status: string;
@@ -50,13 +52,17 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
 
       if (response.ok) {
         const result = await response.json();
+        console.log('📹 面接録画取得レスポンス:', result);
         if (result.success) {
+          console.log(`✅ ${result.data.recordings?.length || 0} 件の録画を取得しました`);
           setRecordings(result.data.recordings || []);
         } else {
+          console.error('❌ 録画データ取得失敗:', result.message);
           setError(result.message || '録画データの取得に失敗しました');
         }
       } else {
         const errorText = await response.text();
+        console.error(`❌ HTTP error! status: ${response.status}, message: ${errorText}`);
         setError(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
     } catch (error) {
@@ -66,6 +72,85 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
       setLoading(false);
     }
   };
+
+  // 録音を再生
+  const playRecording = async (recording: InterviewRecording) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast({
+          title: "エラー",
+          description: "認証トークンが見つかりません",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // 既に再生中の場合は停止
+      if (audioElement && playingRecording === recording.id) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+        setAudioElement(null);
+        setPlayingRecording(null);
+        return;
+      }
+      
+      // 前の再生を停止
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+      }
+      
+      const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+      
+      // Cloud Storage URLの場合は直接使用、そうでない場合はAPI経由
+      let audioUrl = recording.recording_url;
+      if (!recording.recording_url.startsWith('http')) {
+        audioUrl = `${apiUrl}/api/documents/admin/interview-recording/${recording.id}`;
+      }
+      
+      // 署名付きURLが必要な場合の処理は後で実装
+      const audio = new Audio(audioUrl);
+      audio.crossOrigin = 'anonymous';
+      
+      audio.addEventListener('ended', () => {
+        setPlayingRecording(null);
+        setAudioElement(null);
+      });
+      
+      audio.addEventListener('error', (e) => {
+        console.error('録音再生エラー:', e);
+        toast({
+          title: "エラー",
+          description: "録音の再生に失敗しました",
+          variant: "destructive",
+        });
+        setPlayingRecording(null);
+        setAudioElement(null);
+      });
+      
+      await audio.play();
+      setAudioElement(audio);
+      setPlayingRecording(recording.id);
+    } catch (error) {
+      console.error('録音再生エラー:', error);
+      toast({
+        title: "エラー",
+        description: "録音の再生に失敗しました",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // コンポーネントのアンマウント時に音声を停止
+  useEffect(() => {
+    return () => {
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+      }
+    };
+  }, [audioElement]);
 
   // 録画をダウンロード
   const downloadRecording = async (recording: InterviewRecording) => {
@@ -93,11 +178,12 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
         const a = document.createElement('a');
         a.href = url;
         
-        // ファイル名を生成
+        // ファイル名を生成（質問IDを含む）
         const date = new Date(recording.created_at).toISOString().split('T')[0];
         const time = new Date(recording.created_at).toTimeString().split(' ')[0].replace(/:/g, '-');
         const extension = recording.recording_type === 'video' ? 'webm' : 'webm';
-        const fileName = `interview_${recording.recording_type}_${date}_${time}.${extension}`;
+        const questionPrefix = recording.question_id ? `${recording.question_id}_` : '';
+        const fileName = `interview_${questionPrefix}${recording.recording_type}_${date}_${time}.${extension}`;
         
         a.download = fileName;
         document.body.appendChild(a);
@@ -246,66 +332,128 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {recordings.map((recording) => (
-            <div
-              key={recording.id}
-              className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    {recording.recording_type === 'video' ? (
-                      <Video className="h-5 w-5 text-blue-600" />
-                    ) : (
-                      <Headphones className="h-5 w-5 text-green-600" />
-                    )}
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">
-                        {recording.recording_type === 'video' ? '動画' : '音声'}
-                      </Badge>
-                      <Badge className={getStatusColor(recording.session_status)}>
-                        {getStatusLabel(recording.session_status)}
-                      </Badge>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      <span>{formatFileSize(recording.file_size)}</span>
-                    </div>
-                    {recording.duration && (
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        <span>{Math.floor(recording.duration / 60)}分{recording.duration % 60}秒</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      <span>{formatDateTime(recording.created_at)}</span>
-                    </div>
-                    {recording.started_at && (
-                      <div className="flex items-center gap-2">
-                        <Play className="h-4 w-4" />
-                        <span>開始: {formatDateTime(recording.started_at)}</span>
-                      </div>
-                    )}
-                  </div>
+        <div className="space-y-6">
+          {/* 質問ごとにグループ化 */}
+          {Object.entries(
+            recordings.reduce((acc, recording) => {
+              const questionKey = recording.question_id || 'unknown';
+              if (!acc[questionKey]) {
+                acc[questionKey] = [];
+              }
+              acc[questionKey].push(recording);
+              return acc;
+            }, {} as Record<string, InterviewRecording[]>)
+          )
+            .sort(([a], [b]) => {
+              // 質問番号でソート（q1, q2, ..., q10, unknown）
+              if (a === 'unknown') return 1;
+              if (b === 'unknown') return -1;
+              const numA = parseInt(a.replace('q', ''));
+              const numB = parseInt(b.replace('q', ''));
+              return numA - numB;
+            })
+            .map(([questionId, questionRecordings]) => (
+              <div key={questionId} className="border rounded-lg p-4">
+                <div className="mb-4 pb-3 border-b">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-blue-600" />
+                    {questionId === 'unknown' ? '質問不明' : `質問 ${questionId.replace('q', '')}`}
+                  </h3>
                 </div>
                 
-                <Button
-                  onClick={() => downloadRecording(recording)}
-                  variant="outline"
-                  size="sm"
-                  className="ml-4"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  ダウンロード
-                </Button>
+                <div className="space-y-4">
+                  {questionRecordings.map((recording) => (
+                    <div
+                      key={recording.id}
+                      className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            {recording.recording_type === 'video' ? (
+                              <Video className="h-5 w-5 text-blue-600" />
+                            ) : (
+                              <Headphones className="h-5 w-5 text-green-600" />
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">
+                                {recording.recording_type === 'video' ? '動画' : '音声'}
+                              </Badge>
+                              <Badge className={getStatusColor(recording.session_status)}>
+                                {getStatusLabel(recording.session_status)}
+                              </Badge>
+                            </div>
+                          </div>
+                          
+                          {/* 文字起こしテキストの表示 */}
+                          {recording.transcription_text && (
+                            <div className="mb-3 p-3 bg-muted rounded-md">
+                              <div className="text-sm font-medium mb-1 text-muted-foreground">文字起こしテキスト:</div>
+                              <div className="text-sm">{recording.transcription_text}</div>
+                            </div>
+                          )}
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4" />
+                              <span>{formatFileSize(recording.file_size)}</span>
+                            </div>
+                            {recording.duration && (
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                <span>{Math.floor(recording.duration / 60)}分{recording.duration % 60}秒</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              <span>{formatDateTime(recording.created_at)}</span>
+                            </div>
+                            {recording.started_at && (
+                              <div className="flex items-center gap-2">
+                                <Play className="h-4 w-4" />
+                                <span>開始: {formatDateTime(recording.started_at)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          {recording.recording_type === 'audio' && (
+                            <Button
+                              onClick={() => playRecording(recording)}
+                              variant={playingRecording === recording.id ? "secondary" : "default"}
+                              size="sm"
+                              className="flex-shrink-0"
+                            >
+                              {playingRecording === recording.id ? (
+                                <>
+                                  <Clock className="h-4 w-4 mr-2" />
+                                  停止
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-4 w-4 mr-2" />
+                                  再生
+                                </>
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            onClick={() => downloadRecording(recording)}
+                            variant="outline"
+                            size="sm"
+                            className="flex-shrink-0"
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            ダウンロード
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
         
         <div className="mt-6 pt-4 border-t">
