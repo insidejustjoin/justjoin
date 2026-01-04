@@ -36,6 +36,15 @@ class DatabaseService {
       connectionTimeoutMillis: 2000,
     });
 
+    // 接続時にsearch_pathを設定してpublicスキーマを確実に使用
+    this.pool.on('connect', async (client: any) => {
+      try {
+        await client.query('SET search_path = public');
+      } catch (error) {
+        console.error('❌ Error setting search_path:', error);
+      }
+    });
+
     console.log('  Pool created with settings:');
     console.log('    max:', 10);
     console.log('    idleTimeoutMillis:', 30000);
@@ -359,6 +368,8 @@ class DatabaseService {
     filesize: number;
     mimetype: string;
     uploadedAt: Date;
+    questionId?: string; // 質問ID（q1, q2, ..., q10）
+    transcriptionText?: string; // 文字起こしテキスト
   }): Promise<void> {
     try {
       this.initializePool();
@@ -385,7 +396,8 @@ class DatabaseService {
       const recordingUrl = `/uploads/recordings/${recordingInfo.filename}`;
 
       // emailからuser_idを取得（メインプラットフォームのusersテーブルから）
-      let userId: number | null = null;
+      // user_idは数値またはUUID形式のいずれかの可能性がある
+      let userId: number | string | null = null;
       if (email) {
         try {
           const userQuery = `
@@ -394,7 +406,7 @@ class DatabaseService {
           const userResult = await this.pool.query(userQuery, [email]);
           if (userResult.rows.length > 0) {
             userId = userResult.rows[0].id;
-            console.log('✅ Found user_id:', userId, 'for email:', email);
+            console.log('✅ Found user_id:', userId, 'for email:', email, 'type:', typeof userId);
           } else {
             console.warn('⚠️ User not found for email:', email);
           }
@@ -404,11 +416,11 @@ class DatabaseService {
         }
       }
 
-      // 録音情報を保存（user_idも含める）
+      // 録音情報を保存（user_id、question_id、transcription_textも含める）
       const insertQuery = `
         INSERT INTO interview_recordings (
-          session_id, applicant_id, user_id, recording_url, recording_type, file_size, storage_path
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          session_id, applicant_id, user_id, recording_url, recording_type, file_size, storage_path, question_id, transcription_text
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `;
 
       await this.pool.query(insertQuery, [
@@ -418,7 +430,9 @@ class DatabaseService {
         recordingUrl,
         recordingInfo.type,
         recordingInfo.filesize,
-        recordingInfo.filepath
+        recordingInfo.filepath,
+        recordingInfo.questionId || null,
+        recordingInfo.transcriptionText || null
       ]);
 
       console.log('✅ Saved recording info:', {

@@ -1,4 +1,4 @@
-#!/bin/bash
+＠#!/bin/bash
 
 # GCPデプロイスクリプト - justjoin.jp用
 # 使用方法: ./deploy-gcp.sh

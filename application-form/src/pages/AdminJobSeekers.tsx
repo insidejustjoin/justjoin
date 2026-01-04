@@ -417,6 +417,16 @@ export function AdminJobSeekers() {
       if (data.success) {
         const jobSeekersDataRaw = data.jobSeekers || [];
         console.log('Raw job seekers data:', { count: jobSeekersDataRaw.length, sample: jobSeekersDataRaw[0] });
+        // interview_enabledフィールドの確認
+        if (jobSeekersDataRaw.length > 0) {
+          console.log('🔍 interview_enabled status:', jobSeekersDataRaw.map((js: any) => ({
+            userId: js.user_id || js.id,
+            email: js.email || js.user_email,
+            interview_enabled: js.interview_enabled,
+            registration_type: js.registration_type,
+            fullData: js // デバッグ用：完全なデータも表示
+          })));
+        }
         // API 由来の重複があっても user_id で一意化
         const uniqSeen: Record<string, boolean> = {};
         const jobSeekersDataAll = jobSeekersDataRaw.filter((js: any) => {
@@ -440,8 +450,30 @@ export function AdminJobSeekers() {
         };
         const jobSeekersData = filterByTab(jobSeekersDataAll);
         console.log('Job seekers data (filtered by tab):', { activeTab, count: jobSeekersData.length });
+        // interview_enabledの最終状態を確認
+        if (jobSeekersData.length > 0) {
+          console.log('✅ Final interview_enabled after tab filter:', jobSeekersData.map((js: any) => ({
+            userId: js.user_id || js.id,
+            email: js.email || js.user_email,
+            interview_enabled: js.interview_enabled,
+            registration_type: js.registration_type
+          })));
+        }
+        // interview_enabledフィールドのマッピング確認
+        console.log('interview_enabled mapping check:', jobSeekersData.map((js: any) => ({
+          userId: js.user_id || js.id,
+          email: js.email || js.user_email,
+          interview_enabled: js.interview_enabled,
+          interviewEnabled: js.interviewEnabled,
+          registration_type: js.registration_type
+        })));
+        // interview_enabledをinterviewEnabledにマッピング（もし必要であれば）
+        const mappedJobSeekers = jobSeekersData.map((js: any) => ({
+          ...js,
+          interviewEnabled: js.interview_enabled !== undefined ? js.interview_enabled : js.interviewEnabled
+        }));
         // 一覧状態はタブでフィルタ済みの集合を保持し、表示用はさらに詳細フィルタを適用
-        setJobSeekers(jobSeekersData);
+        setJobSeekers(mappedJobSeekers);
         setFilteredJobSeekers(applyFilters(jobSeekersData, currentFilters));
         setLastFetchTime(Date.now());
         
@@ -1386,6 +1418,8 @@ export function AdminJobSeekers() {
         selectedJobSeekers.map(async (jobSeeker) => {
           // user_idまたはjs_idを使用（優先順位: user_id > js_id > id）
           const jobSeekerId = (jobSeeker as any).user_id || (jobSeeker as any).js_id || jobSeeker.id;
+          // registration_typeを取得（現在のフィルターから、またはjobSeekerオブジェクトから）
+          const registrationType = (jobSeeker as any).registration_type || (activeTab === 'engineer' ? 'engineer' : 'general');
           const response = await fetch(`${apiUrl}/api/documents/admin/jobseekers/${jobSeekerId}/interview-visibility`, {
             method: 'PUT',
             headers: {
@@ -1393,7 +1427,8 @@ export function AdminJobSeekers() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              interviewEnabled: enabled
+              interviewEnabled: enabled,
+              registrationType: registrationType
             }),
           });
           
@@ -1424,8 +1459,8 @@ export function AdminJobSeekers() {
           description: `${successfulUpdates.length}件の面接表示設定を${enabled ? '有効' : '無効'}にしました`,
         });
         
-        // 求職者データを再取得
-        fetchJobSeekers();
+        // 求職者データを再取得（キャッシュを無効化して強制再取得）
+        fetchJobSeekers(true);
       }
 
       if (failedUpdates.length > 0) {
@@ -1461,6 +1496,8 @@ export function AdminJobSeekers() {
       
       // user_idまたはjs_idを使用（優先順位: user_id > js_id > id）
       const jobSeekerId = (jobSeeker as any).user_id || (jobSeeker as any).js_id || jobSeeker.id;
+      // registration_typeを取得（jobSeekerオブジェクトから、または現在のフィルターから）
+      const registrationType = (jobSeeker as any).registration_type || (activeTab === 'engineer' ? 'engineer' : 'general');
       const response = await fetch(`${apiUrl}/api/documents/admin/jobseekers/${jobSeekerId}/interview-visibility`, {
         method: 'PUT',
         headers: {
@@ -1468,7 +1505,8 @@ export function AdminJobSeekers() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          interviewEnabled: enabled
+          interviewEnabled: enabled,
+          registrationType: registrationType
         }),
       });
       
@@ -1478,8 +1516,8 @@ export function AdminJobSeekers() {
           description: `面接表示設定を${enabled ? '有効' : '無効'}にしました`,
         });
         
-        // 求職者データを再取得
-        fetchJobSeekers();
+        // 求職者データを再取得（キャッシュを無効化して強制再取得）
+        fetchJobSeekers(true);
       } else {
         const errorData = await response.json().catch(() => ({ error: '設定更新に失敗' }));
         toast({

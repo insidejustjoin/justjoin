@@ -385,58 +385,78 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         // ストリームを停止
         stream.getTracks().forEach(track => track.stop());
         
-        // 録音ファイルをアップロード
-        try {
-          const formData = new FormData();
-          formData.append('file', audioBlob, `recording_${Date.now()}.webm`);
-          formData.append('sessionId', activeSessionId);
-          formData.append('type', 'audio');
+        // 録音ファイルをアップロード（質問ごとに個別保存）
+        // アップロードが完了するまで待つためにPromiseを使用
+        const uploadPromise = (async () => {
+          try {
+            const formData = new FormData();
+            formData.append('file', audioBlob, `recording_${Date.now()}.webm`);
+            formData.append('sessionId', activeSessionId);
+            formData.append('type', 'audio');
+            // 現在の質問IDを追加
+            if (currentQuestion?.id) {
+              formData.append('questionId', currentQuestion.id);
+            }
+            // 文字起こしテキストを追加
+            const trimmedTranscript = transcript.trim();
+            if (trimmedTranscript) {
+              formData.append('transcriptionText', trimmedTranscript);
+            }
 
-          const apiBaseUrl = process.env.NODE_ENV === 'development' 
-            ? 'http://localhost:3002' 
-            : window.location.origin;
-          
-          console.log('録音ファイルアップロード開始:', {
-            apiBaseUrl,
-            sessionId: activeSessionId,
-            fileSize: audioBlob.size,
-            fileType: audioBlob.type
-          });
+            const apiBaseUrl = process.env.NODE_ENV === 'development' 
+              ? 'http://localhost:3002' 
+              : window.location.origin;
+            
+            console.log('録音ファイルアップロード開始:', {
+              apiBaseUrl,
+              sessionId: activeSessionId,
+              questionId: currentQuestion?.id,
+              fileSize: audioBlob.size,
+              fileType: audioBlob.type,
+              hasTranscription: !!trimmedTranscript
+            });
 
-          const uploadResponse = await fetch(`${apiBaseUrl}/api/interview/upload-recording`, {
-            method: 'POST',
-            body: formData
-          });
+            const uploadResponse = await fetch(`${apiBaseUrl}/api/interview/upload-recording`, {
+              method: 'POST',
+              body: formData
+            });
 
-          console.log('録音ファイルアップロードレスポンス:', {
-            status: uploadResponse.status,
-            statusText: uploadResponse.statusText,
-            ok: uploadResponse.ok
-          });
-
-          if (uploadResponse.ok) {
-            const uploadResult = await uploadResponse.json();
-            console.log('✅ 録音ファイルアップロード成功:', uploadResult);
-          } else {
-            const errorText = await uploadResponse.text();
-            console.error('❌ 録音ファイルアップロード失敗:', {
+            console.log('録音ファイルアップロードレスポンス:', {
               status: uploadResponse.status,
               statusText: uploadResponse.statusText,
-              errorText: errorText
+              ok: uploadResponse.ok
             });
+
+            if (uploadResponse.ok) {
+              const uploadResult = await uploadResponse.json();
+              console.log('✅ 録音ファイルアップロード成功:', uploadResult);
+              return true;
+            } else {
+              const errorText = await uploadResponse.text();
+              console.error('❌ 録音ファイルアップロード失敗:', {
+                status: uploadResponse.status,
+                statusText: uploadResponse.statusText,
+                errorText: errorText
+              });
+              // エラーをユーザーに表示しない（面接を継続できるように）
+              return false;
+            }
+          } catch (uploadError) {
+            console.error('❌ 録音ファイルアップロードエラー:', uploadError);
+            if (uploadError instanceof Error) {
+              console.error('エラー詳細:', {
+                name: uploadError.name,
+                message: uploadError.message,
+                stack: uploadError.stack
+              });
+            }
             // エラーをユーザーに表示しない（面接を継続できるように）
+            return false;
           }
-        } catch (uploadError) {
-          console.error('❌ 録音ファイルアップロードエラー:', uploadError);
-          if (uploadError instanceof Error) {
-            console.error('エラー詳細:', {
-              name: uploadError.name,
-              message: uploadError.message,
-              stack: uploadError.stack
-            });
-          }
-          // エラーをユーザーに表示しない（面接を継続できるように）
-        }
+        })();
+        
+        // 録音アップロードを保存して、後で待機できるようにする
+        (window as any).lastRecordingUpload = uploadPromise;
       };
 
       recorder.start(1000); // 1秒ごとにデータを取得
@@ -501,7 +521,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   };
 
   // 録音停止
-  const stopRecording = () => {
+  const stopRecording = async () => {
     setIsRecording(false);
     
     // MediaRecorderを停止
@@ -521,13 +541,28 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       recordingIntervalRef.current = null;
     }
     
+    // 録音ファイルのアップロードが完了するまで少し待つ（最大2秒）
+    try {
+      const uploadPromise = (window as any).lastRecordingUpload;
+      if (uploadPromise) {
+        await Promise.race([
+          uploadPromise,
+          new Promise(resolve => setTimeout(resolve, 2000)) // 最大2秒待つ
+        ]);
+        delete (window as any).lastRecordingUpload;
+      }
+    } catch (error) {
+      console.warn('録音アップロード待機中にエラー:', error);
+      // エラーが発生しても続行
+    }
+    
     // 録音停止後、transcriptがあれば自動的に送信
     const trimmedTranscript = transcript.trim();
     if (trimmedTranscript) {
       setHasRecorded(true); // 録音済みフラグを設定
       setTimeout(() => {
         handleSubmit();
-      }, 500);
+      }, 300);
     } else {
       // transcriptが空の場合、再録音を許可（最大1回）
       if (retryCount < 1) {
@@ -543,7 +578,7 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         setHasRecorded(true);
         setTimeout(() => {
           handleSubmit();
-        }, 500);
+        }, 300);
       }
     }
   };
@@ -601,7 +636,27 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           }, 500);
         } else {
           // 面接完了
+          // 最後の録音アップロードが完了するまで少し待つ
+          try {
+            const uploadPromise = (window as any).lastRecordingUpload;
+            if (uploadPromise) {
+              await Promise.race([
+                uploadPromise,
+                new Promise(resolve => setTimeout(resolve, 2000)) // 最大2秒待つ
+              ]);
+              delete (window as any).lastRecordingUpload;
+            }
+          } catch (error) {
+            console.warn('最後の録音アップロード待機中にエラー:', error);
+            // エラーが発生しても続行
+          }
+          
           const finalDuration = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
+          console.log('面接完了:', {
+            duration: finalDuration,
+            questionsAnswered: progress.current + 1,
+            totalQuestions: progress.total
+          });
           onComplete({
             duration: finalDuration,
             questionsAnswered: progress.current + 1,

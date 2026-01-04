@@ -326,6 +326,7 @@ class DatabaseService {
             const email = sessionResult.rows[0].email;
             const recordingUrl = `/uploads/recordings/${recordingInfo.filename}`;
             // emailからuser_idを取得（メインプラットフォームのusersテーブルから）
+            // user_idは数値またはUUID形式のいずれかの可能性がある
             let userId = null;
             if (email) {
                 try {
@@ -335,7 +336,7 @@ class DatabaseService {
                     const userResult = await this.pool.query(userQuery, [email]);
                     if (userResult.rows.length > 0) {
                         userId = userResult.rows[0].id;
-                        console.log('✅ Found user_id:', userId, 'for email:', email);
+                        console.log('✅ Found user_id:', userId, 'for email:', email, 'type:', typeof userId);
                     }
                     else {
                         console.warn('⚠️ User not found for email:', email);
@@ -346,11 +347,11 @@ class DatabaseService {
                     // user_idの取得に失敗しても録音情報は保存する
                 }
             }
-            // 録音情報を保存（user_idも含める）
+            // 録音情報を保存（user_id、question_id、transcription_textも含める）
             const insertQuery = `
         INSERT INTO interview_recordings (
-          session_id, applicant_id, user_id, recording_url, recording_type, file_size, storage_path
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          session_id, applicant_id, user_id, recording_url, recording_type, file_size, storage_path, question_id, transcription_text
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `;
             await this.pool.query(insertQuery, [
                 recordingInfo.sessionId,
@@ -359,7 +360,9 @@ class DatabaseService {
                 recordingUrl,
                 recordingInfo.type,
                 recordingInfo.filesize,
-                recordingInfo.filepath
+                recordingInfo.filepath,
+                recordingInfo.questionId || null,
+                recordingInfo.transcriptionText || null
             ]);
             console.log('✅ Saved recording info:', {
                 sessionId: recordingInfo.sessionId,

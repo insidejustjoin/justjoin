@@ -505,7 +505,7 @@ export function JobSeekerMyPageGeneral() {
           </Card>
 
           {/* AI面接カード */}
-          {userData?.interview_enabled && (
+          {userData && userData.interview_enabled === true && (
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

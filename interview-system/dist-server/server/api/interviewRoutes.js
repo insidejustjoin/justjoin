@@ -109,7 +109,7 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
                 message: '録音ファイルがアップロードされていません'
             });
         }
-        const { sessionId, type } = req.body;
+        const { sessionId, type, questionId, transcriptionText } = req.body;
         if (!sessionId || !type) {
             console.error('録音アップロードエラー: パラメータ不足', { sessionId, type });
             return res.status(400).json({
@@ -133,9 +133,13 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
         // ファイルはメモリに保存され、データベースにはURLのみ保存
         // 実際のファイルはCloud Storageに保存するか、一時的に保持
         const recordingUrl = `/uploads/recordings/${filename}`;
-        // データベースに録音情報を保存
+        // データベースに録音情報を保存（質問IDと文字起こしテキストも含む）
         try {
-            console.log('録音情報をデータベースに保存中...');
+            console.log('録音情報をデータベースに保存中...', {
+                sessionId,
+                questionId,
+                hasTranscription: !!transcriptionText
+            });
             await databaseService_js_1.default.saveRecordingInfo({
                 sessionId,
                 type,
@@ -143,7 +147,9 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
                 filepath: recordingUrl, // Cloud RunではパスではなくURLを使用
                 filesize: req.file.size,
                 mimetype: req.file.mimetype,
-                uploadedAt: new Date()
+                uploadedAt: new Date(),
+                questionId: questionId || undefined,
+                transcriptionText: transcriptionText || undefined
             });
             console.log('✅ 録音情報のデータベース保存成功');
         }

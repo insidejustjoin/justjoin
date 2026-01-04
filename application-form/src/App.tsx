@@ -17,6 +17,7 @@ import DeployTest from "./pages/DeployTest";
 // 求職者関連ページ
 import JobSeekerLanding from "./pages/JobSeekerLanding";
 import { JobSeekerLogin } from "./pages/JobSeekerLogin";
+import { JobSeekerLoginTypeSelection } from "./pages/JobSeekerLoginTypeSelection";
 import JobSeekerRegister from "./pages/JobSeekerRegister";
 import JobSeekerRegisterType from "./pages/JobSeekerRegisterType";
 import JobSeekerRegisterEngineer from "./pages/JobSeekerRegisterEngineer";
@@ -100,6 +101,8 @@ function App() {
               <Route path="/jobseeker/auth" element={<JobSeekerAuth />} />
               {/* Google OAuth コールバック */}
               <Route path="/auth/google/success" element={<GoogleAuthCallback />} />
+              {/* ログインタイプ選択 */}
+              <Route path="/jobseeker/login/type" element={<JobSeekerLoginTypeSelection />} />
               <Route path="/jobseeker/dashboard" element={<JobSeekerDashboard />} />
               <Route path="/jobseeker/my-page" element={
                 <AuthGuard requiredUserType="job_seeker">

@@ -1,3 +1,8 @@
+// 環境変数の読み込み（開発環境用）
+import dotenv from 'dotenv';
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+}
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -12,6 +17,7 @@ import interviewRoutes from './api/interview.js';
 import directRegistrationRoutes from './api/directRegistration.js';
 import emailVerificationRoutes from './api/emailVerification.js';
 import jobSeekerStatusRoutes from './api/jobSeekerStatus.js';
+import googleAuthRoutes from './api/googleAuth.js';
 import uploadImageRoutes from './api/uploadImage.js';
 import { generateHeadings } from './api/generateHeadings.js';
 import { generateSitemap } from './api/sitemap.js';
@@ -40,6 +46,8 @@ app.use('/api/interview', interviewRoutes);
 app.use('/api/register', directRegistrationRoutes);
 // メール本人確認システム
 app.use('/api/email-verification', emailVerificationRoutes);
+// Google OAuth認証
+app.use('/api/auth', googleAuthRoutes);
 // リマインドAPI: 書類入力率が100%未満の求職者にメール送信（登録から指定日数経過）
 app.post('/api/reminders/incomplete-documents', async (req, res) => {
     try {
@@ -820,7 +828,7 @@ app.get('/api/admin/jobseekers', async (req, res) => {
             END as has_interview_audio,
             COALESCE(js.completion_rate, 0)::int as completion_rate,
             COALESCE(js.registration_type, 'engineer') as registration_type,
-            COALESCE(js.interview_enabled, false) as interview_enabled,
+            COALESCE(js.interview_enabled, false)::boolean as interview_enabled,
             COALESCE(
               js.profile_photo,
               doc.document_data -> 'resume' ->> 'photoUrl'
@@ -848,6 +856,13 @@ app.get('/api/admin/jobseekers', async (req, res) => {
           ${whereClause}
           ORDER BY js.created_at DESC
         `, params);
+            // デバッグ: interview_enabledの状態を確認
+            console.log('[ADMIN/JOBSEEKERS] interview_enabled status:', result.rows.map((r) => ({
+                userId: r.user_id,
+                email: r.email,
+                registration_type: r.registration_type,
+                interview_enabled: r.interview_enabled
+            })));
             // 入力率を再計算して確認（documents.tsのロジックを使用）
             const documentsModule = await import('./api/documents.js');
             const calculateCompletionRate = documentsModule.calculateCompletionRate;
@@ -1097,7 +1112,7 @@ app.get('/api/jobseekers/:id', async (req, res) => {
         };
         const type = normalizeType(registrationType);
         const base = await query(`
-      SELECT js.*, u.email, u.status as user_status, js.completion_rate
+      SELECT js.*, u.email, u.status as user_status, js.completion_rate, js.interview_enabled
       FROM job_seekers js
       LEFT JOIN users u ON u.id = js.user_id
       WHERE (js.user_id::text = $1 OR js.id::text = $1)
@@ -1105,6 +1120,7 @@ app.get('/api/jobseekers/:id', async (req, res) => {
       ORDER BY js.updated_at DESC
       LIMIT 1
     `, [id, type]);
+        console.log(`[求職者詳細API] userId: ${id}, registrationType: ${type}, found: ${base.rows.length > 0}`);
         let row = base.rows[0];
         if (!row) {
             // フォールバック: users から基本情報を取得して最低限のプロフィールを構築
@@ -1118,6 +1134,15 @@ app.get('/api/jobseekers/:id', async (req, res) => {
                 return res.status(404).json({ success: false, message: '求職者が見つかりません' });
             }
             const u = userOnly.rows[0];
+            // job_seekersテーブルから最新のinterview_enabledを取得（フォールバック）
+            const jsFallback = await query(`
+        SELECT interview_enabled, registration_type, completion_rate
+        FROM job_seekers
+        WHERE user_id::text = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `, [id]);
+            const jsData = jsFallback.rows[0] || {};
             row = {
                 id: u.user_id, // job_seekers.id 不明のため user_id を割当
                 user_id: u.user_id,
@@ -1130,7 +1155,9 @@ app.get('/api/jobseekers/:id', async (req, res) => {
                 gender: null,
                 nationality: null,
                 profile_photo: null,
-                completion_rate: 0,
+                completion_rate: jsData.completion_rate || 0,
+                interview_enabled: jsData.interview_enabled || false,
+                registration_type: jsData.registration_type || type,
                 created_at: u.created_at,
                 updated_at: u.updated_at,
             };
@@ -1158,11 +1185,12 @@ app.get('/api/jobseekers/:id', async (req, res) => {
             nationality: row.nationality,
             profile_photo: row.profile_photo,
             completion_rate: row.completion_rate || 0,
-            interview_enabled: row.interview_enabled || false,
-            registration_type: row.registration_type || 'engineer',
+            interview_enabled: row.interview_enabled !== undefined ? row.interview_enabled : false,
+            registration_type: row.registration_type || type,
             created_at: row.created_at,
             updated_at: row.updated_at,
         };
+        console.log(`[求職者詳細API] レスポンス: userId=${merged.user_id}, interview_enabled=${merged.interview_enabled}, registration_type=${merged.registration_type}`);
         const liftBasic = (d) => {
             const b = d?.resume?.basicInfo;
             if (!b)

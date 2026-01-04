@@ -1260,12 +1260,13 @@ Press "OK" to complete audio check, "Cancel" to retry.`;
         <div className="mb-8">
           <div className="flex justify-between items-start relative">
             {/* 背景の線 */}
-            <div className="absolute top-8 left-0 right-0 h-1 bg-gray-200 z-0" style={{ marginLeft: '3rem', marginRight: '3rem' }} />
+            <div className="absolute top-8 h-1 bg-gray-200 z-0" style={{ left: '3rem', right: currentStep === 4 ? '3rem' : 'calc(100% - 3rem)' }} />
             <div 
               className="absolute top-8 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 z-0 transition-all duration-500"
               style={{ 
                 left: '3rem',
-                width: `${((currentStep - 1) / 3) * 100}%`
+                right: currentStep === 4 ? '3rem' : 'calc(100% - 3rem)',
+                width: currentStep === 4 ? 'calc(100% - 6rem)' : `${((currentStep - 1) / 3) * 100}%`
               }}
             />
             

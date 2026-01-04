@@ -63,13 +63,29 @@ function App() {
     initializeApp();
   }, []);
 
+  // Base64デコードヘルパー関数（UTF-8対応）
+  const decodeBase64 = (base64: string): string => {
+    try {
+      // ブラウザ環境でUTF-8対応のBase64デコード
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return new TextDecoder('utf-8').decode(bytes);
+    } catch (error) {
+      console.error('Base64デコードエラー:', error);
+      throw error;
+    }
+  };
+
   // トークン検証
   const verifyToken = async (token: string) => {
     console.log('トークン検証開始:', token.substring(0, 50) + '...');
     try {
       let decodedToken;
       try {
-        const decoded = atob(token);
+        const decoded = decodeBase64(token);
         console.log('デコードされたトークン:', decoded);
         decodedToken = JSON.parse(decoded);
         console.log('パースされたトークン:', decodedToken);
@@ -82,7 +98,19 @@ function App() {
       
       if (decodedToken && decodedToken.userId) {
         console.log('トークン検証成功: userIdあり', decodedToken.userId);
-        const userName = decodedToken.name || decodedToken.firstName || decodedToken.userId?.substring(0, 8) || '求職者';
+        // 名前の取得を優先順位順に試行
+        let userName = '';
+        if (decodedToken.name) {
+          userName = decodedToken.name;
+        } else if (decodedToken.firstName && decodedToken.lastName) {
+          userName = `${decodedToken.lastName} ${decodedToken.firstName}`.trim();
+        } else if (decodedToken.firstName) {
+          userName = decodedToken.firstName;
+        } else if (decodedToken.lastName) {
+          userName = decodedToken.lastName;
+        } else {
+          userName = decodedToken.userId?.substring(0, 8) || '求職者';
+        }
         const jobSeekerInfo = {
           name: userName,
           email: decodedToken.email || '',
@@ -97,7 +125,19 @@ function App() {
         setCurrentState('preparation');
       } else {
         console.warn('トークンの必須フィールドが不足していますが、面接を続行します', decodedToken);
-        const userName = decodedToken?.name || decodedToken?.firstName || decodedToken?.userId?.substring(0, 8) || '求職者';
+        // 名前の取得を優先順位順に試行
+        let userName = '';
+        if (decodedToken?.name) {
+          userName = decodedToken.name;
+        } else if (decodedToken?.firstName && decodedToken?.lastName) {
+          userName = `${decodedToken.lastName} ${decodedToken.firstName}`.trim();
+        } else if (decodedToken?.firstName) {
+          userName = decodedToken.firstName;
+        } else if (decodedToken?.lastName) {
+          userName = decodedToken.lastName;
+        } else {
+          userName = decodedToken?.userId?.substring(0, 8) || '求職者';
+        }
         const jobSeekerInfo = {
           name: userName,
           email: decodedToken?.email || '',
@@ -170,10 +210,25 @@ function App() {
       const newSessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       setSessionId(newSessionId);
       
+      // Base64エンコードヘルパー関数（UTF-8対応）
+      const encodeBase64 = (str: string): string => {
+        try {
+          // UTF-8エンコードしてからBase64エンコード
+          const bytes = new TextEncoder().encode(str);
+          const binaryString = String.fromCharCode(...bytes);
+          return btoa(binaryString);
+        } catch (error) {
+          console.error('Base64エンコードエラー:', error);
+          // フォールバック: エラーが発生した場合は通常のbtoaを使用
+          return btoa(unescape(encodeURIComponent(str)));
+        }
+      };
+
       // 面接開始をメインプラットフォームに通知
       if (tokenData?.userId) {
         try {
-          const response = await fetch(`https://justjoin.jp/api/documents/interview-start/${encodeURIComponent(btoa(JSON.stringify(tokenData)))}`, {
+          const tokenString = encodeBase64(JSON.stringify(tokenData));
+          const response = await fetch(`https://justjoin.jp/api/documents/interview-start/${encodeURIComponent(tokenString)}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

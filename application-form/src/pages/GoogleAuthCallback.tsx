@@ -50,17 +50,18 @@ export function GoogleAuthCallback() {
         
         toast.success(isNewUser ? '新規登録が完了しました' : 'ログインしました');
         
-        // 新規ユーザーの場合は登録タイプ選択ページへ、既存ユーザーの場合はマイページへ
+        const registrationTypes = user.registration_types || [];
+        
+        // 新規ユーザーの場合は登録タイプ選択ページへ
         if (isNewUser && user.user_type === 'job_seeker') {
           // registration_typesが空の場合は新規ユーザーとして扱う
-          const existingRegistrationTypes = user.registration_types || [];
-          const hasEngineer = existingRegistrationTypes.includes('engineer');
-          const hasGeneral = existingRegistrationTypes.includes('general');
+          const hasEngineer = registrationTypes.includes('engineer');
+          const hasGeneral = registrationTypes.includes('general');
           
           const availability = {
             canRegisterEngineer: !hasEngineer,
             canRegisterGeneral: !hasGeneral,
-            existingRegistrationTypes: existingRegistrationTypes,
+            existingRegistrationTypes: registrationTypes,
             userExists: true // Google OAuthで作成されたユーザーなので存在する
           };
           
@@ -83,9 +84,36 @@ export function GoogleAuthCallback() {
           navigate('/jobseeker/register/type', {
             state: navigationState
           });
+        } else if (!isNewUser && user.user_type === 'job_seeker') {
+          // 既存ユーザーで複数のタイプがある場合、タイプ選択画面へ
+          if (registrationTypes.length > 1) {
+            const firstName = user.first_name || user.firstName || '';
+            const lastName = user.last_name || user.lastName || '';
+            
+            navigate('/jobseeker/login/type', {
+              state: {
+                registrationTypes: registrationTypes,
+                email: user.email,
+                firstName: firstName,
+                lastName: lastName,
+                fromGoogleAuth: true
+              }
+            });
+          } else if (registrationTypes.length === 1) {
+            // 1つのタイプのみの場合は直接マイページへ
+            const type = registrationTypes[0];
+            if (type === 'general') {
+              window.location.href = '/jobseeker/my-page-general';
+            } else {
+              window.location.href = '/jobseeker/my-page-engineer';
+            }
+          } else {
+            // タイプがない場合はマイページへ（デフォルト）
+            window.location.href = '/jobseeker/my-page';
+          }
         } else {
-          // 既存ユーザーの場合はマイページへ
-          console.log('GoogleAuthCallback - existing user, redirecting to /jobseeker/my-page');
+          // その他の場合はマイページへ
+          console.log('GoogleAuthCallback - redirecting to /jobseeker/my-page');
           window.location.href = '/jobseeker/my-page';
         }
       } catch (error) {

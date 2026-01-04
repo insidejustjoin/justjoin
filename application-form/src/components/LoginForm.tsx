@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
 
 const loginSchema = z.object({
@@ -37,6 +38,7 @@ type CompanyRegisterFormData = z.infer<typeof companyRegisterSchema>;
 
 export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?: 'job_seeker' | 'company' | 'admin' }) {
   const { login, registerJobSeeker, registerCompany } = useAuth();
+  const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -60,16 +62,31 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
     try {
       console.log('ログイン処理開始:', { email: data.email, userType: data.userType });
 
-      const success = await login(
+      const result = await login(
         data.email,
         data.password,
         data.userType,
         undefined,
         undefined
       );
-      console.log('ログイン結果:', success);
+      console.log('ログイン結果:', result);
       
-      if (success) {
+      if (result === 'type_selection_required') {
+        // 複数のタイプがある場合、タイプ選択画面に遷移
+        const storedUser = localStorage.getItem('auth_user');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          navigate('/jobseeker/login/type', {
+            state: {
+              registrationTypes: user.registration_types || [],
+              email: user.email,
+              firstName: user.first_name || '',
+              lastName: user.last_name || '',
+              fromGoogleAuth: false
+            }
+          });
+        }
+      } else if (result === true) {
         console.log('ログイン成功、リダイレクト開始');
         if (data.userType === 'company') {
           console.log('企業ダッシュボードにリダイレクト');
@@ -78,8 +95,27 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
           console.log('管理者ダッシュボードにリダイレクト');
           navigate('/admin');
         } else {
-          console.log('求職者マイページにリダイレクト');
-          navigate('/jobseeker/my-page');
+          // 求職者の場合
+          const storedUser = localStorage.getItem('auth_user');
+          if (storedUser) {
+            const user = JSON.parse(storedUser);
+            const registrationTypes = user.registration_types || [];
+            
+            // 1つのタイプのみの場合はそのマイページへ、タイプがない場合はデフォルトのマイページへ
+            if (registrationTypes.length === 1) {
+              const type = registrationTypes[0];
+              if (type === 'general') {
+                navigate('/jobseeker/my-page-general');
+              } else {
+                navigate('/jobseeker/my-page-engineer');
+              }
+            } else {
+              // タイプがない場合はデフォルトのマイページへ
+              navigate('/jobseeker/my-page');
+            }
+          } else {
+            navigate('/jobseeker/my-page');
+          }
         }
       } else {
         console.log('ログイン失敗');
@@ -202,7 +238,7 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
                       <span className="w-full border-t" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-white px-2 text-gray-500">または</span>
+                      <span className="bg-white px-2 text-gray-500">{t('auth.or')}</span>
                     </div>
                   </div>
 
@@ -246,7 +282,7 @@ export function LoginForm({ defaultUserType = 'job_seeker' }: { defaultUserType?
                         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                       />
                     </svg>
-                    Googleでログイン
+                    {t('auth.googleLogin')}
                   </Button>
 
                   <div className="text-center space-y-2">

@@ -15,16 +15,32 @@ export class HubSpotClient {
     }
     /**
      * 連絡先を作成または更新
-     * メールアドレスで既存の連絡先を検索し、存在する場合は更新、存在しない場合は作成します。
+     * コンタクトIDが提供されている場合は直接更新、そうでない場合はメールアドレスで検索します。
+     * @param contact 連絡先情報
+     * @param contactId 既知のHubSpotコンタクトID（省略可能、提供された場合は検索をスキップ）
      */
-    async createOrUpdateContact(contact) {
+    async createOrUpdateContact(contact, contactId) {
         if (!this.apiKey) {
             console.error('[HubSpot] APIキーが設定されていません');
             return null;
         }
         try {
-            console.log(`[HubSpot] 連絡先の作成/更新開始: email=${contact.email}`);
-            // まずメールアドレスで既存の連絡先を検索
+            console.log(`[HubSpot] 連絡先の作成/更新開始: email=${contact.email}, contactId=${contactId || '未指定'}`);
+            // コンタクトIDが提供されている場合は直接更新を試みる
+            if (contactId) {
+                try {
+                    console.log(`[HubSpot] コンタクトIDで直接更新を試みます: contactId=${contactId}`);
+                    const result = await this.updateContact(contactId, contact);
+                    console.log(`[HubSpot] 連絡先更新成功: contactId=${contactId}`);
+                    return result;
+                }
+                catch (updateError) {
+                    // 更新に失敗した場合（例: コンタクトIDが無効）、メール検索にフォールバック
+                    console.warn(`[HubSpot] コンタクトIDでの更新に失敗。メール検索にフォールバック: contactId=${contactId}, error=${updateError?.message}`);
+                    // フォールバック処理に続く
+                }
+            }
+            // メールアドレスで既存の連絡先を検索
             console.log(`[HubSpot] 既存連絡先を検索中: email=${contact.email}`);
             const existingContact = await this.findContactByEmail(contact.email);
             if (existingContact) {
@@ -47,6 +63,7 @@ export class HubSpotClient {
             const errorMessage = error?.message || String(error);
             console.error('[HubSpot] 連絡先の作成/更新エラー:', {
                 email: contact.email,
+                contactId,
                 error: errorMessage,
                 stack: error?.stack
             });

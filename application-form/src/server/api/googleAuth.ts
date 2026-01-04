@@ -117,6 +117,37 @@ router.get('/google/callback', async (req, res) => {
       userId = user.id;
       userType = user.user_type;
       console.log('既存ユーザーでログイン:', { userId, email, userType });
+      
+      // 既存ユーザーの場合も、Googleから取得した姓名でjob_seekersテーブルを更新
+      if (userType === 'job_seeker' && name) {
+        try {
+          // 名前を分割（Googleから取得したnameをfirst_name/last_nameに分割）
+          let firstName = '';
+          let lastName = '';
+          const nameParts = name.trim().split(/\s+/);
+          if (nameParts.length >= 2) {
+            lastName = nameParts[0];
+            firstName = nameParts.slice(1).join(' ');
+          } else {
+            firstName = name;
+          }
+          
+          // job_seekersテーブルの姓名を更新
+          await query(`
+            UPDATE job_seekers
+            SET first_name = $2,
+                last_name = $3,
+                full_name = $4,
+                updated_at = NOW()
+            WHERE user_id = $1
+          `, [userId, firstName, lastName, name]);
+          
+          console.log('既存ユーザーの姓名を更新:', { userId, firstName, lastName, fullName: name });
+        } catch (updateError) {
+          console.warn('既存ユーザーの姓名更新エラー（続行）:', updateError);
+          // エラーが発生しても続行
+        }
+      }
     } else {
       // 新規ユーザー登録（求職者として登録）
       isNewUser = true;
@@ -172,13 +203,13 @@ router.get('/google/callback', async (req, res) => {
     let lastName = '';
     if (userType === 'job_seeker') {
       try {
+        // job_seekersテーブルから登録タイプを取得
         const jobSeekerResult = await query(
           `
-            SELECT COALESCE(registration_type, 'engineer') AS registration_type,
+            SELECT DISTINCT COALESCE(registration_type, 'engineer') AS registration_type,
                    first_name, last_name
             FROM job_seekers
             WHERE user_id = $1
-            LIMIT 1
           `,
           [userId]
         );
@@ -191,6 +222,24 @@ router.get('/google/callback', async (req, res) => {
           );
           firstName = row.first_name || '';
           lastName = row.last_name || '';
+        }
+        
+        // user_documentsテーブルからも登録タイプを取得（複数のタイプがある場合に対応）
+        try {
+          const docTypeResult = await query(
+            `
+              SELECT DISTINCT COALESCE(registration_type, 'engineer') AS registration_type
+              FROM user_documents
+              WHERE user_id = $1
+            `,
+            [userId]
+          );
+          const docTypes = docTypeResult.rows.map((row: any) =>
+            row.registration_type === 'general' ? 'general' : 'engineer'
+          );
+          registrationTypes = Array.from(new Set([...registrationTypes, ...docTypes]));
+        } catch (docTypeError) {
+          console.warn('書類ベースの登録タイプ取得に失敗しました:', docTypeError);
         }
       } catch (typeError) {
         console.warn('登録タイプ取得に失敗しました:', typeError);

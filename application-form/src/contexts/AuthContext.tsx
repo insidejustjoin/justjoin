@@ -37,7 +37,7 @@ interface AuthContextType {
     recaptchaToken?: string,
     recaptchaV2Response?: string,
     registrationType?: 'engineer' | 'general'
-  ) => Promise<boolean>;
+  ) => Promise<boolean | 'type_selection_required'>;
   logout: () => void;
   registerJobSeeker: (email: string, firstName: string, lastName: string, language?: 'ja' | 'en') => Promise<boolean>;
   registerCompany: (email: string, companyName: string, description: string) => Promise<boolean>;
@@ -244,7 +244,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     recaptchaToken?: string,
     recaptchaV2Response?: string,
     registrationType?: 'engineer' | 'general'
-  ): Promise<boolean> => {
+  ): Promise<boolean | 'type_selection_required'> => {
     try {
       console.log('Login requested for:', email, userType);
       
@@ -333,6 +333,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         console.log('認証状態更新完了');
         console.log('保存されたJWTトークン:', localStorage.getItem('auth_token'));
+        
+        // 求職者で複数の登録タイプがある場合、タイプ選択画面に遷移する必要がある
+        // ただし、registrationTypeが既に指定されている場合はそのままマイページへ
+        if (userType === 'job_seeker' && Array.isArray(result.registrationTypes) && result.registrationTypes.length > 1 && !registrationType) {
+          // 複数のタイプがある場合、タイプ選択画面に遷移するためのフラグを返す
+          // 実際の遷移は呼び出し元で処理する
+          console.log('複数の登録タイプが検出されました。タイプ選択が必要です。', result.registrationTypes);
+          return 'type_selection_required' as any;
+        }
+        
         toast.success(`${userType === 'job_seeker' ? '求職者' : userType === 'company' ? '企業' : '管理者'}としてログインしました`);
 
         // ID自己修復（ログイン直後）

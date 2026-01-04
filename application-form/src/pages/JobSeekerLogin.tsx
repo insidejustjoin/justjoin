@@ -31,7 +31,6 @@ export function JobSeekerLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [showGuidance, setShowGuidance] = useState(false);
   const [currentTab, setCurrentTab] = useState<'login' | 'register'>('login');
-  const [registrationType, setRegistrationType] = useState<'engineer' | 'general'>('engineer');
   const navigate = useNavigate();
 
   // 初回訪問時にガイダンスを表示（少し遅延させて表示）
@@ -68,19 +67,52 @@ export function JobSeekerLogin() {
   const onLoginSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const success = await login(
+      // registrationTypeは渡さない（ログイン後にタイプ選択画面で選択する）
+      const result = await login(
         data.email,
         data.password,
         'job_seeker',
         undefined,
         undefined,
-        registrationType
+        undefined
       );
-      if (success) {
-        if (registrationType === 'general') {
-          navigate('/jobseeker/my-page-general');
+      
+      if (result === 'type_selection_required') {
+        // 複数のタイプがある場合、タイプ選択画面に遷移
+        const storedUser = localStorage.getItem('auth_user');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          navigate('/jobseeker/login/type', {
+            state: {
+              registrationTypes: user.registration_types || [],
+              email: user.email,
+              firstName: user.first_name || '',
+              lastName: user.last_name || '',
+              fromGoogleAuth: false
+            }
+          });
+        }
+      } else if (result === true) {
+        // ログイン成功（1つのタイプのみ、またはタイプがない場合）
+        const storedUser = localStorage.getItem('auth_user');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          const registrationTypes = user.registration_types || [];
+          
+          // 1つのタイプのみの場合はそのマイページへ、タイプがない場合はデフォルトのマイページへ
+          if (registrationTypes.length === 1) {
+            const type = registrationTypes[0];
+            if (type === 'general') {
+              navigate('/jobseeker/my-page-general');
+            } else {
+              navigate('/jobseeker/my-page-engineer');
+            }
+          } else {
+            // タイプがない場合はデフォルトのマイページへ
+            navigate('/jobseeker/my-page');
+          }
         } else {
-          navigate('/jobseeker/my-page-engineer');
+          navigate('/jobseeker/my-page');
         }
       }
     } finally {
@@ -161,32 +193,6 @@ export function JobSeekerLogin() {
                   <CardContent>
                     <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2">
-                          <User className="h-4 w-4" />
-                          {t('auth.loginTarget')}
-                        </Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant={registrationType === 'engineer' ? 'default' : 'outline'}
-                            onClick={() => setRegistrationType('engineer')}
-                          >
-                            {t('auth.engineer')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={registrationType === 'general' ? 'default' : 'outline'}
-                            onClick={() => setRegistrationType('general')}
-                          >
-                            {t('auth.general')}
-                          </Button>
-                        </div>
-                        <p className="text-xs text-gray-500 text-center">
-                          {t('auth.loginTargetNote')}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
                         <Label htmlFor="login-email" className="flex items-center gap-2">
                           <Mail className="h-4 w-4" />
                           {t('auth.email')}
@@ -243,7 +249,7 @@ export function JobSeekerLogin() {
                           <span className="w-full border-t" />
                         </div>
                         <div className="relative flex justify-center text-xs uppercase">
-                          <span className="bg-white px-2 text-gray-500">または</span>
+                          <span className="bg-white px-2 text-gray-500">{t('auth.or')}</span>
                         </div>
                       </div>
 
@@ -287,7 +293,7 @@ export function JobSeekerLogin() {
                             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                           />
                         </svg>
-                        Googleでログイン
+                        {t('auth.googleLogin')}
                       </Button>
                     </form>
                   </CardContent>

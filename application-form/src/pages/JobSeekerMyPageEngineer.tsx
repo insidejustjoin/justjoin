@@ -79,6 +79,12 @@ export function JobSeekerMyPageEngineer() {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
+          console.log('🔍 面接履歴APIレスポンス:', {
+            data: result.data,
+            canTakeInterview: result.data?.canTakeInterview,
+            hasInterview: result.data?.hasInterview,
+            status: result.data?.status
+          });
           setInterviewData(result.data);
         }
       }
@@ -213,6 +219,14 @@ export function JobSeekerMyPageEngineer() {
           if (response.ok) {
             const result = await response.json();
             
+            console.log('🔍 マイページAPIレスポンス:', { 
+              success: result.success, 
+              interview_enabled: result.data?.interview_enabled,
+              registration_type: result.data?.registration_type,
+              userId: user.id,
+              fullData: result.data
+            });
+            
             if (result.success && result.data) {
               const profileData = result.data;
               
@@ -228,11 +242,17 @@ export function JobSeekerMyPageEngineer() {
                 full_name: fullName,
                 first_name: profileData.first_name || '',
                 last_name: profileData.last_name || '',
-                interview_enabled: profileData.interview_enabled || false,
+                interview_enabled: profileData.interview_enabled === true || profileData.interview_enabled === 'true',
                 profile_photo: profileData.profile_photo || null,
                 whyJapan: profileData.whyJapan || null,
                 whyInterestJapan: profileData.whyInterestJapan || null
               };
+              
+              console.log('✅ 更新後のuserData:', { 
+                interview_enabled: updatedUserData.interview_enabled,
+                full_name: updatedUserData.full_name
+              });
+              
               setUserData(updatedUserData);
             }
           } else {
@@ -512,7 +532,7 @@ export function JobSeekerMyPageEngineer() {
           </Card>
 
           {/* AI面接カード */}
-          {userData?.interview_enabled && (
+          {userData && userData.interview_enabled === true && (
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -579,7 +599,15 @@ export function JobSeekerMyPageEngineer() {
                     )}
 
                     {/* AI面接開始ボタン */}
-                    {interviewData.canTakeInterview && (
+                    {(() => {
+                      const shouldShowButton = interviewData.canTakeInterview === true;
+                      console.log('🔍 面接開始ボタン表示チェック:', {
+                        canTakeInterview: interviewData.canTakeInterview,
+                        shouldShowButton,
+                        interviewData: interviewData
+                      });
+                      return shouldShowButton;
+                    })() && (
                       <Button
                         onClick={startAIInterview}
                         disabled={isStartingInterview || completionRate < 100}

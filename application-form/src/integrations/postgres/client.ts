@@ -241,6 +241,136 @@ export const query = async (text: string, params?: any[]) => {
     if (text && typeof text === 'string') {
       const lower = text.toLowerCase();
       const needsUsers = lower.includes(' into users ') || lower.includes(' from users ') || lower.includes(' update users ');
+      const needsInterviewUrls = lower.includes('interview_urls');
+      
+      // interview_urlsテーブルの存在チェックと作成
+      if (needsInterviewUrls) {
+        try {
+          const exists = await pool.query(`SELECT 1 FROM information_schema.tables WHERE table_name = 'interview_urls'`);
+          if (exists.rowCount === 0) {
+            console.log('interview_urlsテーブルが存在しないため、作成します...');
+            await pool.query(`
+              CREATE TABLE interview_urls (
+                id SERIAL PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                interview_token TEXT NOT NULL,
+                interview_url TEXT NOT NULL,
+                expires_at TIMESTAMP WITH TIME ZONE,
+                is_used BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+              );
+              
+              CREATE INDEX idx_interview_urls_user_id ON interview_urls(user_id);
+              CREATE INDEX idx_interview_urls_token ON interview_urls(interview_token);
+              CREATE INDEX idx_interview_urls_is_used ON interview_urls(is_used);
+              
+              CREATE OR REPLACE FUNCTION update_interview_urls_updated_at()
+              RETURNS TRIGGER AS $$
+              BEGIN
+                NEW.updated_at = NOW();
+                RETURN NEW;
+              END;
+              $$ language 'plpgsql';
+              
+              CREATE TRIGGER update_interview_urls_updated_at_trigger
+                BEFORE UPDATE ON interview_urls
+                FOR EACH ROW
+                EXECUTE FUNCTION update_interview_urls_updated_at();
+            `);
+            console.log('✅ interview_urlsテーブルを作成しました');
+          }
+        } catch (interviewUrlsError: any) {
+          console.warn('interview_urlsテーブルの作成チェックをスキップ:', interviewUrlsError.message);
+        }
+      }
+      
+      // interview_recordingsテーブルの存在チェックと作成
+      if (needsInterviewUrls || lower.includes('interview_recordings')) {
+        try {
+          const exists = await pool.query(`SELECT 1 FROM information_schema.tables WHERE table_name = 'interview_recordings'`);
+          if (exists.rowCount === 0) {
+            console.log('interview_recordingsテーブルが存在しないため、作成します...');
+            // interview_sessionsテーブルが存在するかチェック（外部キー参照のため）
+            const sessionsExists = await pool.query(`SELECT 1 FROM information_schema.tables WHERE table_name = 'interview_sessions'`);
+            if (sessionsExists.rowCount > 0) {
+              await pool.query(`
+                CREATE TABLE interview_recordings (
+                  id SERIAL PRIMARY KEY,
+                  session_id VARCHAR(36),
+                  applicant_id VARCHAR(36),
+                  user_id UUID,
+                  recording_url TEXT NOT NULL,
+                  recording_type VARCHAR(20) DEFAULT 'audio',
+                  file_size BIGINT,
+                  duration INTEGER,
+                  storage_path TEXT,
+                  question_id VARCHAR(10),
+                  transcription_text TEXT,
+                  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_session_id ON interview_recordings(session_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_applicant_id ON interview_recordings(applicant_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_user_id ON interview_recordings(user_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_question_id ON interview_recordings(question_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_session_question ON interview_recordings(session_id, question_id);
+              `);
+              console.log('✅ interview_recordingsテーブルを作成しました');
+            } else {
+              // interview_sessionsテーブルが存在しない場合でも、テーブルだけ作成（外部キー制約なし）
+              await pool.query(`
+                CREATE TABLE interview_recordings (
+                  id SERIAL PRIMARY KEY,
+                  session_id VARCHAR(36),
+                  applicant_id VARCHAR(36),
+                  user_id UUID,
+                  recording_url TEXT NOT NULL,
+                  recording_type VARCHAR(20) DEFAULT 'audio',
+                  file_size BIGINT,
+                  duration INTEGER,
+                  storage_path TEXT,
+                  question_id VARCHAR(10),
+                  transcription_text TEXT,
+                  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_session_id ON interview_recordings(session_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_applicant_id ON interview_recordings(applicant_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_user_id ON interview_recordings(user_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_question_id ON interview_recordings(question_id);
+                CREATE INDEX IF NOT EXISTS idx_interview_recordings_session_question ON interview_recordings(session_id, question_id);
+              `);
+              console.log('✅ interview_recordingsテーブルを作成しました（外部キー制約なし）');
+            }
+          } else {
+            // テーブルが存在する場合、question_idとtranscription_textカラムが存在するかチェック
+            const columns = await pool.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'interview_recordings'
+            `);
+            const columnNames = columns.rows.map((r: any) => r.column_name);
+            
+            if (!columnNames.includes('question_id')) {
+              await pool.query(`ALTER TABLE interview_recordings ADD COLUMN IF NOT EXISTS question_id VARCHAR(10)`);
+              await pool.query(`CREATE INDEX IF NOT EXISTS idx_interview_recordings_question_id ON interview_recordings(question_id)`);
+              console.log('✅ interview_recordings.question_idカラムを追加しました');
+            }
+            
+            if (!columnNames.includes('transcription_text')) {
+              await pool.query(`ALTER TABLE interview_recordings ADD COLUMN IF NOT EXISTS transcription_text TEXT`);
+              console.log('✅ interview_recordings.transcription_textカラムを追加しました');
+            }
+            
+            // インデックスの確認と作成
+            await pool.query(`CREATE INDEX IF NOT EXISTS idx_interview_recordings_session_question ON interview_recordings(session_id, question_id)`);
+          }
+        } catch (interviewRecordingsError: any) {
+          console.warn('interview_recordingsテーブルの作成チェックをスキップ:', interviewRecordingsError.message);
+        }
+      }
+      
       if (needsUsers) {
         // usersテーブルが無ければスキーマを実行
         const exists = await pool.query(`SELECT 1 FROM information_schema.tables WHERE table_name = 'users'`);
