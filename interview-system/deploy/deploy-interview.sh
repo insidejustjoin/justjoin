@@ -51,11 +51,15 @@ else
 fi
 
 echo "☁️ Cloud Runにデプロイ中..."
+# サービスアカウントの設定（Cloud Storageへのアクセス権限が必要）
+SERVICE_ACCOUNT="justjoin-interview@$PROJECT_ID.iam.gserviceaccount.com"
+
 gcloud run deploy $SERVICE_NAME \
     --image $IMAGE_NAME \
     --platform managed \
     --region $REGION \
     --project $PROJECT_ID \
+    --service-account $SERVICE_ACCOUNT \
     --allow-unauthenticated \
     --port 3002 \
     --memory 1Gi \
