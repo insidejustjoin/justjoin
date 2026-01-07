@@ -288,7 +288,16 @@ router.post('/start', async (req, res) => {
     // 応募者情報をデータベースから取得または作成
     let applicant;
     try {
-      applicant = await databaseService.createOrGetApplicantFromJobSeeker(email, name, position);
+      // emailとnameが空の場合はデフォルト値を使用（テスト用）
+      const applicantEmail = email || `interview_${Date.now()}@temp.local`;
+      const applicantName = name || 'Anonymous User';
+      const applicantPosition = position || 'Unknown Position';
+      
+      applicant = await databaseService.createOrGetApplicantFromJobSeeker(
+        applicantEmail, 
+        applicantName, 
+        applicantPosition
+      );
       console.log('✅ 応募者情報を取得/作成:', {
         id: applicant.id,
         email: applicant.email,
