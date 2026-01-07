@@ -29,6 +29,7 @@ interface InterviewScreenProps {
   name?: string;
   position?: string;
   consentGiven?: boolean;
+  userId?: string;
 }
 
 interface Progress {
@@ -45,7 +46,8 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
   email,
   name,
   position,
-  consentGiven = true
+  consentGiven = true,
+  userId
 }) => {
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -177,6 +179,17 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
         // サーバー側のテスト用開始APIを呼び出し
         const apiBaseUrl = getApiBaseUrl();
+        console.log('面接開始API呼び出し:', {
+          url: `${apiBaseUrl}/api/interview/start`,
+          body: {
+            email,
+            name,
+            position,
+            language: displayLanguage,
+            consentGiven: consentGiven ?? true,
+          }
+        });
+
         const response = await fetch(`${apiBaseUrl}/api/interview/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -189,12 +202,30 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           }),
         });
 
-        if (!response.ok) throw new Error('面接開始に失敗しました');
+        const responseText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('レスポンスのパースエラー:', responseText);
+          throw new Error(`サーバーエラー: ${response.status} ${response.statusText}`);
+        }
 
-        const data = await response.json();
+        if (!response.ok) {
+          console.error('面接開始APIエラー:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: data.error,
+            message: data.message,
+            details: data.details
+          });
+          throw new Error(data.message || data.error || `面接開始に失敗しました (${response.status})`);
+        }
+
         if (data.success && (data.nextQuestion || data.question)) {
           // サーバー側セッションIDを優先的に利用
           if (data.sessionId) {
+            console.log('セッションIDを設定:', data.sessionId);
             setActiveSessionId(data.sessionId);
           }
 
@@ -220,10 +251,15 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
                 : firstQuestion.text?.ja || ''
             );
           }, 1000);
+        } else {
+          console.error('面接開始レスポンスが不正:', data);
+          throw new Error('面接開始レスポンスが不正です');
         }
       } catch (error) {
         console.error('面接開始エラー:', error);
-        onError('面接を開始できませんでした');
+        const errorMessage = error instanceof Error ? error.message : '面接を開始できませんでした';
+        setError(errorMessage);
+        onError(errorMessage);
       } finally {
         setIsLoading(false);
       }
@@ -401,6 +437,13 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
             const trimmedTranscript = transcript.trim();
             if (trimmedTranscript) {
               formData.append('transcriptionText', trimmedTranscript);
+            }
+            // emailとuserIdを追加（セッションが見つからない場合のフォールバック用）
+            if (email) {
+              formData.append('email', email);
+            }
+            if (userId) {
+              formData.append('userId', userId);
             }
 
             const apiBaseUrl = process.env.NODE_ENV === 'development' 
@@ -607,12 +650,25 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('レスポンスのパースエラー:', responseText);
+        throw new Error(`サーバーエラー: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        console.error('回答送信APIエラー:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: data.error,
+          message: data.message,
+          details: data.details
+        });
+        throw new Error(data.message || data.error || `回答送信に失敗しました (${response.status})`);
+      }
       
       if (data.success) {
         if (data.nextQuestion) {

@@ -120,7 +120,7 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
       });
     }
 
-    const { sessionId, type, questionId, transcriptionText } = req.body;
+    const { sessionId, type, questionId, transcriptionText, email, userId } = req.body;
     
     if (!sessionId || !type) {
       console.error('録音アップロードエラー: パラメータ不足', { sessionId, type });
@@ -189,7 +189,9 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
           mimetype: req.file.mimetype,
           uploadedAt: new Date(),
           questionId: questionId || undefined,
-          transcriptionText: transcriptionText || undefined
+          transcriptionText: transcriptionText || undefined,
+          email: email || undefined, // セッションが見つからない場合のフォールバック用
+          userId: userId || undefined // セッションが見つからない場合のフォールバック用
         });
         console.log('✅ 録音情報のデータベース保存成功');
     } catch (dbError) {
@@ -236,7 +238,7 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
   }
 });
 
-// テスト用の面接開始エンドポイント（開発環境のみ）
+// 面接開始エンドポイント（本番用）
 router.post('/start', async (req, res) => {
   try {
     console.log('面接開始API呼び出し:', req.body);
@@ -283,42 +285,66 @@ router.post('/start', async (req, res) => {
       });
     }
 
-    // テスト用の応募者データを作成
-    const applicant = {
-      id: `test_applicant_${Date.now()}`,
-      email: email || 'test@example.com',
-      name: name || 'テストユーザー',
-      position: position || 'ソフトウェアエンジニア',
-      experienceYears: 3,
-      skills: ['JavaScript', 'React', 'Node.js'],
-      selfIntroduction: 'テスト用の自己紹介です。',
-      nationality: 'Japanese',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    
-    console.log('応募者データ作成:', applicant);
-    
-    // テスト用の面接セッションを作成
-    const sessionId = `test_session_${Date.now()}`;
-    const session = {
-      id: sessionId,
-      applicantId: applicant.id,
-      status: 'in_progress' as InterviewStatus,
-      language: language as Language,
-      currentQuestionIndex: 0,
-      startedAt: new Date(),
-      completedAt: null,
-      totalDuration: 0,
-      consentGiven: true,
-      ipAddress,
-      userAgent,
-      metadata: {},
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    // 応募者情報をデータベースから取得または作成
+    let applicant;
+    try {
+      applicant = await databaseService.createOrGetApplicantFromJobSeeker(email, name, position);
+      console.log('✅ 応募者情報を取得/作成:', {
+        id: applicant.id,
+        email: applicant.email,
+        name: applicant.name,
+        position: applicant.position
+      });
+    } catch (applicantError) {
+      console.error('❌ 応募者情報の取得/作成エラー:', applicantError);
+      if (applicantError instanceof Error) {
+        console.error('エラー詳細:', {
+          message: applicantError.message,
+          stack: applicantError.stack
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        error: 'APPLICANT_CREATION_ERROR',
+        message: '応募者情報の取得に失敗しました',
+        details: process.env.NODE_ENV === 'development' && applicantError instanceof Error ? applicantError.message : undefined
+      });
+    }
 
-    console.log('面接セッション作成:', session);
+    // データベースに面接セッションを作成
+    let session;
+    try {
+      console.log('面接セッション作成開始:', {
+        applicantId: applicant.id,
+        language,
+        consentGiven,
+        ipAddress,
+        userAgent
+      });
+      
+      session = await databaseService.createInterviewSession(
+        applicant.id,
+        language as Language,
+        consentGiven,
+        ipAddress,
+        userAgent
+      );
+      console.log('✅ 面接セッションをデータベースに作成:', session.id);
+    } catch (sessionError) {
+      console.error('❌ 面接セッション作成エラー:', sessionError);
+      if (sessionError instanceof Error) {
+        console.error('エラー詳細:', {
+          message: sessionError.message,
+          stack: sessionError.stack
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        error: 'SESSION_CREATION_ERROR',
+        message: '面接セッションの作成に失敗しました',
+        details: process.env.NODE_ENV === 'development' && sessionError instanceof Error ? sessionError.message : undefined
+      });
+    }
 
     // AI面接官による面接開始
     console.log('AI面接官サービス呼び出し開始');
@@ -328,9 +354,9 @@ router.post('/start', async (req, res) => {
     // 求職者プロフィール情報を設定
     const jobSeekerInfo = {
       name: applicant.name,
-      position: applicant.position,
-      experienceYears: applicant.experienceYears,
-      skills: applicant.skills
+      position: applicant.position || position || '未設定',
+      experienceYears: applicant.experienceYears || 0,
+      skills: applicant.skills || []
     };
 
     const response = {
@@ -347,18 +373,52 @@ router.post('/start', async (req, res) => {
       jobSeekerInfo: jobSeekerInfo
     };
 
-    console.log('面接開始API成功レスポンス:', response);
+    console.log('✅ 面接開始API成功レスポンス:', response);
     res.json(response);
 
   } catch (error) {
-    console.error('面接開始エラー詳細:', error);
+    console.error('❌ 面接開始エラー詳細:', error);
     if (error instanceof Error) {
       console.error('エラースタック:', error.stack);
+      // PostgreSQLエラーの場合、詳細情報をログに記録
+      if ((error as any).code) {
+        console.error('PostgreSQLエラーコード:', (error as any).code);
+        console.error('PostgreSQLエラー詳細:', (error as any).detail);
+        console.error('PostgreSQLエラーメッセージ:', (error as any).message);
+      }
     }
+    
+    // エラーメッセージを構築
+    let errorMessage = '面接を開始できませんでした';
+    let errorCode = 'INTERNAL_ERROR';
+    
+    if (error instanceof Error) {
+      // データベース接続エラーの場合
+      if (error.message.includes('DATABASE') || error.message.includes('connection')) {
+        errorCode = 'DATABASE_ERROR';
+        errorMessage = 'データベース接続エラーが発生しました';
+      }
+      // セッション作成エラーの場合
+      else if (error.message.includes('SESSION') || error.message.includes('session')) {
+        errorCode = 'SESSION_ERROR';
+        errorMessage = 'セッション作成エラーが発生しました';
+      }
+      // 応募者作成エラーの場合
+      else if (error.message.includes('APPLICANT') || error.message.includes('applicant')) {
+        errorCode = 'APPLICANT_ERROR';
+        errorMessage = '応募者情報の取得に失敗しました';
+      }
+      // PostgreSQLエラーの場合
+      else if ((error as any).code) {
+        errorCode = 'DATABASE_ERROR';
+        errorMessage = `データベースエラー: ${(error as any).code}`;
+      }
+    }
+    
     res.status(500).json({
       success: false,
-      error: 'INTERNAL_ERROR',
-      message: '面接を開始できませんでした',
+      error: errorCode,
+      message: errorMessage,
       details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : undefined
     });
   }
