@@ -47,6 +47,9 @@ COPY --from=deps --chown=interview:nodejs /app/node_modules ./node_modules
 COPY --from=frontend-builder --chown=interview:nodejs /app/dist ./dist
 COPY --from=server-builder --chown=interview:nodejs /app/dist-server ./dist-server
 
+# データベーススキーマファイルをコピー
+COPY --from=server-builder --chown=interview:nodejs /app/database ./database
+
 # 設定ファイルをコピー
 COPY --chown=interview:nodejs package.json ./
 

@@ -26,6 +26,15 @@ class DatabaseService {
             idleTimeoutMillis: 30000,
             connectionTimeoutMillis: 2000,
         });
+        // 接続時にsearch_pathを設定してpublicスキーマを確実に使用
+        this.pool.on('connect', async (client) => {
+            try {
+                await client.query('SET search_path = public');
+            }
+            catch (error) {
+                console.error('❌ Error setting search_path:', error);
+            }
+        });
         console.log('  Pool created with settings:');
         console.log('    max:', 10);
         console.log('    idleTimeoutMillis:', 30000);
@@ -50,59 +59,153 @@ class DatabaseService {
         }
     }
     // メインプラットフォームの求職者データから応募者を取得または作成
-    async createOrGetApplicantFromJobSeeker(email, name) {
+    async createOrGetApplicantFromJobSeeker(email, name, position) {
         try {
             this.initializePool();
             if (!this.pool) {
                 throw new Error('Pool not initialized');
             }
+            // search_pathを明示的に設定
+            await this.pool.query('SET search_path = public');
             let applicant;
             if (email) {
                 // メールアドレスから既存の求職者を検索
-                const userQuery = `
+                console.log('既存の求職者を検索:', email);
+                try {
+                    const userQuery = `
           SELECT u.id as user_id, u.email, js.* 
           FROM users u 
           LEFT JOIN job_seekers js ON u.id = js.user_id 
           WHERE u.email = $1 AND u.user_type = 'job_seeker'
         `;
-                const userResult = await this.pool.query(userQuery, [email]);
-                if (userResult.rows.length > 0) {
-                    const userData = userResult.rows[0];
-                    // 既存の求職者データを面接システム用の応募者として使用
-                    applicant = {
-                        id: userData.user_id,
-                        email: userData.email,
-                        name: userData.full_name || name || 'Unknown',
-                        position: userData.desired_job_title || '',
-                        experienceYears: userData.experience_years || 0,
-                        skills: userData.skills || [],
-                        selfIntroduction: userData.self_introduction || '',
-                        nationality: userData.nationality || 'N/A',
-                        createdAt: userData.created_at || new Date(),
-                        updatedAt: userData.updated_at || new Date()
-                    };
-                    console.log('✅ Found existing job seeker:', userData.email);
-                    return applicant;
+                    const userResult = await this.pool.query(userQuery, [email]);
+                    if (userResult.rows.length > 0) {
+                        const userData = userResult.rows[0];
+                        // 既存の求職者データを面接システム用の応募者として使用
+                        // user_idはUUID形式の可能性があるため、文字列として扱う
+                        applicant = {
+                            id: String(userData.user_id), // UUIDを文字列に変換
+                            email: userData.email,
+                            name: userData.full_name || name || 'Unknown',
+                            position: userData.desired_job_title || position || '',
+                            experienceYears: userData.experience_years || 0,
+                            skills: userData.skills || [],
+                            selfIntroduction: userData.self_introduction || '',
+                            nationality: userData.nationality || 'N/A',
+                            createdAt: userData.created_at || new Date(),
+                            updatedAt: userData.updated_at || new Date()
+                        };
+                        console.log('✅ Found existing job seeker:', {
+                            id: applicant.id,
+                            email: applicant.email,
+                            name: applicant.name
+                        });
+                        // 既存の求職者の場合、interview_applicantsテーブルにも存在するか確認
+                        // 存在しない場合は作成する（セッション作成時の外部キー制約を満たすため）
+                        const applicantCheckQuery = `
+            SELECT id FROM interview_applicants WHERE id = $1
+          `;
+                        const applicantCheckResult = await this.pool.query(applicantCheckQuery, [applicant.id]);
+                        if (applicantCheckResult.rows.length === 0) {
+                            console.log('interview_applicantsテーブルに存在しないため、作成します');
+                            const insertApplicantQuery = `
+              INSERT INTO interview_applicants (id, email, name, position, created_at, updated_at)
+              VALUES ($1, $2, $3, $4, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                  email = EXCLUDED.email,
+                  name = EXCLUDED.name,
+                  position = EXCLUDED.position,
+                  updated_at = NOW()
+              RETURNING *
+            `;
+                            const insertResult = await this.pool.query(insertApplicantQuery, [
+                                applicant.id,
+                                applicant.email,
+                                applicant.name,
+                                applicant.position
+                            ]);
+                            if (insertResult.rows && insertResult.rows.length > 0) {
+                                console.log('✅ interview_applicantsテーブルに作成しました');
+                            }
+                            else {
+                                // 既に存在していた場合は再取得
+                                const existingResult = await this.pool.query(applicantCheckQuery, [applicant.id]);
+                                if (existingResult.rows.length > 0) {
+                                    console.log('✅ interview_applicantsテーブルに既に存在していました');
+                                }
+                            }
+                        }
+                        return applicant;
+                    }
+                }
+                catch (queryError) {
+                    // users テーブルが存在しない場合（別データベースの場合など）は、新規応募者として作成
+                    if (queryError.code === '42P01' || queryError.message?.includes('does not exist')) {
+                        console.log('⚠️ users/job_seekersテーブルが存在しないため、新規応募者として作成します:', queryError.message);
+                        // この場合は後続の処理で新規応募者として作成される
+                    }
+                    else {
+                        // その他のエラーは再スロー
+                        throw queryError;
+                    }
                 }
             }
             // 新規の応募者として面接専用テーブルに作成
-            const insertQuery = `
+            const applicantEmail = email || `interview_${Date.now()}@temp.local`;
+            const applicantName = name || 'Anonymous';
+            const applicantPosition = position || 'Unknown Position';
+            console.log('新規の応募者を作成:', { email: applicantEmail, name: applicantName, position: applicantPosition });
+            // emailが既に存在する場合は取得、存在しない場合は作成
+            const upsertQuery = `
         INSERT INTO interview_applicants (id, email, name, position, created_at, updated_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+        VALUES (gen_random_uuid()::text, $1, $2, $3, NOW(), NOW())
+        ON CONFLICT (email) DO UPDATE SET
+          name = COALESCE(EXCLUDED.name, interview_applicants.name),
+          position = COALESCE(EXCLUDED.position, interview_applicants.position),
+          updated_at = NOW()
         RETURNING *
       `;
-            const result = await this.pool.query(insertQuery, [
-                email || `interview_${Date.now()}@temp.local`,
-                name || 'Anonymous',
-                'Unknown Position'
+            const result = await this.pool.query(upsertQuery, [
+                applicantEmail,
+                applicantName,
+                applicantPosition
             ]);
+            if (!result.rows || result.rows.length === 0) {
+                throw new Error('応募者の作成後、結果が返されませんでした');
+            }
             applicant = this.mapRowToApplicant(result.rows[0]);
-            console.log('✅ Created new interview applicant:', applicant.email);
+            console.log('✅ Created/Updated interview applicant:', {
+                id: applicant.id,
+                email: applicant.email,
+                name: applicant.name,
+                position: applicant.position
+            });
             return applicant;
         }
         catch (error) {
             console.error('❌ Error creating/getting applicant from job seeker:', error);
-            throw new Error('Failed to create or get applicant');
+            if (error instanceof Error) {
+                console.error('エラー詳細:', {
+                    message: error.message,
+                    stack: error.stack,
+                    email,
+                    name,
+                    position
+                });
+                // PostgreSQLエラーの場合、詳細情報をログに記録
+                if (error.code) {
+                    console.error('PostgreSQLエラーコード:', error.code);
+                    console.error('PostgreSQLエラー詳細:', error.detail);
+                    console.error('PostgreSQLエラーメッセージ:', error.message);
+                    console.error('PostgreSQLエラー位置:', error.position);
+                }
+            }
+            // エラーメッセージを改善して再スロー
+            const enhancedError = error instanceof Error
+                ? new Error(`応募者情報の取得に失敗しました: ${error.message}${error.code ? ` (コード: ${error.code})` : ''}`)
+                : new Error('応募者情報の取得に失敗しました: 不明なエラー');
+            enhancedError.originalError = error;
+            throw enhancedError;
         }
     }
     // 求職者プロフィールの詳細情報を取得
@@ -132,7 +235,19 @@ class DatabaseService {
     // 面接セッションを作成
     async createInterviewSession(applicantId, language = 'ja', consentGiven = false, ipAddress, userAgent) {
         try {
+            this.initializePool();
+            if (!this.pool) {
+                throw new Error('Pool not initialized');
+            }
+            // search_pathを明示的に設定
+            await this.pool.query('SET search_path = public');
             const sessionId = `interview_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            console.log('セッション作成クエリ実行:', {
+                sessionId,
+                applicantId,
+                language,
+                consentGiven
+            });
             const query = `
         INSERT INTO interview_sessions (
           id, applicant_id, status, language, current_question_index,
@@ -140,23 +255,39 @@ class DatabaseService {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
         RETURNING *
       `;
-            const result = await this.pool?.query(query, [
+            const result = await this.pool.query(query, [
                 sessionId,
                 applicantId,
                 'waiting',
                 language,
                 0,
                 consentGiven,
-                ipAddress,
-                userAgent
+                ipAddress || null,
+                userAgent || null
             ]);
-            const session = this.mapRowToSession(result?.rows[0]);
+            if (!result.rows || result.rows.length === 0) {
+                throw new Error('セッション作成後、結果が返されませんでした');
+            }
+            const session = this.mapRowToSession(result.rows[0]);
             console.log('✅ Created interview session:', session.id);
             return session;
         }
         catch (error) {
             console.error('❌ Error creating interview session:', error);
-            throw new Error('Failed to create interview session');
+            if (error instanceof Error) {
+                console.error('エラー詳細:', {
+                    message: error.message,
+                    stack: error.stack,
+                    applicantId,
+                    language
+                });
+                // PostgreSQLエラーの場合、詳細情報をログに記録
+                if (error.code) {
+                    console.error('PostgreSQLエラーコード:', error.code);
+                    console.error('PostgreSQLエラー詳細:', error.detail);
+                }
+            }
+            throw error; // 元のエラーを再スローして、呼び出し元で詳細を確認できるようにする
         }
     }
     // 面接セッションを取得
@@ -310,6 +441,8 @@ class DatabaseService {
             if (!this.pool) {
                 throw new Error('Pool not initialized');
             }
+            // search_pathを明示的に設定（既存の接続にも適用）
+            await this.pool.query('SET search_path = public');
             // セッションIDから応募者IDとemailを取得
             const sessionQuery = `
         SELECT s.applicant_id, a.email
@@ -318,18 +451,43 @@ class DatabaseService {
         WHERE s.id = $1
       `;
             const sessionResult = await this.pool.query(sessionQuery, [recordingInfo.sessionId]);
+            let applicantId = null;
+            let email = null;
             if (sessionResult.rows.length === 0) {
-                console.error('❌ Session not found:', recordingInfo.sessionId);
-                return;
+                console.warn('⚠️ Session not found:', recordingInfo.sessionId);
+                console.warn('   セッションがデータベースに存在しないため、セッションIDからemailを推測します');
+                // test_session_の場合、セッションIDから情報を推測できないため、
+                // 録音ファイルのパスやstorage_pathからemailを推測するか、
+                // またはuser_idを直接使用する
+                // ここでは、sessionIdにemailが含まれている可能性をチェック
+                // または、storage_pathからemailを抽出する
+                // セッションが見つからない場合でも、録音情報は保存する
+                // applicant_idとemailはNULLで保存
+                console.warn('⚠️ セッションが見つからないため、最小限の情報で保存を試みます');
+                // セッションが見つからない場合でも、録音情報は保存する
+                // ただし、applicant_idとemailはNULLになる
             }
-            const applicantId = sessionResult.rows[0].applicant_id;
-            const email = sessionResult.rows[0].email;
+            else {
+                applicantId = sessionResult.rows[0].applicant_id;
+                email = sessionResult.rows[0].email;
+            }
+            // emailが取得できない場合、recordingInfoからemailを取得
+            if (!email && recordingInfo.email) {
+                email = recordingInfo.email;
+                console.log('📧 recordingInfoからemailを取得:', email);
+            }
             const recordingUrl = `/uploads/recordings/${recordingInfo.filename}`;
             // emailからuser_idを取得（メインプラットフォームのusersテーブルから）
             // user_idは数値またはUUID形式のいずれかの可能性がある
             let userId = null;
-            if (email) {
+            // user_idが取得できない場合、recordingInfoからuser_idを取得
+            if (recordingInfo.userId) {
+                userId = recordingInfo.userId;
+                console.log('👤 recordingInfoからuser_idを取得:', userId, 'type:', typeof userId);
+            }
+            else if (email) {
                 try {
+                    console.log('🔍 Looking up user_id for email:', email);
                     const userQuery = `
             SELECT id FROM users WHERE email = $1 AND user_type = 'job_seeker' LIMIT 1
           `;
@@ -340,12 +498,31 @@ class DatabaseService {
                     }
                     else {
                         console.warn('⚠️ User not found for email:', email);
+                        // user_typeが'job_seeker'でない場合も試す
+                        const userQueryAny = `
+              SELECT id FROM users WHERE email = $1 LIMIT 1
+            `;
+                        const userResultAny = await this.pool.query(userQueryAny, [email]);
+                        if (userResultAny.rows.length > 0) {
+                            userId = userResultAny.rows[0].id;
+                            console.log('✅ Found user_id (any type):', userId, 'for email:', email);
+                        }
+                        else {
+                            console.warn('⚠️ User not found (any type) for email:', email);
+                        }
                     }
                 }
                 catch (userError) {
-                    console.warn('⚠️ Could not fetch user_id:', userError);
+                    console.error('❌ Could not fetch user_id:', userError);
+                    if (userError instanceof Error) {
+                        console.error('   Error message:', userError.message);
+                        console.error('   Error stack:', userError.stack);
+                    }
                     // user_idの取得に失敗しても録音情報は保存する
                 }
+            }
+            else {
+                console.warn('⚠️ No email provided, cannot lookup user_id');
             }
             // 録音情報を保存（user_id、question_id、transcription_textも含める）
             const insertQuery = `
@@ -366,9 +543,13 @@ class DatabaseService {
             ]);
             console.log('✅ Saved recording info:', {
                 sessionId: recordingInfo.sessionId,
+                applicantId,
+                userId,
+                email,
                 type: recordingInfo.type,
                 filename: recordingInfo.filename,
-                size: recordingInfo.filesize
+                size: recordingInfo.filesize,
+                questionId: recordingInfo.questionId
             });
         }
         catch (error) {
@@ -386,7 +567,7 @@ class DatabaseService {
             const query = `
         SELECT * FROM interview_recordings 
         WHERE session_id = $1 
-        ORDER BY uploaded_at DESC
+        ORDER BY created_at DESC
       `;
             const result = await this.pool.query(query, [sessionId]);
             return result.rows;
@@ -394,6 +575,128 @@ class DatabaseService {
         catch (error) {
             console.error('❌ Error getting session recordings:', error);
             return [];
+        }
+    }
+    // 応募者の録音情報を取得（古い録画削除用）
+    async getApplicantRecordings(applicantId) {
+        try {
+            this.initializePool();
+            if (!this.pool) {
+                throw new Error('Pool not initialized');
+            }
+            const query = `
+        SELECT id, storage_path, recording_url, session_id, created_at
+        FROM interview_recordings 
+        WHERE applicant_id = $1 
+        ORDER BY created_at DESC
+      `;
+            const result = await this.pool.query(query, [applicantId]);
+            return result.rows;
+        }
+        catch (error) {
+            console.error('❌ Error getting applicant recordings:', error);
+            return [];
+        }
+    }
+    // 応募者の古い録画を削除（データベースから）
+    async deleteApplicantRecordings(applicantId) {
+        try {
+            this.initializePool();
+            if (!this.pool) {
+                throw new Error('Pool not initialized');
+            }
+            const deleteQuery = `
+        DELETE FROM interview_recordings 
+        WHERE applicant_id = $1
+        RETURNING id, storage_path, recording_url
+      `;
+            const result = await this.pool.query(deleteQuery, [applicantId]);
+            const deletedCount = result.rows.length;
+            console.log(`✅ 応募者の録画をデータベースから削除: ${deletedCount}件`);
+            return deletedCount;
+        }
+        catch (error) {
+            console.error('❌ Error deleting applicant recordings:', error);
+            return 0;
+        }
+    }
+    // データベーススキーマを実行するメソッド
+    async executeSchema(schemaSql) {
+        try {
+            this.initializePool();
+            if (!this.pool) {
+                throw new Error('Pool not initialized');
+            }
+            // search_pathを設定
+            await this.pool.query('SET search_path = public');
+            // SQLファイルをパースしてコマンドを分割（より堅牢な方法）
+            // PostgreSQLでは複数のコマンドを一度に実行できるため、セミコロンで分割
+            // ただし、$$で囲まれた関数定義を考慮する必要がある
+            // まず、$$で囲まれたブロックを一時的に置き換える
+            const dollarQuoteBlocks = [];
+            let blockCounter = 0;
+            let processedSql = schemaSql;
+            // $$で囲まれたブロックを検出して置き換え
+            const dollarQuoteRegex = /\$\$[\s\S]*?\$\$/g;
+            processedSql = processedSql.replace(dollarQuoteRegex, (match) => {
+                const placeholder = `__DOLLAR_QUOTE_BLOCK_${blockCounter}__`;
+                dollarQuoteBlocks[blockCounter] = match;
+                blockCounter++;
+                return placeholder;
+            });
+            // コメントを削除（--で始まる行コメント）
+            processedSql = processedSql.replace(/--[^\n]*/g, '');
+            // セミコロンで分割
+            let commands = processedSql
+                .split(';')
+                .map(cmd => cmd.trim())
+                .filter(cmd => cmd.length > 0);
+            // 一時プレースホルダーを元に戻す
+            commands = commands.map(cmd => {
+                let restoredCmd = cmd;
+                for (let i = 0; i < dollarQuoteBlocks.length; i++) {
+                    restoredCmd = restoredCmd.replace(`__DOLLAR_QUOTE_BLOCK_${i}__`, dollarQuoteBlocks[i]);
+                }
+                return restoredCmd;
+            });
+            let successCount = 0;
+            let errorCount = 0;
+            const errorDetails = [];
+            const client = await this.pool.connect();
+            try {
+                await client.query('SET search_path = public');
+                for (const command of commands) {
+                    if (!command || command.length < 10) {
+                        continue;
+                    }
+                    try {
+                        await client.query(command);
+                        successCount++;
+                    }
+                    catch (error) {
+                        // 既に存在する場合は警告のみ
+                        if (error.code === '42P07' || error.code === '42710' || error.message?.includes('already exists')) {
+                            // 警告のみで継続
+                        }
+                        else {
+                            errorDetails.push(`${error.code || 'UNKNOWN'}: ${error.message}`);
+                            errorCount++;
+                        }
+                    }
+                }
+            }
+            finally {
+                client.release();
+            }
+            return {
+                success: successCount,
+                errors: errorCount,
+                errorDetails
+            };
+        }
+        catch (error) {
+            console.error('❌ Error executing schema:', error);
+            throw error;
         }
     }
     // プライベートヘルパーメソッド

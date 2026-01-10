@@ -27,8 +27,9 @@ google-credentials.json
 *.key
 *.pem
 scripts/*.json
-google-credentials.json
-scripts/*.json
-.env*
-*.key
-*.pem
+# Environment configuration files with sensitive data
+**/env.gcp.yaml
+**/env.production.yaml
+**/env.local.yaml
+**/env.gcp.yaml
+**/env.gcp.example

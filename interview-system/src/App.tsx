@@ -418,6 +418,7 @@ function App() {
           name={jobSeekerInfo?.name}
           position={jobSeekerInfo?.position}
           consentGiven={consentGiven}
+          userId={tokenData?.userId}
         />
       )}
 
@@ -428,6 +429,7 @@ function App() {
           duration={interviewDuration}
           questionsAnswered={questionsAnswered}
           totalQuestions={totalQuestions}
+          onLanguageChange={setLanguage}
           onRestart={() => {
             setCurrentState('consent');
             setSessionId('');

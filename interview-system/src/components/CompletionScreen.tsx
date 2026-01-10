@@ -12,6 +12,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Language } from '@/types/interview';
+import { LanguageToggle } from './LanguageToggle';
 
 interface CompletionScreenProps {
   sessionId: string;
@@ -20,6 +21,7 @@ interface CompletionScreenProps {
   questionsAnswered?: number;
   totalQuestions?: number;
   onRestart?: () => void;
+  onLanguageChange?: (language: Language) => void;
 }
 
 const CompletionScreen: React.FC<CompletionScreenProps> = ({
@@ -28,7 +30,8 @@ const CompletionScreen: React.FC<CompletionScreenProps> = ({
   duration = 0,
   questionsAnswered = 0,
   totalQuestions = 10,
-  onRestart
+  onRestart,
+  onLanguageChange
 }) => {
   const texts = {
     ja: {
@@ -125,7 +128,14 @@ const CompletionScreen: React.FC<CompletionScreenProps> = ({
     }
   };
 
-  const t = texts[language] || texts.ja;
+  // 言語が正しく設定されているか確認
+  const validLanguage = (language && texts[language]) ? language : 'ja';
+  const t = texts[validLanguage] || texts.ja;
+  
+  // デバッグ用（本番環境では削除可能）
+  if (process.env.NODE_ENV === 'development') {
+    console.log('CompletionScreen language:', language, 'validLanguage:', validLanguage);
+  }
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -156,6 +166,13 @@ const CompletionScreen: React.FC<CompletionScreenProps> = ({
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* 言語切り替えボタン */}
+        {onLanguageChange && (
+          <div className="flex justify-end mb-4 animate-fade-in">
+            <LanguageToggle language={language} onLanguageChange={onLanguageChange} />
+          </div>
+        )}
+        
         {/* ヘッダー */}
         <div className="text-center mb-12 animate-fade-in">
           <div className="relative inline-block mb-8">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,8 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
   const [recordings, setRecordings] = useState<InterviewRecording[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playingRecording, setPlayingRecording] = useState<string | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   // 録画データを取得
   const fetchRecordings = async () => {
@@ -87,35 +89,163 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
       }
       
       // 既に再生中の場合は停止
-      if (audioElement && playingRecording === recording.id) {
-        audioElement.pause();
-        audioElement.currentTime = 0;
-        setAudioElement(null);
+      if (audioElementRef.current && playingRecording === recording.id) {
+        audioElementRef.current.pause();
+        audioElementRef.current.currentTime = 0;
+        audioElementRef.current = null;
         setPlayingRecording(null);
         return;
       }
       
       // 前の再生を停止
-      if (audioElement) {
-        audioElement.pause();
-        audioElement.currentTime = 0;
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current.currentTime = 0;
       }
       
       const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
       
-      // Cloud Storage URLの場合は直接使用、そうでない場合はAPI経由
-      let audioUrl = recording.recording_url;
-      if (!recording.recording_url.startsWith('http')) {
-        audioUrl = `${apiUrl}/api/documents/admin/interview-recording/${recording.id}`;
+      // 録音URLを決定
+      let audioUrl: string | null = null;
+      
+      if (recording.recording_url && recording.recording_url.trim() !== '') {
+        // recording_urlが存在する場合
+        if (recording.recording_url.startsWith('http://') || recording.recording_url.startsWith('https://')) {
+          // 署名付きURLかどうかを確認（Signature、X-Goog-Signature、Expiresパラメータが含まれているか）
+          const isSignedUrl = recording.recording_url.includes('Signature=') || 
+                             recording.recording_url.includes('X-Goog-Signature=') || 
+                             recording.recording_url.includes('Expires=');
+          
+          if (isSignedUrl) {
+            // 署名付きURLの場合はそのまま使用
+            audioUrl = recording.recording_url;
+            console.log('🎵 署名付きURLを使用:', audioUrl.substring(0, 100) + '...');
+          } else {
+            // 通常のCloud Storage URL（署名付きURLではない）の場合、エンドポイント経由で署名付きURLを取得
+            console.log('🎵 通常のCloud Storage URLのため、API経由で署名付きURLを取得:', recording.recording_url.substring(0, 100));
+            // fetchで署名付きURLを取得（JSON形式で取得）
+            try {
+              const response = await fetch(`${apiUrl}/api/documents/admin/interview-recording/${recording.id}?format=json`, {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Accept': 'application/json',
+                },
+              });
+              
+              if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.data?.signedUrl) {
+                  audioUrl = result.data.signedUrl;
+                  console.log('✅ 署名付きURLを取得しました (JSON):', audioUrl.substring(0, 150) + '...');
+                } else {
+                  // JSON形式で取得できなかった場合、リダイレクトを追従
+                  audioUrl = response.url;
+                  console.log('✅ 署名付きURLを取得しました (リダイレクト):', audioUrl.substring(0, 150) + '...');
+                }
+              } else {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+            } catch (fetchError) {
+              console.error('❌ 署名付きURL取得エラー:', fetchError);
+              throw new Error('署名付きURLの取得に失敗しました');
+            }
+          }
+        } else {
+          // パス形式の場合、API経由で署名付きURLを取得
+          console.log('🎵 パス形式のため、API経由で署名付きURLを取得:', recording.recording_url);
+          // fetchで署名付きURLを取得（JSON形式で取得）
+          try {
+            const response = await fetch(`${apiUrl}/api/documents/admin/interview-recording/${recording.id}?format=json`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json',
+              },
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.data?.signedUrl) {
+                audioUrl = result.data.signedUrl;
+                console.log('✅ 署名付きURLを取得しました (JSON):', audioUrl.substring(0, 150) + '...');
+              } else {
+                // JSON形式で取得できなかった場合、リダイレクトを追従
+                audioUrl = response.url;
+                console.log('✅ 署名付きURLを取得しました (リダイレクト):', audioUrl.substring(0, 150) + '...');
+              }
+            } else {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+          } catch (fetchError) {
+            console.error('❌ 署名付きURL取得エラー:', fetchError);
+            throw new Error('署名付きURLの取得に失敗しました');
+          }
+        }
+      } else {
+        // recording_urlが空の場合はAPI経由で署名付きURLを取得
+        console.log('🎵 recording_urlが空のため、API経由で署名付きURLを取得');
+        // fetchで署名付きURLを取得（JSON形式で取得）
+        try {
+          const response = await fetch(`${apiUrl}/api/documents/admin/interview-recording/${recording.id}?format=json`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data?.signedUrl) {
+              audioUrl = result.data.signedUrl;
+              console.log('✅ 署名付きURLを取得しました (JSON):', audioUrl.substring(0, 150) + '...');
+            } else {
+              // JSON形式で取得できなかった場合、リダイレクトを追従
+              audioUrl = response.url;
+              console.log('✅ 署名付きURLを取得しました (リダイレクト):', audioUrl.substring(0, 150) + '...');
+            }
+          } else {
+            const errorText = await response.text();
+            console.error(`❌ HTTP error! status: ${response.status}, message: ${errorText}`);
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+        } catch (fetchError) {
+          console.error('❌ 署名付きURL取得エラー:', fetchError);
+          throw new Error('署名付きURLの取得に失敗しました');
+        }
       }
       
-      // 署名付きURLが必要な場合の処理は後で実装
+      if (!audioUrl) {
+        throw new Error('録音URLが取得できませんでした');
+      }
+      
+      console.log('🎵 録音再生開始:', {
+        recordingId: recording.id,
+        audioUrl: audioUrl.substring(0, 150),
+        hasUrl: !!recording.recording_url,
+        originalUrl: recording.recording_url?.substring(0, 100)
+      });
+      
       const audio = new Audio(audioUrl);
+      // CORS設定（署名付きURLの場合は不要だが、念のため）
       audio.crossOrigin = 'anonymous';
+      
+      // 音声メタデータの読み込みを待つ
+      audio.addEventListener('loadedmetadata', () => {
+        console.log('✅ 音声メタデータ読み込み完了:', {
+          duration: audio.duration,
+          readyState: audio.readyState
+        });
+      });
+      
+      audio.addEventListener('canplay', () => {
+        console.log('✅ 音声再生準備完了');
+      });
       
       audio.addEventListener('ended', () => {
         setPlayingRecording(null);
-        setAudioElement(null);
+        audioElementRef.current = null;
       });
       
       audio.addEventListener('error', (e) => {
@@ -126,11 +256,11 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
           variant: "destructive",
         });
         setPlayingRecording(null);
-        setAudioElement(null);
+        audioElementRef.current = null;
       });
       
       await audio.play();
-      setAudioElement(audio);
+      audioElementRef.current = audio;
       setPlayingRecording(recording.id);
     } catch (error) {
       console.error('録音再生エラー:', error);
@@ -145,12 +275,13 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
   // コンポーネントのアンマウント時に音声を停止
   useEffect(() => {
     return () => {
-      if (audioElement) {
-        audioElement.pause();
-        audioElement.currentTime = 0;
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current.currentTime = 0;
+        audioElementRef.current = null;
       }
     };
-  }, [audioElement]);
+  }, []);
 
   // 録画をダウンロード
   const downloadRecording = async (recording: InterviewRecording) => {

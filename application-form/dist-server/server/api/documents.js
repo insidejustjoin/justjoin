@@ -388,11 +388,123 @@ router.post('/', async (req, res) => {
             });
         }
         const userIdStr = String(userId);
-        const normalizedData = typeof documentData === 'string' ? JSON.parse(documentData) : documentData;
+        let normalizedData = typeof documentData === 'string' ? JSON.parse(documentData) : documentData;
         if (registrationType !== 'engineer' && registrationType !== 'general') {
             return res.status(400).json({ success: false, message: 'registrationType は engineer または general が必須です' });
         }
         const normalizedRegistrationType = registrationType;
+        // 長文項目の翻訳・要約処理（非同期で実行、エラーが発生しても処理を続行）
+        (async () => {
+            try {
+                console.log('📝 長文項目の翻訳・要約処理を開始します', { userId: userIdStr });
+                const { TranslationService } = await import('../../services/translationService.js');
+                const translationService = TranslationService.getInstance();
+                // 翻訳対象の長文項目を抽出
+                const textFields = [];
+                // selfPR (resume.selfPR)
+                if (normalizedData.resume?.selfPR && normalizedData.resume.selfPR.trim().length > 0) {
+                    textFields.push({
+                        field: 'selfPR',
+                        value: normalizedData.resume.selfPR,
+                        path: ['resume', 'selfPR_translated']
+                    });
+                }
+                // whyJapan
+                if (normalizedData.whyJapan && normalizedData.whyJapan.trim().length > 0) {
+                    textFields.push({
+                        field: 'whyJapan',
+                        value: normalizedData.whyJapan,
+                        path: ['whyJapan_translated']
+                    });
+                }
+                // whyInterestJapan
+                if (normalizedData.whyInterestJapan && normalizedData.whyInterestJapan.trim().length > 0) {
+                    textFields.push({
+                        field: 'whyInterestJapan',
+                        value: normalizedData.whyInterestJapan,
+                        path: ['whyInterestJapan_translated']
+                    });
+                }
+                // personalPreference
+                if (normalizedData.personalPreference && normalizedData.personalPreference.trim().length > 0) {
+                    textFields.push({
+                        field: 'personalPreference',
+                        value: normalizedData.personalPreference,
+                        path: ['personalPreference_translated']
+                    });
+                }
+                if (textFields.length === 0) {
+                    console.log('📝 翻訳対象の長文項目がありません');
+                    return;
+                }
+                console.log(`📝 ${textFields.length}件の長文項目を翻訳・要約します`);
+                // 各長文項目を翻訳・要約（並列処理）
+                const translationPromises = textFields.map(async ({ field, value, path }) => {
+                    try {
+                        // ソース言語を推測（日本語と仮定、実際には元のデータの言語を確認する必要がある）
+                        const sourceLanguage = 'ja'; // デフォルトは日本語
+                        const translatedResult = await translationService.translateAndSummarizeForDocuments({
+                            text: value,
+                            sourceLanguage
+                        });
+                        // document_dataに翻訳版を追加
+                        let target = normalizedData;
+                        for (let i = 0; i < path.length - 1; i++) {
+                            if (!target[path[i]]) {
+                                target[path[i]] = {};
+                            }
+                            target = target[path[i]];
+                        }
+                        target[path[path.length - 1]] = {
+                            ja: translatedResult.ja,
+                            en: translatedResult.en,
+                            ru: translatedResult.ru
+                        };
+                        console.log(`✅ ${field}の翻訳・要約が完了しました`);
+                        return { field, success: true };
+                    }
+                    catch (error) {
+                        console.error(`❌ ${field}の翻訳・要約に失敗しました:`, error);
+                        return { field, success: false, error };
+                    }
+                });
+                const results = await Promise.all(translationPromises);
+                const successCount = results.filter(r => r.success).length;
+                const failCount = results.filter(r => !r.success).length;
+                console.log(`📝 翻訳・要約完了: 成功=${successCount}, 失敗=${failCount}`);
+                // 翻訳・要約が完了したら、データベースを更新
+                if (successCount > 0) {
+                    const checkQuery = `
+            SELECT id 
+            FROM user_documents 
+            WHERE user_id = $1 
+              AND document_type = $2 
+              AND registration_type IS NOT NULL
+              AND LOWER(registration_type) = LOWER($3)
+            ORDER BY created_at DESC 
+            LIMIT 1
+          `;
+                    const checkResult = await query(checkQuery, [userIdStr, documentType, normalizedRegistrationType]);
+                    if (checkResult.rows.length > 0) {
+                        const updateQuery = `
+              UPDATE user_documents 
+              SET document_data = $1, updated_at = $2
+              WHERE id = $3
+            `;
+                        await query(updateQuery, [
+                            JSON.stringify(normalizedData),
+                            new Date().toISOString(),
+                            checkResult.rows[0].id
+                        ]);
+                        console.log(`✅ 翻訳・要約結果をデータベースに保存しました`);
+                    }
+                }
+            }
+            catch (error) {
+                console.error('❌ 翻訳・要約処理でエラーが発生しました:', error);
+                // エラーが発生しても処理を続行（レスポンスは既に返されている）
+            }
+        })();
         // データベースに保存（メインストレージ）
         try {
             const checkQuery = `
@@ -1350,44 +1462,65 @@ router.get('/admin/interview-status/:userId', authenticate, async (req, res) => 
         }
         // 面接URLの状態を取得（テーブルが存在しない場合はエラーを無視）
         let urlResult = { rows: [] };
+        const urlQuery = `
+      SELECT is_used, created_at
+      FROM interview_urls
+      WHERE user_id = $1::uuid
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
         try {
-            const urlQuery = `
-        SELECT is_used, created_at
-        FROM interview_urls
-        WHERE user_id = $1
-        ORDER BY created_at DESC
-        LIMIT 1
-      `;
             urlResult = await query(urlQuery, [userId]);
+            console.log('面接URL状態取得結果:', { userId, rowCount: urlResult.rows.length });
         }
         catch (urlError) {
             // interview_urlsテーブルが存在しない場合は空の結果として扱う
             if (urlError?.message?.includes('does not exist') || urlError?.code === '42P01') {
                 console.warn('interview_urlsテーブルが存在しません:', urlError.message);
+                urlResult = { rows: [] };
             }
             else {
-                throw urlError;
+                console.error('interview_urlsクエリエラー:', {
+                    message: urlError.message,
+                    code: urlError.code,
+                    userId,
+                    query: urlQuery
+                });
+                // エラーを再スローせず、空の結果として扱う
+                urlResult = { rows: [] };
             }
         }
         // 面接受験回数を取得（テーブルが存在しない場合はエラーを無視）
         let attemptsData = { attempt_count: 0, first_attempt_at: null, last_attempt_at: null };
         try {
+            // interview_attemptsテーブルは面接システムのデータベースにあるため、
+            // メインプラットフォームのデータベースには存在しない可能性がある
+            // そのため、エラーを無視してデフォルト値を返す
             const attemptsQuery = `
         SELECT attempt_count, first_attempt_at, last_attempt_at
         FROM interview_attempts
-        WHERE user_id = $1
+        WHERE user_id = $1::uuid
       `;
             const attemptsResult = await query(attemptsQuery, [userId]);
-            attemptsData = attemptsResult.rows.length > 0 ? attemptsResult.rows[0] : { attempt_count: 0, first_attempt_at: null, last_attempt_at: null };
+            attemptsData = attemptsResult.rows.length > 0
+                ? attemptsResult.rows[0]
+                : { attempt_count: 0, first_attempt_at: null, last_attempt_at: null };
+            console.log('面接受験回数取得結果:', { userId, attemptsData });
         }
         catch (attemptsError) {
             // interview_attemptsテーブルが存在しない場合はデフォルト値を返す
             if (attemptsError?.message?.includes('does not exist') || attemptsError?.code === '42P01') {
-                console.warn('interview_attemptsテーブルが存在しません:', attemptsError.message);
+                console.warn('interview_attemptsテーブルが存在しません（正常です。面接システムのDBにあります）:', attemptsError.message);
             }
             else {
-                throw attemptsError;
+                console.warn('interview_attemptsクエリエラー（デフォルト値を使用）:', {
+                    message: attemptsError.message,
+                    code: attemptsError.code,
+                    userId
+                });
             }
+            // エラーを無視してデフォルト値を使用
+            attemptsData = { attempt_count: 0, first_attempt_at: null, last_attempt_at: null };
         }
         if (urlResult.rows.length === 0) {
             return res.json({
@@ -1813,6 +1946,7 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req, res)
             // user_idで見つからない場合、email経由で取得を試みる
             if (recordings.length === 0) {
                 console.log(`🔍 user_id (${userId}) で録音が見つからなかったため、email (${userEmail}) 経由で検索します`);
+                // まず、user_idがNULLまたはemailで直接検索（セッションが存在しない場合も含む）
                 const recordingsByEmailQuery = `
           SELECT 
             ir.id,
@@ -1831,18 +1965,47 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req, res)
             isess.completed_at as session_completed_at,
             ia.email as applicant_email
           FROM interview_recordings ir
-          INNER JOIN interview_sessions isess ON ir.session_id = isess.id
-          INNER JOIN interview_applicants ia ON isess.applicant_id = ia.id
-          WHERE ia.email = $1
+          LEFT JOIN interview_sessions isess ON ir.session_id = isess.id
+          LEFT JOIN interview_applicants ia ON isess.applicant_id = ia.id
+          WHERE ir.user_id::text = $1 OR (ir.user_id IS NULL AND ir.session_id LIKE 'test_session_%')
           ORDER BY ir.question_id ASC, ir.created_at DESC
         `;
+                // さらに、user_idがNULLで、最近の録音（24時間以内）を検索
+                const recentRecordingsQuery = `
+          SELECT 
+            ir.id,
+            ir.session_id,
+            ir.applicant_id,
+            ir.user_id,
+            ir.recording_url,
+            ir.recording_type,
+            ir.file_size,
+            ir.duration,
+            ir.storage_path,
+            ir.question_id,
+            ir.transcription_text,
+            ir.created_at,
+            isess.status as session_status,
+            isess.completed_at as session_completed_at,
+            ia.email as applicant_email
+          FROM interview_recordings ir
+          LEFT JOIN interview_sessions isess ON ir.session_id = isess.id
+          LEFT JOIN interview_applicants ia ON isess.applicant_id = ia.id
+          WHERE ir.user_id IS NULL 
+            AND ir.created_at >= NOW() - INTERVAL '24 hours'
+            AND ir.session_id LIKE 'test_session_%'
+          ORDER BY ir.created_at DESC
+        `;
                 try {
-                    const recordingsByEmailResult = await query(recordingsByEmailQuery, [userEmail]);
-                    recordings = recordingsByEmailResult.rows;
-                    console.log(`✅ email (${userEmail}) で ${recordings.length} 件の録音を取得しました`);
-                    if (recordings.length > 0) {
-                        console.log('📋 取得した録音のuser_id:', recordings.map(r => r.user_id));
-                        console.log('📋 取得した録音のapplicant_email:', recordings.map(r => r.applicant_email));
+                    // まず、user_idで再検索
+                    const recordingsByUserIdResult = await query(recordingsByEmailQuery, [userId]);
+                    recordings = recordingsByUserIdResult.rows;
+                    console.log(`✅ user_id (${userId}) で再検索: ${recordings.length} 件の録音を取得しました`);
+                    // それでも見つからない場合、最近の録音を検索
+                    if (recordings.length === 0) {
+                        const recentResult = await query(recentRecordingsQuery);
+                        recordings = recentResult.rows;
+                        console.log(`✅ 最近の録音（24時間以内）で ${recordings.length} 件を取得しました`);
                     }
                 }
                 catch (emailQueryError) {
@@ -1851,6 +2014,88 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req, res)
                         stack: emailQueryError.stack,
                         userEmail
                     });
+                }
+                // 従来のemail経由の検索も試す（interview_applicantsテーブル経由）
+                if (recordings.length === 0) {
+                    const recordingsByEmailQueryOld = `
+            SELECT 
+              ir.id,
+              ir.session_id,
+              ir.applicant_id,
+              ir.user_id,
+              ir.recording_url,
+              ir.recording_type,
+              ir.file_size,
+              ir.duration,
+              ir.storage_path,
+              ir.question_id,
+              ir.transcription_text,
+              ir.created_at,
+              isess.status as session_status,
+              isess.completed_at as session_completed_at,
+              ia.email as applicant_email
+            FROM interview_recordings ir
+            INNER JOIN interview_sessions isess ON ir.session_id = isess.id
+            INNER JOIN interview_applicants ia ON isess.applicant_id = ia.id
+            WHERE ia.email = $1
+            ORDER BY ir.question_id ASC, ir.created_at DESC
+          `;
+                    try {
+                        const recordingsByEmailResult = await query(recordingsByEmailQueryOld, [userEmail]);
+                        recordings = recordingsByEmailResult.rows;
+                        console.log(`✅ email (${userEmail}) で ${recordings.length} 件の録音を取得しました`);
+                        if (recordings.length > 0) {
+                            console.log('📋 取得した録音のuser_id:', recordings.map(r => r.user_id));
+                            console.log('📋 取得した録音のapplicant_email:', recordings.map(r => r.applicant_email));
+                        }
+                    }
+                    catch (emailQueryErrorOld) {
+                        console.error('❌ email経由の録音取得エラー（旧方式）:', {
+                            error: emailQueryErrorOld.message,
+                            stack: emailQueryErrorOld.stack,
+                            userEmail
+                        });
+                    }
+                }
+                // email経由でも見つからない場合、user_idがNULLで最近の録音（24時間以内）を検索
+                if (recordings.length === 0) {
+                    console.log(`🔍 email経由でも見つからなかったため、最近の録音（24時間以内）を検索します`);
+                    const recentRecordingsQuery = `
+            SELECT 
+              ir.id,
+              ir.session_id,
+              ir.applicant_id,
+              ir.user_id,
+              ir.recording_url,
+              ir.recording_type,
+              ir.file_size,
+              ir.duration,
+              ir.storage_path,
+              ir.question_id,
+              ir.transcription_text,
+              ir.created_at,
+              isess.status as session_status,
+              isess.completed_at as session_completed_at,
+              ia.email as applicant_email
+            FROM interview_recordings ir
+            LEFT JOIN interview_sessions isess ON ir.session_id = isess.id
+            LEFT JOIN interview_applicants ia ON isess.applicant_id = ia.id
+            WHERE ir.created_at > NOW() - INTERVAL '24 hours'
+            ORDER BY ir.created_at DESC
+            LIMIT 50
+          `;
+                    try {
+                        const recentRecordingsResult = await query(recentRecordingsQuery);
+                        console.log(`📋 最近24時間以内の録音: ${recentRecordingsResult.rows.length} 件`);
+                        // デバッグ用：最近の録音のuser_idとemailを確認
+                        if (recentRecordingsResult.rows.length > 0) {
+                            console.log('📋 最近の録音のuser_id:', recentRecordingsResult.rows.map(r => r.user_id).slice(0, 10));
+                            console.log('📋 最近の録音のapplicant_email:', recentRecordingsResult.rows.map(r => r.applicant_email).slice(0, 10));
+                        }
+                    }
+                    catch (recentError) {
+                        console.error('❌ 最近の録音取得エラー:', recentError.message);
+                    }
                 }
             }
         }
@@ -1865,21 +2110,388 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req, res)
             // エラーを返さず、空の配列を返す
             recordings = [];
         }
-        // 録音ファイルのダウンロードURLを生成（コンポーネントが期待するスネークケース形式で返す）
-        const recordingsWithUrls = recordings.map(recording => {
+        // 録音ファイルの署名付きURLを生成（CORSエラーを回避）
+        const { Storage } = await import('@google-cloud/storage');
+        // Cloud Run環境では、サービスアカウントの認証情報が自動的に設定される
+        // GOOGLE_APPLICATION_CREDENTIALS環境変数が設定されている場合でも、
+        // Storageクライアントは内部でこの環境変数を参照するため、
+        // 一時的に環境変数を削除してからStorageクライアントを初期化する
+        const originalCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+        if (originalCredentials) {
+            // Cloud Run環境では、GOOGLE_APPLICATION_CREDENTIALS環境変数を削除
+            // デフォルトの認証情報（サービスアカウント）を使用するため
+            delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+            console.log(`⚠️  GOOGLE_APPLICATION_CREDENTIALS環境変数を一時的に削除しました (Cloud Run環境では不要)`);
+        }
+        const storageOptions = {
+            projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'justjoin-platform',
+        };
+        console.log(`📋 Cloud Storage初期化 (録画取得エンドポイント): projectId=${storageOptions.projectId}`);
+        const storage = new Storage(storageOptions);
+        // 環境変数を復元（他の処理に影響を与えないため）
+        if (originalCredentials) {
+            process.env.GOOGLE_APPLICATION_CREDENTIALS = originalCredentials;
+        }
+        const bucketName_gcs = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || 'justjoin-platform-match-job-documents';
+        const bucket = storage.bucket(bucketName_gcs);
+        // 認証情報が正しく設定されているか確認
+        try {
+            const [serviceAccountEmail] = await storage.getServiceAccount();
+            console.log(`✅ Cloud Storage認証情報確認: ${serviceAccountEmail.emailAddress || 'N/A'}`);
+        }
+        catch (authError) {
+            console.error(`❌ Cloud Storage認証情報確認エラー:`, {
+                message: authError?.message,
+                code: authError?.code,
+                stack: authError?.stack
+            });
+            // エラーが発生しても処理を継続（署名付きURL生成時に再度エラーが発生する可能性がある）
+        }
+        const recordingsWithUrls = await Promise.all(recordings.map(async (recording) => {
             let downloadUrl = null;
-            if (recording.storage_path) {
-                // ストレージパスがある場合、それをそのまま使用
-                downloadUrl = recording.storage_path;
+            try {
+                // storage_pathを優先して使用（Cloud Storageパスが保存されている可能性が高い）
+                let originalPath = null;
+                if (recording.storage_path && recording.storage_path.trim() !== '') {
+                    const storagePath = recording.storage_path.trim();
+                    // storage_pathがCloud Storage URLまたはパスの場合、それを優先
+                    if (storagePath.startsWith('interview-recordings/') || storagePath.startsWith('https://storage.googleapis.com/') || storagePath.includes('interview_')) {
+                        originalPath = storagePath;
+                        console.log(`   📋 storage_pathを優先使用: ${storagePath.substring(0, 80)}...`);
+                    }
+                }
+                // storage_pathが使えない場合、recording_urlを使用
+                if (!originalPath && recording.recording_url && recording.recording_url.trim() !== '') {
+                    originalPath = recording.recording_url.trim();
+                    console.log(`   📋 recording_urlを使用: ${originalPath.substring(0, 80)}...`);
+                }
+                console.log(`🔍 録画ID ${recording.id} のURL生成開始:`, {
+                    storage_path: recording.storage_path?.substring(0, 100),
+                    recording_url: recording.recording_url?.substring(0, 100),
+                    originalPath: originalPath?.substring(0, 100),
+                    storage_path_type: recording.storage_path ? typeof recording.storage_path : 'null',
+                    recording_url_type: recording.recording_url ? typeof recording.recording_url : 'null'
+                });
+                if (!originalPath) {
+                    console.warn(`⚠️  録画ID ${recording.id}: storage_path と recording_url の両方が空です`);
+                    downloadUrl = null;
+                }
+                else if (originalPath.startsWith('https://storage.googleapis.com/')) {
+                    // 完全なCloud Storage URLの場合、署名付きURLを生成
+                    try {
+                        // URLからファイルパスを抽出
+                        // 形式: https://storage.googleapis.com/BUCKET_NAME/path/to/file
+                        const urlMatch = originalPath.match(/https:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
+                        if (urlMatch && urlMatch[1]) {
+                            const filePath = urlMatch[1];
+                            console.log(`🔍 ファイルパス抽出: ${filePath.substring(0, 80)}...`);
+                            const file = bucket.file(filePath);
+                            // ファイルの存在確認はスキップして、直接署名付きURLを生成
+                            // ファイルが存在しない場合でも署名付きURLは生成可能（ただし、アクセス時に404エラーになる）
+                            try {
+                                console.log(`🔧 署名付きURL生成を試行: ${filePath.substring(0, 80)}...`);
+                                const expirationDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間後
+                                const [signedUrl] = await file.getSignedUrl({
+                                    action: 'read',
+                                    expires: expirationDate,
+                                });
+                                downloadUrl = signedUrl;
+                                console.log(`✅ 署名付きURL生成成功: ${filePath.substring(0, 60)}...`);
+                                console.log(`   URLプレビュー: ${signedUrl.substring(0, 150)}...`);
+                                // 署名付きURLにSignatureパラメータが含まれているか確認
+                                if (signedUrl.includes('Signature=') || signedUrl.includes('X-Goog-Signature=') || signedUrl.includes('Expires=')) {
+                                    console.log(`   ✅ 署名パラメータが確認できました`);
+                                }
+                                else {
+                                    console.warn(`   ⚠️  署名パラメータが見つかりません。URLを確認してください`);
+                                    console.warn(`   実際のURL: ${signedUrl}`);
+                                }
+                            }
+                            catch (signError) {
+                                console.error(`❌ 署名付きURL生成エラー: ${filePath}`, {
+                                    message: signError?.message,
+                                    code: signError?.code,
+                                    errors: signError?.errors,
+                                    stack: signError?.stack,
+                                    name: signError?.name
+                                });
+                                // エラーが権限関連の場合、サービスアカウントの権限を確認
+                                if (signError?.code === 403 || signError?.code === 'PERMISSION_DENIED' || signError?.message?.includes('permission') || signError?.message?.includes('Permission denied')) {
+                                    console.error(`   ⚠️  権限エラーの可能性があります。サービスアカウントの権限を確認してください`);
+                                    console.error(`   バケット: ${bucketName_gcs}`);
+                                    console.error(`   ファイル: ${filePath}`);
+                                    console.error(`   プロジェクトID: ${process.env.GOOGLE_CLOUD_PROJECT_ID || 'justjoin-platform'}`);
+                                }
+                                // フォールバック: 元のURLを使用（ただし、これは403エラーになる可能性が高い）
+                                downloadUrl = originalPath;
+                                console.warn(`   ⚠️  元のURLを使用します（403エラーの可能性があります）`);
+                            }
+                        }
+                        else {
+                            console.warn(`⚠️  URL解析失敗: ${originalPath}`);
+                            // URL解析に失敗した場合でも、最後の手段として署名付きURL生成を試みる
+                            // ファイル名を抽出して試す
+                            const fileName = originalPath.split('/').pop();
+                            if (fileName && fileName.includes('interview_')) {
+                                const fallbackPath = `interview-recordings/${fileName}`;
+                                try {
+                                    const file = bucket.file(fallbackPath);
+                                    const expirationDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間後
+                                    const [signedUrl] = await file.getSignedUrl({
+                                        action: 'read',
+                                        expires: expirationDate,
+                                    });
+                                    downloadUrl = signedUrl;
+                                    console.log(`✅ フォールバック: 署名付きURL生成成功: ${fallbackPath.substring(0, 60)}...`);
+                                    console.log(`   URLプレビュー: ${signedUrl.substring(0, 150)}...`);
+                                    // 署名パラメータの確認
+                                    if (signedUrl.includes('Signature=') || signedUrl.includes('X-Goog-Signature=') || signedUrl.includes('Expires=')) {
+                                        console.log(`   ✅ 署名パラメータが確認できました`);
+                                    }
+                                    else {
+                                        console.warn(`   ⚠️  署名パラメータが見つかりません`);
+                                    }
+                                }
+                                catch (fallbackError) {
+                                    console.error(`❌ フォールバック署名付きURL生成も失敗:`, fallbackError);
+                                    downloadUrl = originalPath;
+                                }
+                            }
+                            else {
+                                downloadUrl = originalPath;
+                            }
+                        }
+                    }
+                    catch (urlError) {
+                        console.error(`❌ 署名付きURL生成エラー（全体）: ${originalPath}`, urlError);
+                        downloadUrl = originalPath; // フォールバック
+                    }
+                }
+                else if (originalPath.startsWith('interview-recordings/')) {
+                    // 相対パスの場合（interview-recordings/で始まる）
+                    try {
+                        const file = bucket.file(originalPath);
+                        const [exists] = await file.exists();
+                        // ファイルの存在確認はスキップして、直接署名付きURLを生成
+                        // ファイルが存在しない場合でも署名付きURLは生成可能（ただし、アクセス時に404エラーになる）
+                        try {
+                            console.log(`   🔧 署名付きURL生成を試行 (interview-recordings): ${originalPath.substring(0, 80)}...`);
+                            const expirationDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間後
+                            const [signedUrl] = await file.getSignedUrl({
+                                action: 'read',
+                                expires: expirationDate,
+                            });
+                            downloadUrl = signedUrl;
+                            console.log(`✅ 署名付きURL生成成功 (interview-recordings): ${originalPath.substring(0, 60)}...`);
+                            console.log(`   URLプレビュー: ${signedUrl.substring(0, 150)}...`);
+                            // 署名パラメータの確認
+                            if (signedUrl.includes('Signature=') || signedUrl.includes('X-Goog-Signature=') || signedUrl.includes('Expires=')) {
+                                console.log(`   ✅ 署名パラメータが確認できました`);
+                            }
+                            else {
+                                console.warn(`   ⚠️  署名パラメータが見つかりません`);
+                            }
+                        }
+                        catch (signError) {
+                            console.error(`❌ 署名付きURL生成エラー (interview-recordings): ${originalPath}`, {
+                                message: signError?.message,
+                                code: signError?.code,
+                                errors: signError?.errors,
+                                stack: signError?.stack
+                            });
+                            // エラーが発生してもフォールバックしない（通常のURLは403エラーになるため）
+                            throw signError; // エラーを再スローして、上位のエラーハンドリングで処理
+                        }
+                    }
+                    catch (urlError) {
+                        console.error(`❌ 署名付きURL生成エラー (interview-recordings): ${originalPath}`, {
+                            message: urlError?.message,
+                            code: urlError?.code,
+                            stack: urlError?.stack
+                        });
+                        // エラーが発生した場合は、通常のURLではなく空文字列を返す（フロントエンドでエンドポイント経由で取得することを示す）
+                        downloadUrl = null; // 通常のURLは403エラーになるため、返さない
+                    }
+                }
+                else if (originalPath.includes('interview_') && originalPath.includes('_audio_')) {
+                    // ファイル名から推測（interview_xxx_xxx_audio_xxx.webm 形式）
+                    const fileName = originalPath.split('/').pop() || originalPath;
+                    const filePath = `interview-recordings/${fileName}`;
+                    try {
+                        console.log(`   🔧 署名付きURL生成を試行 (ファイル名から推測): ${filePath.substring(0, 80)}...`);
+                        const file = bucket.file(filePath);
+                        const expirationDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間後
+                        const [signedUrl] = await file.getSignedUrl({
+                            action: 'read',
+                            expires: expirationDate,
+                        });
+                        downloadUrl = signedUrl;
+                        console.log(`✅ 署名付きURL生成成功 (ファイル名から推測): ${filePath.substring(0, 60)}...`);
+                        console.log(`   URLプレビュー: ${signedUrl.substring(0, 150)}...`);
+                        // 署名パラメータの確認
+                        if (signedUrl.includes('Signature=') || signedUrl.includes('X-Goog-Signature=') || signedUrl.includes('Expires=')) {
+                            console.log(`   ✅ 署名パラメータが確認できました`);
+                        }
+                        else {
+                            console.warn(`   ⚠️  署名パラメータが見つかりません`);
+                        }
+                    }
+                    catch (urlError) {
+                        console.error(`❌ 署名付きURL生成エラー (ファイル名から推測): ${filePath}`, {
+                            message: urlError?.message,
+                            code: urlError?.code,
+                            stack: urlError?.stack
+                        });
+                        // エラーが発生した場合は、通常のURLではなくnullを返す
+                        downloadUrl = null;
+                    }
+                }
+                else if (originalPath.startsWith('/uploads/recordings/')) {
+                    // ローカルパスの場合、Cloud Storageパスに変換
+                    const filePath = `interview-recordings/${originalPath.replace('/uploads/recordings/', '')}`;
+                    try {
+                        console.log(`   🔧 署名付きURL生成を試行 (/uploads/recordings): ${filePath.substring(0, 80)}...`);
+                        const file = bucket.file(filePath);
+                        const expirationDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間後
+                        const [signedUrl] = await file.getSignedUrl({
+                            action: 'read',
+                            expires: expirationDate,
+                        });
+                        downloadUrl = signedUrl;
+                        console.log(`✅ 署名付きURL生成成功 (/uploads/recordings): ${filePath.substring(0, 60)}...`);
+                        console.log(`   URLプレビュー: ${signedUrl.substring(0, 150)}...`);
+                        // 署名パラメータの確認
+                        if (signedUrl.includes('Signature=') || signedUrl.includes('X-Goog-Signature=') || signedUrl.includes('Expires=')) {
+                            console.log(`   ✅ 署名パラメータが確認できました`);
+                        }
+                        else {
+                            console.warn(`   ⚠️  署名パラメータが見つかりません`);
+                        }
+                    }
+                    catch (urlError) {
+                        console.error(`❌ 署名付きURL生成エラー (/uploads/recordings): ${filePath}`, {
+                            message: urlError?.message,
+                            code: urlError?.code,
+                            stack: urlError?.stack
+                        });
+                        // エラーが発生した場合は、通常のURLではなくnullを返す
+                        downloadUrl = null;
+                    }
+                }
+                else {
+                    // その他の形式の場合、ファイル名を抽出して署名付きURLを生成を試みる
+                    console.log(`🔍 その他の形式のため、ファイル名から推測: ${originalPath.substring(0, 80)}...`);
+                    // ファイル名を抽出
+                    const fileName = originalPath.split('/').pop() || originalPath;
+                    if (fileName && (fileName.includes('interview_') || fileName.endsWith('.webm'))) {
+                        const filePath = `interview-recordings/${fileName}`;
+                        try {
+                            const file = bucket.file(filePath);
+                            console.log(`   🔧 署名付きURL生成を試行 (その他形式): ${filePath.substring(0, 80)}...`);
+                            const expirationDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間後
+                            const [signedUrl] = await file.getSignedUrl({
+                                action: 'read',
+                                expires: expirationDate,
+                            });
+                            downloadUrl = signedUrl;
+                            console.log(`✅ 署名付きURL生成成功 (その他形式): ${filePath.substring(0, 60)}...`);
+                            console.log(`   URLプレビュー: ${signedUrl.substring(0, 150)}...`);
+                            // 署名パラメータの確認
+                            if (signedUrl.includes('Signature=') || signedUrl.includes('X-Goog-Signature=') || signedUrl.includes('Expires=')) {
+                                console.log(`   ✅ 署名パラメータが確認できました`);
+                            }
+                            else {
+                                console.warn(`   ⚠️  署名パラメータが見つかりません`);
+                            }
+                        }
+                        catch (urlError) {
+                            console.error(`❌ 署名付きURL生成エラー (その他形式): ${filePath}`, {
+                                message: urlError?.message,
+                                code: urlError?.code,
+                                stack: urlError?.stack
+                            });
+                            // エラーが発生した場合は、通常のURLではなくnullを返す
+                            downloadUrl = null;
+                        }
+                    }
+                    else {
+                        // ファイル名が推測できない場合は元のパスを使用
+                        downloadUrl = originalPath;
+                        console.log(`ℹ️  既存URLを使用: ${originalPath.substring(0, 60)}...`);
+                    }
+                }
             }
-            else if (recording.recording_url) {
-                // recording_urlがある場合、それをそのまま使用
-                downloadUrl = recording.recording_url;
+            catch (error) {
+                console.error(`❌ 録画URL生成エラー (ID: ${recording.id}):`, error);
+                if (error instanceof Error) {
+                    console.error(`   エラーメッセージ: ${error.message}`);
+                    console.error(`   スタック: ${error.stack}`);
+                }
+                downloadUrl = recording.recording_url || recording.storage_path || null;
             }
+            // 最終チェック: 署名付きURLが生成されていない場合、再度試行
+            if (downloadUrl && downloadUrl.startsWith('https://storage.googleapis.com/') && !downloadUrl.includes('Signature=') && !downloadUrl.includes('X-Goog-Signature=') && !downloadUrl.includes('Expires=')) {
+                console.warn(`⚠️  録画ID ${recording.id}: 署名付きURLが生成されていません。再試行します...`);
+                console.warn(`   現在のURL: ${downloadUrl.substring(0, 100)}...`);
+                try {
+                    const urlMatch = downloadUrl.match(/https:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
+                    if (urlMatch && urlMatch[1]) {
+                        const filePath = urlMatch[1];
+                        console.log(`   🔄 ファイルパス抽出: ${filePath.substring(0, 80)}...`);
+                        const file = bucket.file(filePath);
+                        const expirationDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間後
+                        const [signedUrl] = await file.getSignedUrl({
+                            action: 'read',
+                            expires: expirationDate,
+                        });
+                        downloadUrl = signedUrl;
+                        console.log(`✅ 再試行成功: 署名付きURL生成: ${filePath.substring(0, 60)}...`);
+                        console.log(`   URLプレビュー: ${signedUrl.substring(0, 150)}...`);
+                        // 署名パラメータの確認
+                        if (signedUrl.includes('Signature=') || signedUrl.includes('X-Goog-Signature=') || signedUrl.includes('Expires=')) {
+                            console.log(`   ✅ 署名パラメータが確認できました`);
+                        }
+                        else {
+                            console.warn(`   ⚠️  署名パラメータが見つかりません`);
+                        }
+                    }
+                    else {
+                        console.error(`   ❌ URL解析失敗: ${downloadUrl}`);
+                    }
+                }
+                catch (retryError) {
+                    console.error(`❌ 再試行も失敗:`, {
+                        message: retryError?.message,
+                        code: retryError?.code,
+                        stack: retryError?.stack
+                    });
+                    // エラーが発生しても元のURLを使用（ただし、これは403エラーになる可能性が高い）
+                }
+            }
+            // さらに最終チェック: 署名付きURLが確実に生成されているか確認
+            if (downloadUrl && downloadUrl.startsWith('https://storage.googleapis.com/')) {
+                const hasSignature = downloadUrl.includes('Signature=') || downloadUrl.includes('X-Goog-Signature=') || downloadUrl.includes('Expires=');
+                if (!hasSignature) {
+                    console.error(`❌ 録画ID ${recording.id}: 署名付きURLが最終的に生成されませんでした`);
+                    console.error(`   URL: ${downloadUrl.substring(0, 150)}...`);
+                    // 署名付きURLが生成されていない場合、nullに設定してフロントエンドでエンドポイント経由で取得するようにする
+                    downloadUrl = null;
+                }
+                else {
+                    console.log(`✅ 録画ID ${recording.id}: 署名付きURLが正常に生成されました`);
+                }
+            }
+            console.log(`📋 録画ID ${recording.id} の最終URL:`, {
+                hasUrl: !!downloadUrl,
+                isSigned: downloadUrl?.includes('Signature=') || downloadUrl?.includes('X-Goog-Signature=') || downloadUrl?.includes('Expires=') || false,
+                urlPreview: downloadUrl?.substring(0, 100) || 'null'
+            });
+            // downloadUrlがnullの場合は、エンドポイント経由で取得することを示すために空文字列を返す
+            // フロントエンドでは、recording_urlが空の場合、/api/documents/admin/interview-recording/:recordingIdを呼び出す
             return {
                 id: recording.id.toString(),
                 session_id: recording.session_id,
-                recording_url: downloadUrl,
+                recording_url: downloadUrl || '', // nullの場合は空文字列（エンドポイント経由で取得）
                 recording_type: recording.recording_type || 'audio',
                 file_size: recording.file_size || 0,
                 duration: recording.duration || undefined,
@@ -1890,7 +2502,7 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req, res)
                 started_at: recording.session_completed_at ? undefined : recording.created_at,
                 completed_at: recording.session_completed_at || undefined
             };
-        });
+        }));
         console.log(`✅ 録音情報取得完了: ${recordingsWithUrls.length}件 (userId: ${userId}, email: ${userEmail})`);
         res.json({
             success: true,
@@ -1961,6 +2573,148 @@ router.get('/admin/interview-recording/:recordingId', authenticate, async (req, 
                 message: '録音ファイルのパスが見つかりません'
             });
         }
+        // Cloud Storage URLの場合、署名付きURLを生成して返す
+        try {
+            console.log(`🔍 録音再生エンドポイント: recordingId=${recordingId}, filePath=${filePath?.substring(0, 100)}`);
+            const { Storage } = await import('@google-cloud/storage');
+            // Cloud Run環境では、サービスアカウントの認証情報が自動的に設定される
+            // GOOGLE_APPLICATION_CREDENTIALS環境変数が設定されている場合でも、
+            // Storageクライアントは内部でこの環境変数を参照するため、
+            // 一時的に環境変数を削除してからStorageクライアントを初期化する
+            const originalCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+            if (originalCredentials) {
+                // Cloud Run環境では、GOOGLE_APPLICATION_CREDENTIALS環境変数を削除
+                // デフォルトの認証情報（サービスアカウント）を使用するため
+                delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+                console.log(`⚠️  GOOGLE_APPLICATION_CREDENTIALS環境変数を一時的に削除しました (Cloud Run環境では不要)`);
+            }
+            const storageOptions = {
+                projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'justjoin-platform',
+            };
+            console.log(`📋 Cloud Storage初期化 (録音再生エンドポイント): projectId=${storageOptions.projectId}`);
+            const storage = new Storage(storageOptions);
+            // 環境変数を復元（他の処理に影響を与えないため）
+            if (originalCredentials) {
+                process.env.GOOGLE_APPLICATION_CREDENTIALS = originalCredentials;
+            }
+            const bucketName = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || 'justjoin-platform-match-job-documents';
+            const bucket = storage.bucket(bucketName);
+            // ファイルパスを抽出
+            let gcsFilePath = null;
+            if (filePath.startsWith('https://storage.googleapis.com/')) {
+                // URLからファイルパスを抽出
+                const urlMatch = filePath.match(/https:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
+                if (urlMatch && urlMatch[1]) {
+                    gcsFilePath = urlMatch[1];
+                    console.log(`   📋 URLからファイルパス抽出: ${gcsFilePath.substring(0, 80)}...`);
+                }
+            }
+            else if (filePath.startsWith('gs://')) {
+                const urlParts = filePath.replace('gs://', '').split('/');
+                gcsFilePath = urlParts.slice(1).join('/');
+            }
+            else if (filePath.startsWith('interview-recordings/')) {
+                gcsFilePath = filePath;
+                console.log(`   📋 interview-recordingsパス使用: ${gcsFilePath.substring(0, 80)}...`);
+            }
+            else if (filePath.startsWith('/uploads/recordings/')) {
+                // ローカルパスからファイル名を抽出
+                const fileName = filePath.replace('/uploads/recordings/', '');
+                gcsFilePath = `interview-recordings/${fileName}`;
+                console.log(`   📋 ローカルパスから変換: ${gcsFilePath.substring(0, 80)}...`);
+            }
+            else if (filePath.includes('interview_') && filePath.includes('_audio_')) {
+                // ファイル名から推測
+                const fileName = filePath.split('/').pop() || filePath;
+                gcsFilePath = `interview-recordings/${fileName}`;
+                console.log(`   📋 ファイル名から推測: ${gcsFilePath.substring(0, 80)}...`);
+            }
+            if (!gcsFilePath) {
+                console.error(`❌ ファイルパス抽出失敗: filePath=${filePath}`);
+                return res.status(404).json({
+                    success: false,
+                    error: 'INVALID_PATH',
+                    message: '録音ファイルのパスが無効です',
+                    details: `filePath: ${filePath}`
+                });
+            }
+            console.log(`   🔍 ファイルパス確定: ${gcsFilePath.substring(0, 80)}...`);
+            const file = bucket.file(gcsFilePath);
+            // ファイルの存在確認（エラーが発生しても署名付きURLは生成可能）
+            try {
+                const [exists] = await file.exists();
+                console.log(`   📋 ファイル存在確認: ${exists ? '存在' : '不存在'} - ${gcsFilePath.substring(0, 60)}...`);
+                if (!exists) {
+                    console.warn(`   ⚠️  ファイルが存在しませんが、署名付きURL生成を試行します`);
+                }
+            }
+            catch (existsError) {
+                console.warn(`   ⚠️  ファイル存在確認エラー（署名付きURL生成を試行）:`, existsError);
+            }
+            // 署名付きURLを生成（24時間有効）
+            try {
+                console.log(`   🔧 署名付きURL生成を試行: ${gcsFilePath.substring(0, 80)}...`);
+                const expirationDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24時間後
+                const [signedUrl] = await file.getSignedUrl({
+                    action: 'read',
+                    expires: expirationDate,
+                });
+                console.log(`✅ 署名付きURL生成成功 (録音再生エンドポイント): ${gcsFilePath.substring(0, 60)}...`);
+                console.log(`   URLプレビュー: ${signedUrl.substring(0, 150)}...`);
+                // 署名パラメータの確認
+                if (signedUrl.includes('Signature=') || signedUrl.includes('X-Goog-Signature=') || signedUrl.includes('Expires=')) {
+                    console.log(`   ✅ 署名パラメータが確認できました`);
+                }
+                else {
+                    console.warn(`   ⚠️  署名パラメータが見つかりません`);
+                }
+                // リクエストヘッダーを確認して、リダイレクトまたはJSONを返す
+                const acceptHeader = req.headers.accept || '';
+                if (acceptHeader.includes('application/json') || req.query.format === 'json') {
+                    // JSON形式で署名付きURLを返す
+                    return res.json({
+                        success: true,
+                        data: {
+                            signedUrl: signedUrl,
+                            recordingId: recordingId,
+                            filePath: gcsFilePath
+                        }
+                    });
+                }
+                else {
+                    // デフォルトはリダイレクト（後方互換性のため）
+                    return res.redirect(302, signedUrl);
+                }
+            }
+            catch (signError) {
+                console.error(`❌ 署名付きURL生成エラー:`, {
+                    message: signError?.message,
+                    code: signError?.code,
+                    errors: signError?.errors,
+                    stack: signError?.stack
+                });
+                return res.status(500).json({
+                    success: false,
+                    error: 'SIGNED_URL_ERROR',
+                    message: '署名付きURLの生成に失敗しました',
+                    details: signError instanceof Error ? signError.message : 'Unknown error'
+                });
+            }
+        }
+        catch (storageError) {
+            console.error('❌ Cloud Storage操作エラー:', {
+                message: storageError?.message,
+                code: storageError?.code,
+                stack: storageError?.stack
+            });
+            return res.status(500).json({
+                success: false,
+                error: 'STORAGE_ERROR',
+                message: 'Cloud Storageからのファイル取得に失敗しました',
+                details: storageError instanceof Error ? storageError.message : 'Unknown error'
+            });
+        }
+        // ローカルファイルパスの場合（従来の処理）
         // ファイルパスが相対パスの場合、絶対パスに変換
         // 面接システムのuploads/recordingsディレクトリを参照
         if (!path.isAbsolute(filePath)) {

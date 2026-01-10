@@ -5,7 +5,7 @@ import { QuestionService } from '../services/questionService.js';
 import textToSpeechService from '../services/textToSpeechService.js';
 import openaiTtsService from '../services/openaiTtsService.js';
 import voicevoxService from '../services/voicevoxService.js';
-import { uploadRecordingToGCS } from '../services/storageService.js';
+import { uploadRecordingToGCS, deleteOldRecordingsByApplicant } from '../services/storageService.js';
 import { Language, InterviewStatus, Answer } from '../../src/types/interview.js';
 import multer from 'multer';
 import path from 'path';
@@ -27,10 +27,85 @@ const upload = multer({
 
 const router = express.Router();
 
-// テキストを音声に変換するエンドポイント（VOICEVOX優先）
+// データベーススキーマセットアップエンドポイント（開発・本番環境初期化用）
+// 注意: 本番環境では環境変数で制御することを推奨
+router.post('/setup-database', async (req, res) => {
+  // セキュリティチェック: 本番環境では特定のトークンまたはヘッダーが必要
+  const setupToken = process.env.DB_SETUP_TOKEN || 'justjoin-setup-2024';
+  const providedToken = req.headers['x-setup-token'] || req.body.token;
+  
+  if (providedToken !== setupToken && process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      success: false,
+      error: 'FORBIDDEN',
+      message: 'データベースセットアップには認証が必要です'
+    });
+  }
+
+  try {
+    console.log('🗄️  データベーススキーマセットアップ開始...');
+    
+    // スキーマファイルを読み込む
+    let schemaPath = path.join(process.cwd(), 'database', 'schema.sql');
+    
+    if (!fs.existsSync(schemaPath)) {
+      // デプロイ済み環境では相対パスを試す
+      const altPath = path.join(__dirname, '..', '..', 'database', 'schema.sql');
+      if (fs.existsSync(altPath)) {
+        schemaPath = altPath;
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: 'SCHEMA_FILE_NOT_FOUND',
+          message: 'スキーマファイルが見つかりません'
+        });
+      }
+    }
+
+    const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
+    console.log('📄 スキーマファイルを読み込みました');
+
+    // データベース接続をテスト
+    const isConnected = await databaseService.testConnection();
+    if (!isConnected) {
+      return res.status(500).json({
+        success: false,
+        error: 'DATABASE_CONNECTION_ERROR',
+        message: 'データベースに接続できませんでした'
+      });
+    }
+
+    // スキーマを実行
+    console.log('📝 スキーマを実行中...');
+    const result = await databaseService.executeSchema(schemaSql);
+    console.log(`📊 実行結果: 成功 ${result.success}件, エラー ${result.errors}件`);
+
+    return res.json({
+      success: result.errors === 0,
+      message: 'データベーススキーマセットアップが完了しました',
+      stats: {
+        success: result.success,
+        errors: result.errors,
+        errorDetails: result.errorDetails.length > 0 ? result.errorDetails : undefined
+      }
+    });
+
+  } catch (error: any) {
+    console.error('❌ データベースセットアップエラー:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'SETUP_ERROR',
+      message: error.message || 'データベースセットアップに失敗しました'
+    });
+  }
+});
+
+// テキストを音声に変換するエンドポイント（必ず日本語で生成）
 router.post('/synthesize-speech', async (req, res) => {
   try {
-    const { text, languageCode = 'ja' } = req.body;
+    const { text } = req.body;
+    // languageCodeパラメータは受け取るが、音声は常に日本語で生成
+    // 質問内容の表示言語とは独立して、音声は必ず日本語
 
     if (!text || typeof text !== 'string') {
       return res.status(400).json({
@@ -44,15 +119,16 @@ router.post('/synthesize-speech', async (req, res) => {
     let audioFormat = 'mp3';
 
     // コスト削減のため、OpenAI TTSを優先使用（使用量ベースで安い）
+    // 音声は必ず日本語で生成（質問内容の表示言語とは独立）
     // 1. まずOpenAI TTS APIを試す（高品質で使用量ベース）
-    console.log('Using OpenAI TTS for speech synthesis (cost-effective)...');
-    audioBase64 = await openaiTtsService.synthesizeSpeechAsBase64(text, languageCode);
+    console.log('Using OpenAI TTS for speech synthesis (日本語固定)...');
+    audioBase64 = await openaiTtsService.synthesizeSpeechAsBase64(text, 'ja');  // 常に日本語
     audioFormat = 'mp3';
 
     // 2. OpenAI TTSが失敗した場合、Google Cloud TTSを試す（無料枠あり）
     if (!audioBase64) {
-      console.log('OpenAI TTS failed, trying Google Cloud TTS...');
-      audioBase64 = await textToSpeechService.synthesizeSpeechAsBase64(text, 'ja-JP');
+      console.log('OpenAI TTS failed, trying Google Cloud TTS (日本語固定)...');
+      audioBase64 = await textToSpeechService.synthesizeSpeechAsBase64(text, 'ja-JP');  // 常に日本語
       audioFormat = 'mp3';
     }
 
@@ -311,12 +387,24 @@ router.post('/start', async (req, res) => {
           message: applicantError.message,
           stack: applicantError.stack
         });
+        // 元のエラーがある場合はそれも記録
+        if ((applicantError as any).originalError) {
+          console.error('元のエラー:', (applicantError as any).originalError);
+        }
       }
+      
+      // より詳細なエラー情報を返す
+      const errorMessage = applicantError instanceof Error 
+        ? applicantError.message 
+        : '応募者情報の取得に失敗しました';
+      
       return res.status(500).json({
         success: false,
         error: 'APPLICANT_CREATION_ERROR',
-        message: '応募者情報の取得に失敗しました',
-        details: process.env.NODE_ENV === 'development' && applicantError instanceof Error ? applicantError.message : undefined
+        message: errorMessage,
+        details: process.env.NODE_ENV !== 'production' 
+          ? (applicantError instanceof Error ? applicantError.message : String(applicantError))
+          : undefined
       });
     }
 
@@ -330,6 +418,24 @@ router.post('/start', async (req, res) => {
         ipAddress,
         userAgent
       });
+      
+      // 面接開始前に、同じ応募者の古い録画を削除
+      try {
+        console.log('🗑️  古い録画の削除を開始:', applicant.id);
+        const deletedCount = await databaseService.deleteApplicantRecordings(applicant.id);
+        console.log(`✅ 古い録画をデータベースから削除: ${deletedCount}件`);
+        
+        // Cloud Storageからも削除
+        try {
+          const storageDeletedCount = await deleteOldRecordingsByApplicant(applicant.id, databaseService);
+          console.log(`✅ 古い録画をCloud Storageから削除: ${storageDeletedCount}件`);
+        } catch (storageError) {
+          console.warn('⚠️  Cloud Storageからの録画削除エラー（継続します）:', storageError);
+        }
+      } catch (deleteError) {
+        console.warn('⚠️  古い録画削除エラー（継続します）:', deleteError);
+        // エラーが発生しても面接開始を継続
+      }
       
       session = await databaseService.createInterviewSession(
         applicant.id,

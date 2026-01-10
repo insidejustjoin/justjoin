@@ -10,7 +10,10 @@ const questionService_js_1 = require("../services/questionService.js");
 const textToSpeechService_js_1 = __importDefault(require("../services/textToSpeechService.js"));
 const openaiTtsService_js_1 = __importDefault(require("../services/openaiTtsService.js"));
 const voicevoxService_js_1 = __importDefault(require("../services/voicevoxService.js"));
+const storageService_js_1 = require("../services/storageService.js");
 const multer_1 = __importDefault(require("multer"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const aiInterviewerService = new aiInterviewerService_js_1.AIInterviewerService();
 const questionService = new questionService_js_1.QuestionService();
 // 録音ファイル保存用の設定
@@ -23,10 +26,77 @@ const upload = (0, multer_1.default)({
     }
 });
 const router = express_1.default.Router();
-// テキストを音声に変換するエンドポイント（VOICEVOX優先）
+// データベーススキーマセットアップエンドポイント（開発・本番環境初期化用）
+// 注意: 本番環境では環境変数で制御することを推奨
+router.post('/setup-database', async (req, res) => {
+    // セキュリティチェック: 本番環境では特定のトークンまたはヘッダーが必要
+    const setupToken = process.env.DB_SETUP_TOKEN || 'justjoin-setup-2024';
+    const providedToken = req.headers['x-setup-token'] || req.body.token;
+    if (providedToken !== setupToken && process.env.NODE_ENV === 'production') {
+        return res.status(403).json({
+            success: false,
+            error: 'FORBIDDEN',
+            message: 'データベースセットアップには認証が必要です'
+        });
+    }
+    try {
+        console.log('🗄️  データベーススキーマセットアップ開始...');
+        // スキーマファイルを読み込む
+        let schemaPath = path_1.default.join(process.cwd(), 'database', 'schema.sql');
+        if (!fs_1.default.existsSync(schemaPath)) {
+            // デプロイ済み環境では相対パスを試す
+            const altPath = path_1.default.join(__dirname, '..', '..', 'database', 'schema.sql');
+            if (fs_1.default.existsSync(altPath)) {
+                schemaPath = altPath;
+            }
+            else {
+                return res.status(404).json({
+                    success: false,
+                    error: 'SCHEMA_FILE_NOT_FOUND',
+                    message: 'スキーマファイルが見つかりません'
+                });
+            }
+        }
+        const schemaSql = fs_1.default.readFileSync(schemaPath, 'utf-8');
+        console.log('📄 スキーマファイルを読み込みました');
+        // データベース接続をテスト
+        const isConnected = await databaseService_js_1.default.testConnection();
+        if (!isConnected) {
+            return res.status(500).json({
+                success: false,
+                error: 'DATABASE_CONNECTION_ERROR',
+                message: 'データベースに接続できませんでした'
+            });
+        }
+        // スキーマを実行
+        console.log('📝 スキーマを実行中...');
+        const result = await databaseService_js_1.default.executeSchema(schemaSql);
+        console.log(`📊 実行結果: 成功 ${result.success}件, エラー ${result.errors}件`);
+        return res.json({
+            success: result.errors === 0,
+            message: 'データベーススキーマセットアップが完了しました',
+            stats: {
+                success: result.success,
+                errors: result.errors,
+                errorDetails: result.errorDetails.length > 0 ? result.errorDetails : undefined
+            }
+        });
+    }
+    catch (error) {
+        console.error('❌ データベースセットアップエラー:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'SETUP_ERROR',
+            message: error.message || 'データベースセットアップに失敗しました'
+        });
+    }
+});
+// テキストを音声に変換するエンドポイント（必ず日本語で生成）
 router.post('/synthesize-speech', async (req, res) => {
     try {
-        const { text, languageCode = 'ja' } = req.body;
+        const { text } = req.body;
+        // languageCodeパラメータは受け取るが、音声は常に日本語で生成
+        // 質問内容の表示言語とは独立して、音声は必ず日本語
         if (!text || typeof text !== 'string') {
             return res.status(400).json({
                 success: false,
@@ -37,14 +107,15 @@ router.post('/synthesize-speech', async (req, res) => {
         let audioBase64 = null;
         let audioFormat = 'mp3';
         // コスト削減のため、OpenAI TTSを優先使用（使用量ベースで安い）
+        // 音声は必ず日本語で生成（質問内容の表示言語とは独立）
         // 1. まずOpenAI TTS APIを試す（高品質で使用量ベース）
-        console.log('Using OpenAI TTS for speech synthesis (cost-effective)...');
-        audioBase64 = await openaiTtsService_js_1.default.synthesizeSpeechAsBase64(text, languageCode);
+        console.log('Using OpenAI TTS for speech synthesis (日本語固定)...');
+        audioBase64 = await openaiTtsService_js_1.default.synthesizeSpeechAsBase64(text, 'ja'); // 常に日本語
         audioFormat = 'mp3';
         // 2. OpenAI TTSが失敗した場合、Google Cloud TTSを試す（無料枠あり）
         if (!audioBase64) {
-            console.log('OpenAI TTS failed, trying Google Cloud TTS...');
-            audioBase64 = await textToSpeechService_js_1.default.synthesizeSpeechAsBase64(text, 'ja-JP');
+            console.log('OpenAI TTS failed, trying Google Cloud TTS (日本語固定)...');
+            audioBase64 = await textToSpeechService_js_1.default.synthesizeSpeechAsBase64(text, 'ja-JP'); // 常に日本語
             audioFormat = 'mp3';
         }
         // 3. ローカル開発時のみVOICEVOXを使用（本番では使用しない）
@@ -109,7 +180,7 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
                 message: '録音ファイルがアップロードされていません'
             });
         }
-        const { sessionId, type, questionId, transcriptionText } = req.body;
+        const { sessionId, type, questionId, transcriptionText, email, userId } = req.body;
         if (!sessionId || !type) {
             console.error('録音アップロードエラー: パラメータ不足', { sessionId, type });
             return res.status(400).json({
@@ -119,37 +190,61 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
             });
         }
         // ファイル情報をログ出力
-        const filename = `${sessionId}_${type}_${Date.now()}.webm`;
+        const filename = questionId
+            ? `${sessionId}_${questionId}_${type}_${Date.now()}.webm`
+            : `${sessionId}_${type}_${Date.now()}.webm`;
         console.log('録音アップロード処理開始:', {
             sessionId,
             type,
+            questionId,
             filename,
             originalname: req.file.originalname,
             size: req.file.size,
             mimetype: req.file.mimetype,
             bufferSize: req.file.buffer?.length || 0
         });
-        // Cloud Runでは一時的なファイルシステムを使用するため、
-        // ファイルはメモリに保存され、データベースにはURLのみ保存
-        // 実際のファイルはCloud Storageに保存するか、一時的に保持
-        const recordingUrl = `/uploads/recordings/${filename}`;
+        // Cloud Storageに録音ファイルをアップロード
+        let recordingUrl = '';
+        let storagePath = '';
+        try {
+            if (!req.file.buffer) {
+                throw new Error('ファイルバッファが存在しません');
+            }
+            const gcsUrl = await (0, storageService_js_1.uploadRecordingToGCS)(req.file.buffer, filename, req.file.mimetype);
+            storagePath = gcsUrl;
+            recordingUrl = gcsUrl;
+            console.log('✅ 録音ファイルをCloud Storageにアップロードしました:', gcsUrl);
+        }
+        catch (storageError) {
+            console.error('❌ Cloud Storageアップロードエラー:', storageError);
+            // Cloud Storageへの保存に失敗した場合、エラーを返す
+            return res.status(500).json({
+                success: false,
+                error: 'STORAGE_ERROR',
+                message: '録音ファイルの保存に失敗しました',
+                details: storageError instanceof Error ? storageError.message : 'Unknown error'
+            });
+        }
         // データベースに録音情報を保存（質問IDと文字起こしテキストも含む）
         try {
             console.log('録音情報をデータベースに保存中...', {
                 sessionId,
                 questionId,
-                hasTranscription: !!transcriptionText
+                hasTranscription: !!transcriptionText,
+                storagePath
             });
             await databaseService_js_1.default.saveRecordingInfo({
                 sessionId,
                 type,
                 filename: filename,
-                filepath: recordingUrl, // Cloud RunではパスではなくURLを使用
+                filepath: storagePath, // Cloud StorageのURLを使用
                 filesize: req.file.size,
                 mimetype: req.file.mimetype,
                 uploadedAt: new Date(),
                 questionId: questionId || undefined,
-                transcriptionText: transcriptionText || undefined
+                transcriptionText: transcriptionText || undefined,
+                email: email || undefined, // セッションが見つからない場合のフォールバック用
+                userId: userId || undefined // セッションが見つからない場合のフォールバック用
             });
             console.log('✅ 録音情報のデータベース保存成功');
         }
@@ -195,7 +290,7 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
         });
     }
 });
-// テスト用の面接開始エンドポイント（開発環境のみ）
+// 面接開始エンドポイント（本番用）
 router.post('/start', async (req, res) => {
     try {
         console.log('面接開始API呼び出し:', req.body);
@@ -230,39 +325,92 @@ router.post('/start', async (req, res) => {
                 message: 'データベース接続に失敗しました'
             });
         }
-        // テスト用の応募者データを作成
-        const applicant = {
-            id: `test_applicant_${Date.now()}`,
-            email: email || 'test@example.com',
-            name: name || 'テストユーザー',
-            position: position || 'ソフトウェアエンジニア',
-            experienceYears: 3,
-            skills: ['JavaScript', 'React', 'Node.js'],
-            selfIntroduction: 'テスト用の自己紹介です。',
-            nationality: 'Japanese',
-            createdAt: new Date(),
-            updatedAt: new Date()
-        };
-        console.log('応募者データ作成:', applicant);
-        // テスト用の面接セッションを作成
-        const sessionId = `test_session_${Date.now()}`;
-        const session = {
-            id: sessionId,
-            applicantId: applicant.id,
-            status: 'in_progress',
-            language: language,
-            currentQuestionIndex: 0,
-            startedAt: new Date(),
-            completedAt: null,
-            totalDuration: 0,
-            consentGiven: true,
-            ipAddress,
-            userAgent,
-            metadata: {},
-            createdAt: new Date(),
-            updatedAt: new Date()
-        };
-        console.log('面接セッション作成:', session);
+        // 応募者情報をデータベースから取得または作成
+        let applicant;
+        try {
+            // emailとnameが空の場合はデフォルト値を使用（テスト用）
+            const applicantEmail = email || `interview_${Date.now()}@temp.local`;
+            const applicantName = name || 'Anonymous User';
+            const applicantPosition = position || 'Unknown Position';
+            applicant = await databaseService_js_1.default.createOrGetApplicantFromJobSeeker(applicantEmail, applicantName, applicantPosition);
+            console.log('✅ 応募者情報を取得/作成:', {
+                id: applicant.id,
+                email: applicant.email,
+                name: applicant.name,
+                position: applicant.position
+            });
+        }
+        catch (applicantError) {
+            console.error('❌ 応募者情報の取得/作成エラー:', applicantError);
+            if (applicantError instanceof Error) {
+                console.error('エラー詳細:', {
+                    message: applicantError.message,
+                    stack: applicantError.stack
+                });
+                // 元のエラーがある場合はそれも記録
+                if (applicantError.originalError) {
+                    console.error('元のエラー:', applicantError.originalError);
+                }
+            }
+            // より詳細なエラー情報を返す
+            const errorMessage = applicantError instanceof Error
+                ? applicantError.message
+                : '応募者情報の取得に失敗しました';
+            return res.status(500).json({
+                success: false,
+                error: 'APPLICANT_CREATION_ERROR',
+                message: errorMessage,
+                details: process.env.NODE_ENV !== 'production'
+                    ? (applicantError instanceof Error ? applicantError.message : String(applicantError))
+                    : undefined
+            });
+        }
+        // データベースに面接セッションを作成
+        let session;
+        try {
+            console.log('面接セッション作成開始:', {
+                applicantId: applicant.id,
+                language,
+                consentGiven,
+                ipAddress,
+                userAgent
+            });
+            // 面接開始前に、同じ応募者の古い録画を削除
+            try {
+                console.log('🗑️  古い録画の削除を開始:', applicant.id);
+                const deletedCount = await databaseService_js_1.default.deleteApplicantRecordings(applicant.id);
+                console.log(`✅ 古い録画をデータベースから削除: ${deletedCount}件`);
+                // Cloud Storageからも削除
+                try {
+                    const storageDeletedCount = await (0, storageService_js_1.deleteOldRecordingsByApplicant)(applicant.id, databaseService_js_1.default);
+                    console.log(`✅ 古い録画をCloud Storageから削除: ${storageDeletedCount}件`);
+                }
+                catch (storageError) {
+                    console.warn('⚠️  Cloud Storageからの録画削除エラー（継続します）:', storageError);
+                }
+            }
+            catch (deleteError) {
+                console.warn('⚠️  古い録画削除エラー（継続します）:', deleteError);
+                // エラーが発生しても面接開始を継続
+            }
+            session = await databaseService_js_1.default.createInterviewSession(applicant.id, language, consentGiven, ipAddress, userAgent);
+            console.log('✅ 面接セッションをデータベースに作成:', session.id);
+        }
+        catch (sessionError) {
+            console.error('❌ 面接セッション作成エラー:', sessionError);
+            if (sessionError instanceof Error) {
+                console.error('エラー詳細:', {
+                    message: sessionError.message,
+                    stack: sessionError.stack
+                });
+            }
+            return res.status(500).json({
+                success: false,
+                error: 'SESSION_CREATION_ERROR',
+                message: '面接セッションの作成に失敗しました',
+                details: process.env.NODE_ENV === 'development' && sessionError instanceof Error ? sessionError.message : undefined
+            });
+        }
         // AI面接官による面接開始
         console.log('AI面接官サービス呼び出し開始');
         const welcomeResponse = await aiInterviewerService.startInterview(session);
@@ -270,9 +418,9 @@ router.post('/start', async (req, res) => {
         // 求職者プロフィール情報を設定
         const jobSeekerInfo = {
             name: applicant.name,
-            position: applicant.position,
-            experienceYears: applicant.experienceYears,
-            skills: applicant.skills
+            position: applicant.position || position || '未設定',
+            experienceYears: applicant.experienceYears || 0,
+            skills: applicant.skills || []
         };
         const response = {
             success: true,
@@ -287,18 +435,49 @@ router.post('/start', async (req, res) => {
             },
             jobSeekerInfo: jobSeekerInfo
         };
-        console.log('面接開始API成功レスポンス:', response);
+        console.log('✅ 面接開始API成功レスポンス:', response);
         res.json(response);
     }
     catch (error) {
-        console.error('面接開始エラー詳細:', error);
+        console.error('❌ 面接開始エラー詳細:', error);
         if (error instanceof Error) {
             console.error('エラースタック:', error.stack);
+            // PostgreSQLエラーの場合、詳細情報をログに記録
+            if (error.code) {
+                console.error('PostgreSQLエラーコード:', error.code);
+                console.error('PostgreSQLエラー詳細:', error.detail);
+                console.error('PostgreSQLエラーメッセージ:', error.message);
+            }
+        }
+        // エラーメッセージを構築
+        let errorMessage = '面接を開始できませんでした';
+        let errorCode = 'INTERNAL_ERROR';
+        if (error instanceof Error) {
+            // データベース接続エラーの場合
+            if (error.message.includes('DATABASE') || error.message.includes('connection')) {
+                errorCode = 'DATABASE_ERROR';
+                errorMessage = 'データベース接続エラーが発生しました';
+            }
+            // セッション作成エラーの場合
+            else if (error.message.includes('SESSION') || error.message.includes('session')) {
+                errorCode = 'SESSION_ERROR';
+                errorMessage = 'セッション作成エラーが発生しました';
+            }
+            // 応募者作成エラーの場合
+            else if (error.message.includes('APPLICANT') || error.message.includes('applicant')) {
+                errorCode = 'APPLICANT_ERROR';
+                errorMessage = '応募者情報の取得に失敗しました';
+            }
+            // PostgreSQLエラーの場合
+            else if (error.code) {
+                errorCode = 'DATABASE_ERROR';
+                errorMessage = `データベースエラー: ${error.code}`;
+            }
         }
         res.status(500).json({
             success: false,
-            error: 'INTERNAL_ERROR',
-            message: '面接を開始できませんでした',
+            error: errorCode,
+            message: errorMessage,
             details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : undefined
         });
     }

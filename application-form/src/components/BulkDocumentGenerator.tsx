@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useToast } from '@/hooks/use-toast';
 import ExcelJS from 'exceljs';
@@ -278,6 +280,7 @@ const BulkDocumentGenerator: React.FC<BulkDocumentGeneratorProps> = ({
   const [currentJobSeeker, setCurrentJobSeeker] = useState('');
   const [generatedFiles, setGeneratedFiles] = useState<{[key: string]: Blob}>({});
   const [errors, setErrors] = useState<string[]>([]);
+  const [selectedLanguage, setSelectedLanguage] = useState<'ja' | 'en' | 'ru'>('ja'); // 言語選択
   const { toast } = useToast();
   const { t } = useLanguage();
 
@@ -394,8 +397,8 @@ const BulkDocumentGenerator: React.FC<BulkDocumentGeneratorProps> = ({
           }
           
           // Excelファイルを生成（DocumentGenerator.tsxの内容を完全に踏襲）
-          console.log(`求職者ID ${jobSeeker.id} のExcelファイル生成開始...`);
-          const blob = await generateExcelFile(jobSeeker.id, documentData);
+          console.log(`求職者ID ${jobSeeker.id} のExcelファイル生成開始... (言語: ${selectedLanguage})`);
+          const blob = await generateExcelFile(jobSeeker.id, documentData, selectedLanguage);
           
           // ローカル変数に保存
           if (blob) {
@@ -533,7 +536,7 @@ const BulkDocumentGenerator: React.FC<BulkDocumentGeneratorProps> = ({
 
 
   // フロントエンドだけでExcelファイルを生成する関数
-  const generateExcelFile = async (jobSeekerId: string, documentData: any) => {
+  const generateExcelFile = async (jobSeekerId: string, documentData: any, language: 'ja' | 'en' | 'ru' = 'ja') => {
     try {
       
       // ExcelJSを使用してExcelファイルを生成
@@ -946,7 +949,9 @@ const BulkDocumentGenerator: React.FC<BulkDocumentGeneratorProps> = ({
 
     resumeSheet.mergeCells('L11:N15');
     const l11Cell = resumeSheet.getCell('L11');
-    l11Cell.value = documentData.whyJapan;
+    // 選択された言語で翻訳版を使用（存在する場合）
+    const whyJapanText = (documentData as any).whyJapan_translated?.[language] || documentData.whyJapan;
+    l11Cell.value = whyJapanText;
     l11Cell.font = { name: 'MS Gothic', size: 10, bold: false };
     l11Cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
@@ -958,7 +963,9 @@ const BulkDocumentGenerator: React.FC<BulkDocumentGeneratorProps> = ({
 
     resumeSheet.mergeCells('L16:N19');
     const l16Cell = resumeSheet.getCell('L16');
-    l16Cell.value = documentData.whyInterestJapan;
+    // 選択された言語で翻訳版を使用（存在する場合）
+    const whyInterestJapanText = (documentData as any).whyInterestJapan_translated?.[language] || documentData.whyInterestJapan;
+    l16Cell.value = whyInterestJapanText;
     l16Cell.font = { name: 'MS Gothic', size: 10, bold: false };
     l16Cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
@@ -970,7 +977,10 @@ const BulkDocumentGenerator: React.FC<BulkDocumentGeneratorProps> = ({
 
     resumeSheet.mergeCells('L20:N24');
     const l20Cell = resumeSheet.getCell('L20');
-    l20Cell.value = documentData.selfIntroduction;
+    // 選択された言語で翻訳版を使用（存在する場合）
+    // selfPRはresume.selfPR_translatedに保存されている
+    const selfPRText = (documentData as any).resume?.selfPR_translated?.[language] || documentData.resume?.selfPR || documentData.selfIntroduction;
+    l20Cell.value = selfPRText;
     l20Cell.font = { name: 'MS Gothic', size: 10, bold: false };
     l20Cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
@@ -1060,7 +1070,9 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
     // 本人希望記入欄の値
     resumeSheet.mergeCells('J30:N34');
     const j30Cell = resumeSheet.getCell('J30');
-    j30Cell.value = documentData.personalPreference;
+    // 選択された言語で翻訳版を使用（存在する場合）
+    const personalPreferenceText = (documentData as any).personalPreference_translated?.[language] || documentData.personalPreference;
+    j30Cell.value = personalPreferenceText;
     j30Cell.font = { name: 'MS Gothic', size: 10, bold: false };
     j30Cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
@@ -1549,10 +1561,30 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
           <p className="text-sm text-gray-600">
             選択された求職者: {selectedJobSeekers.length}名
           </p>
-            </div>
+        </div>
+
+        {/* 言語選択 */}
+        <div className="mb-4">
+          <Label htmlFor="language-select" className="text-sm font-medium mb-2 block">
+            出力言語
+          </Label>
+          <Select value={selectedLanguage} onValueChange={(value: 'ja' | 'en' | 'ru') => setSelectedLanguage(value)}>
+            <SelectTrigger id="language-select" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ja">日本語</SelectItem>
+              <SelectItem value="en">英語 (English)</SelectItem>
+              <SelectItem value="ru">ロシア語 (Русский)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-gray-500 mt-1">
+            選択した言語で長文項目（自己PR、日本で働きたい理由、日本に興味を持った理由、希望・要望）が出力されます
+          </p>
+        </div>
             
         {/* 一括生成ボタン */}
-            <div className="mb-4">
+        <div className="mb-4">
           <Button
             onClick={generateBulkDocuments}
             disabled={isGenerating || selectedJobSeekers.length === 0}
@@ -1560,7 +1592,7 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
           >
             {isGenerating ? '生成中...' : '一括書類生成開始'}
           </Button>
-            </div>
+        </div>
 
             {/* 進捗表示 */}
             {isGenerating && (

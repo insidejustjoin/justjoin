@@ -12,7 +12,8 @@
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist-server/index.js",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:setup": "tsx scripts/setup-database.ts"
   },
   "dependencies": {
     "@google-cloud/speech": "^6.0.0",

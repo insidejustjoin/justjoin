@@ -86,6 +86,7 @@ class DatabaseService {
       if (email) {
         // メールアドレスから既存の求職者を検索
         console.log('既存の求職者を検索:', email);
+        try {
         const userQuery = `
           SELECT u.id as user_id, u.email, js.* 
           FROM users u 
@@ -129,33 +130,67 @@ class DatabaseService {
             const insertApplicantQuery = `
               INSERT INTO interview_applicants (id, email, name, position, created_at, updated_at)
               VALUES ($1, $2, $3, $4, NOW(), NOW())
-              ON CONFLICT (id) DO NOTHING
+                ON CONFLICT (id) DO UPDATE SET
+                  email = EXCLUDED.email,
+                  name = EXCLUDED.name,
+                  position = EXCLUDED.position,
+                  updated_at = NOW()
               RETURNING *
             `;
-            await this.pool.query(insertApplicantQuery, [
+              const insertResult = await this.pool.query(insertApplicantQuery, [
               applicant.id,
               applicant.email,
               applicant.name,
               applicant.position
             ]);
+              
+              if (insertResult.rows && insertResult.rows.length > 0) {
             console.log('✅ interview_applicantsテーブルに作成しました');
+              } else {
+                // 既に存在していた場合は再取得
+                const existingResult = await this.pool.query(applicantCheckQuery, [applicant.id]);
+                if (existingResult.rows.length > 0) {
+                  console.log('✅ interview_applicantsテーブルに既に存在していました');
+                }
+              }
           }
           
           return applicant;
+          }
+        } catch (queryError: any) {
+          // users テーブルが存在しない場合（別データベースの場合など）は、新規応募者として作成
+          if (queryError.code === '42P01' || queryError.message?.includes('does not exist')) {
+            console.log('⚠️ users/job_seekersテーブルが存在しないため、新規応募者として作成します:', queryError.message);
+            // この場合は後続の処理で新規応募者として作成される
+          } else {
+            // その他のエラーは再スロー
+            throw queryError;
+          }
         }
       }
 
       // 新規の応募者として面接専用テーブルに作成
-      console.log('新規の応募者を作成:', { email, name, position });
-      const insertQuery = `
+      const applicantEmail = email || `interview_${Date.now()}@temp.local`;
+      const applicantName = name || 'Anonymous';
+      const applicantPosition = position || 'Unknown Position';
+      
+      console.log('新規の応募者を作成:', { email: applicantEmail, name: applicantName, position: applicantPosition });
+      
+      // emailが既に存在する場合は取得、存在しない場合は作成
+      const upsertQuery = `
         INSERT INTO interview_applicants (id, email, name, position, created_at, updated_at)
         VALUES (gen_random_uuid()::text, $1, $2, $3, NOW(), NOW())
+        ON CONFLICT (email) DO UPDATE SET
+          name = COALESCE(EXCLUDED.name, interview_applicants.name),
+          position = COALESCE(EXCLUDED.position, interview_applicants.position),
+          updated_at = NOW()
         RETURNING *
       `;
-      const result = await this.pool.query(insertQuery, [
-        email || `interview_${Date.now()}@temp.local`,
-        name || 'Anonymous',
-        position || 'Unknown Position'
+      
+      const result = await this.pool.query(upsertQuery, [
+        applicantEmail,
+        applicantName,
+        applicantPosition
       ]);
 
       if (!result.rows || result.rows.length === 0) {
@@ -163,10 +198,11 @@ class DatabaseService {
       }
 
       applicant = this.mapRowToApplicant(result.rows[0]);
-      console.log('✅ Created new interview applicant:', {
+      console.log('✅ Created/Updated interview applicant:', {
         id: applicant.id,
         email: applicant.email,
-        name: applicant.name
+        name: applicant.name,
+        position: applicant.position
       });
       return applicant;
 
@@ -184,9 +220,16 @@ class DatabaseService {
         if ((error as any).code) {
           console.error('PostgreSQLエラーコード:', (error as any).code);
           console.error('PostgreSQLエラー詳細:', (error as any).detail);
+          console.error('PostgreSQLエラーメッセージ:', (error as any).message);
+          console.error('PostgreSQLエラー位置:', (error as any).position);
         }
       }
-      throw error; // 元のエラーを再スローして、呼び出し元で詳細を確認できるようにする
+      // エラーメッセージを改善して再スロー
+      const enhancedError = error instanceof Error 
+        ? new Error(`応募者情報の取得に失敗しました: ${error.message}${(error as any).code ? ` (コード: ${(error as any).code})` : ''}`)
+        : new Error('応募者情報の取得に失敗しました: 不明なエラー');
+      (enhancedError as any).originalError = error;
+      throw enhancedError;
     }
   }
 
@@ -608,6 +651,140 @@ class DatabaseService {
     } catch (error) {
       console.error('❌ Error getting session recordings:', error);
       return [];
+    }
+  }
+
+  // 応募者の録音情報を取得（古い録画削除用）
+  async getApplicantRecordings(applicantId: string): Promise<any[]> {
+    try {
+      this.initializePool();
+      if (!this.pool) {
+        throw new Error('Pool not initialized');
+      }
+
+      const query = `
+        SELECT id, storage_path, recording_url, session_id, created_at
+        FROM interview_recordings 
+        WHERE applicant_id = $1 
+        ORDER BY created_at DESC
+      `;
+      const result = await this.pool.query(query, [applicantId]);
+      return result.rows;
+    } catch (error) {
+      console.error('❌ Error getting applicant recordings:', error);
+      return [];
+    }
+  }
+
+  // 応募者の古い録画を削除（データベースから）
+  async deleteApplicantRecordings(applicantId: string): Promise<number> {
+    try {
+      this.initializePool();
+      if (!this.pool) {
+        throw new Error('Pool not initialized');
+      }
+
+      const deleteQuery = `
+        DELETE FROM interview_recordings 
+        WHERE applicant_id = $1
+        RETURNING id, storage_path, recording_url
+      `;
+      const result = await this.pool.query(deleteQuery, [applicantId]);
+      const deletedCount = result.rows.length;
+      console.log(`✅ 応募者の録画をデータベースから削除: ${deletedCount}件`);
+      return deletedCount;
+    } catch (error) {
+      console.error('❌ Error deleting applicant recordings:', error);
+      return 0;
+    }
+  }
+
+  // データベーススキーマを実行するメソッド
+  async executeSchema(schemaSql: string): Promise<{ success: number; errors: number; errorDetails: string[] }> {
+    try {
+      this.initializePool();
+      if (!this.pool) {
+        throw new Error('Pool not initialized');
+      }
+
+      // search_pathを設定
+      await this.pool.query('SET search_path = public');
+
+      // SQLファイルをパースしてコマンドを分割（より堅牢な方法）
+      // PostgreSQLでは複数のコマンドを一度に実行できるため、セミコロンで分割
+      // ただし、$$で囲まれた関数定義を考慮する必要がある
+      
+      // まず、$$で囲まれたブロックを一時的に置き換える
+      const dollarQuoteBlocks: string[] = [];
+      let blockCounter = 0;
+      let processedSql = schemaSql;
+      
+      // $$で囲まれたブロックを検出して置き換え
+      const dollarQuoteRegex = /\$\$[\s\S]*?\$\$/g;
+      processedSql = processedSql.replace(dollarQuoteRegex, (match) => {
+        const placeholder = `__DOLLAR_QUOTE_BLOCK_${blockCounter}__`;
+        dollarQuoteBlocks[blockCounter] = match;
+        blockCounter++;
+        return placeholder;
+      });
+
+      // コメントを削除（--で始まる行コメント）
+      processedSql = processedSql.replace(/--[^\n]*/g, '');
+      
+      // セミコロンで分割
+      let commands = processedSql
+        .split(';')
+        .map(cmd => cmd.trim())
+        .filter(cmd => cmd.length > 0);
+
+      // 一時プレースホルダーを元に戻す
+      commands = commands.map(cmd => {
+        let restoredCmd = cmd;
+        for (let i = 0; i < dollarQuoteBlocks.length; i++) {
+          restoredCmd = restoredCmd.replace(`__DOLLAR_QUOTE_BLOCK_${i}__`, dollarQuoteBlocks[i]);
+        }
+        return restoredCmd;
+      });
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errorDetails: string[] = [];
+
+      const client = await this.pool.connect();
+      try {
+        await client.query('SET search_path = public');
+
+        for (const command of commands) {
+          if (!command || command.length < 10) {
+            continue;
+          }
+
+          try {
+            await client.query(command);
+            successCount++;
+          } catch (error: any) {
+            // 既に存在する場合は警告のみ
+            if (error.code === '42P07' || error.code === '42710' || error.message?.includes('already exists')) {
+              // 警告のみで継続
+            } else {
+              errorDetails.push(`${error.code || 'UNKNOWN'}: ${error.message}`);
+              errorCount++;
+            }
+          }
+        }
+      } finally {
+        client.release();
+      }
+
+      return {
+        success: successCount,
+        errors: errorCount,
+        errorDetails
+      };
+
+    } catch (error: any) {
+      console.error('❌ Error executing schema:', error);
+      throw error;
     }
   }
 

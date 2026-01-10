@@ -294,10 +294,11 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       setCanStartRecording(false);
       
       const apiBaseUrl = getApiBaseUrl();
+      // 音声は必ず日本語で生成（質問内容の表示言語とは独立）
       const response = await fetch(`${apiBaseUrl}/api/interview/synthesize-speech`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: message, languageCode: displayLanguage })
+        body: JSON.stringify({ text: message, languageCode: 'ja' })  // 常に日本語で音声を生成
       });
 
       const data = await response.json();
@@ -328,16 +329,10 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
       }
 
       // サーバー側TTSが利用できない場合はブラウザの音声合成にフォールバック
+      // 音声は必ず日本語で生成（質問内容の表示言語とは独立）
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(message);
-        utterance.lang =
-          displayLanguage === 'en'
-            ? 'en-US'
-            : displayLanguage === 'ru'
-            ? 'ru-RU'
-            : displayLanguage === 'uz'
-            ? 'uz-UZ'
-            : 'ja-JP';
+        utterance.lang = 'ja-JP';  // 常に日本語で音声を生成
         utterance.rate = 0.9;
         utterance.onend = () => {
           setIsPlaying(false);
@@ -356,16 +351,10 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
     } catch (error) {
       console.error('音声再生エラー:', error);
       // エラー時もブラウザ側の音声合成を試す
+      // 音声は必ず日本語で生成（質問内容の表示言語とは独立）
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(message);
-        utterance.lang =
-          displayLanguage === 'en'
-            ? 'en-US'
-            : displayLanguage === 'ru'
-            ? 'ru-RU'
-            : displayLanguage === 'uz'
-            ? 'uz-UZ'
-            : 'ja-JP';
+        utterance.lang = 'ja-JP';  // 常に日本語で音声を生成
         utterance.rate = 0.9;
         utterance.onend = () => {
           setIsPlaying(false);
@@ -685,9 +674,10 @@ const InterviewScreen: React.FC<InterviewScreenProps> = ({
           });
           
           setTimeout(() => {
+            // 音声は必ず日本語で生成（質問内容の表示言語とは独立）
             const questionText = typeof data.nextQuestion.text === 'string' 
               ? data.nextQuestion.text 
-              : data.nextQuestion.text[displayLanguage] || data.nextQuestion.text.ja || '';
+              : data.nextQuestion.text.ja || '';  // 常に日本語テキストを使用
             playAIMessage(questionText);
           }, 500);
         } else {
