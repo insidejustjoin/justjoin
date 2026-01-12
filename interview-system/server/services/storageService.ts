@@ -21,11 +21,13 @@ const storage = new Storage({
 export const uploadRecordingToGCS = async (
   fileBuffer: Buffer,
   fileName: string,
-  mimetype: string
+  mimetype: string,
+  registrationType?: string // 'engineer' | 'general' | undefined
 ): Promise<string> => {
   try {
     console.log(`📤 Cloud Storageアップロード開始: ${fileName} (${fileBuffer.length} bytes)`);
     console.log(`   Bucket: ${bucketName}`);
+    console.log(`   Registration Type: ${registrationType || '未指定'}`);
     
     const bucket = storage.bucket(bucketName);
     
@@ -39,8 +41,10 @@ export const uploadRecordingToGCS = async (
     }
     console.log('✅ バケットが存在します');
     
-    // 録音ファイル用のパスを生成
-    const filePath = `interview-recordings/${fileName}`;
+    // 録音ファイル用のパスを生成（求職者タイプで分ける）
+    // registrationTypeが指定されている場合は、パスに含める
+    const typePath = registrationType ? `${registrationType}/` : '';
+    const filePath = `interview-recordings/${typePath}${fileName}`;
     console.log(`📁 ファイルパス: ${filePath}`);
     const file = bucket.file(filePath);
     

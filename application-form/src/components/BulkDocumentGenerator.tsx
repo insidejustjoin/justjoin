@@ -1507,6 +1507,178 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
     });
         
     
+      // 面接録音シートを追加
+      try {
+        const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
+        const token = localStorage.getItem('token');
+        
+        // 求職者のuser_idを取得
+        const jobSeeker = selectedJobSeekers.find(js => String(js.id) === String(jobSeekerId) || String(js.user_id) === String(jobSeekerId));
+        const userId = jobSeeker?.user_id || jobSeekerId;
+        
+        // 面接録音データを取得
+        const recordingsResponse = await fetch(`${apiUrl}/api/documents/admin/interview-recordings/${userId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (recordingsResponse.ok) {
+          const recordingsResult = await recordingsResponse.json();
+          const recordings = recordingsResult.data?.recordings || [];
+          
+          if (recordings.length > 0) {
+            // 質問内容のマッピング（日本語）
+            const questionTexts: { [key: string]: string } = {
+              'q1': 'まず初めに、簡単に自己紹介をしてください。お名前、現在のご職業、簡単な経歴について教えてください。',
+              'q2': '現在のお仕事の内容について詳しく教えてください。どのような業務を担当されていますか？',
+              'q3': 'これまでに最も達成感を感じたプロジェクトや業務について教えてください。その成果と学んだことについても聞かせてください。',
+              'q4': 'チームでの働き方についてお聞きします。あなたはチームの中でどのような役割を果たすことが多いですか？',
+              'q5': '当社（Just Join）に応募された理由を教えてください。なぜ私たちの会社で働きたいと思われたのですか？',
+              'q6': 'ご自身の強みと弱みについて教えてください。それぞれ具体例も含めて説明していただけますか？',
+              'q7': '技術的なスキルについてお聞きします。現在得意としている分野と、今後学びたい技術や分野があれば教えてください。',
+              'q8': '困難な問題や課題に直面した時、あなたはどのようにアプローチしますか？具体的な経験があれば教えてください。',
+              'q9': '将来的なキャリアビジョンについて教えてください。3〜5年後、どのような成長を目指していますか？',
+              'q10': '最後に、当社や職種について何かご質問はありますか？気になることがあれば何でもお聞きください。',
+            };
+            
+            // 面接録音シートを作成
+            const recordingsSheet = workbook.addWorksheet('面接録音');
+            
+            // 列幅設定
+            recordingsSheet.getColumn('A').width = 5; // 設問番号
+            recordingsSheet.getColumn('B').width = 60; // 質問内容
+            recordingsSheet.getColumn('C').width = 80; // 音声URL
+            recordingsSheet.getColumn('D').width = 20; // 文字起こし
+            
+            // ヘッダー行
+            const headerRow = recordingsSheet.getRow(1);
+            headerRow.height = 25;
+            headerRow.getCell(1).value = '設問番号';
+            headerRow.getCell(1).font = { name: 'MS Gothic', size: 11, bold: true };
+            headerRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+            headerRow.getCell(1).fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFE0E0E0' }
+            };
+            
+            headerRow.getCell(2).value = '質問内容';
+            headerRow.getCell(2).font = { name: 'MS Gothic', size: 11, bold: true };
+            headerRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+            headerRow.getCell(2).fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFE0E0E0' }
+            };
+            
+            headerRow.getCell(3).value = '音声URL';
+            headerRow.getCell(3).font = { name: 'MS Gothic', size: 11, bold: true };
+            headerRow.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+            headerRow.getCell(3).fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFE0E0E0' }
+            };
+            
+            headerRow.getCell(4).value = '文字起こし';
+            headerRow.getCell(4).font = { name: 'MS Gothic', size: 11, bold: true };
+            headerRow.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+            headerRow.getCell(4).fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFE0E0E0' }
+            };
+            
+            // 録音データを行として追加（question_idでソート）
+            const sortedRecordings = recordings
+              .filter((r: any) => r.question_id) // question_idがあるもののみ
+              .sort((a: any, b: any) => {
+                // q1, q2, ..., q10の順にソート
+                const aNum = parseInt(a.question_id.replace('q', ''));
+                const bNum = parseInt(b.question_id.replace('q', ''));
+                return aNum - bNum;
+              });
+            
+            let rowIndex = 2;
+            for (const recording of sortedRecordings) {
+              const row = recordingsSheet.getRow(rowIndex);
+              row.height = 30;
+              
+              // 設問番号
+              const questionId = recording.question_id || '';
+              row.getCell(1).value = questionId.toUpperCase();
+              row.getCell(1).font = { name: 'MS Gothic', size: 10, bold: true };
+              row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+              
+              // 質問内容
+              const questionText = questionTexts[questionId] || '質問内容不明';
+              row.getCell(2).value = questionText;
+              row.getCell(2).font = { name: 'MS Gothic', size: 9 };
+              row.getCell(2).alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+              
+              // 音声URL（署名付きURLを取得）
+              let audioUrl = recording.downloadUrl || recording.recording_url || '';
+              if (!audioUrl && recording.id) {
+                // 署名付きURLを取得
+                try {
+                  const signedUrlResponse = await fetch(`${apiUrl}/api/documents/admin/interview-recording/${recording.id}?format=json`, {
+                    method: 'GET',
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                      'Accept': 'application/json',
+                    },
+                  });
+                  
+                  if (signedUrlResponse.ok) {
+                    const signedUrlResult = await signedUrlResponse.json();
+                    if (signedUrlResult.success && signedUrlResult.data?.signedUrl) {
+                      audioUrl = signedUrlResult.data.signedUrl;
+                    }
+                  }
+                } catch (urlError) {
+                  console.warn('署名付きURL取得エラー:', urlError);
+                }
+              }
+              
+              row.getCell(3).value = audioUrl || '音声URLなし';
+              row.getCell(3).font = { name: 'MS Gothic', size: 9 };
+              row.getCell(3).alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+              if (audioUrl) {
+                // URLとしてハイパーリンクを設定
+                row.getCell(3).value = {
+                  text: audioUrl,
+                  hyperlink: audioUrl
+                };
+                row.getCell(3).font = { name: 'MS Gothic', size: 9, color: { argb: 'FF0000FF' }, underline: true };
+              }
+              
+              // 文字起こし
+              const transcription = recording.transcription_text || '';
+              row.getCell(4).value = transcription || '文字起こしなし';
+              row.getCell(4).font = { name: 'MS Gothic', size: 9 };
+              row.getCell(4).alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+              
+              rowIndex++;
+            }
+            
+            // 録音がない場合のメッセージ
+            if (sortedRecordings.length === 0) {
+              const row = recordingsSheet.getRow(2);
+              row.getCell(1).value = '録音データなし';
+              row.getCell(1).font = { name: 'MS Gothic', size: 10 };
+              row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+              recordingsSheet.mergeCells('A2:D2');
+            }
+          }
+        }
+      } catch (recordingsError) {
+        console.warn('面接録音データの取得に失敗しました:', recordingsError);
+        // エラーが発生してもExcel生成は続行
+      }
+    
       // ExcelファイルをBlobとして保存（個別ダウンロードは行わない）
       console.log(`求職者ID ${jobSeekerId} のExcelファイル生成中...`);
       const buffer = await workbook.xlsx.writeBuffer();
