@@ -517,12 +517,21 @@ export function InterviewRecordings({ userId, onRefresh }: InterviewRecordingsPr
                           </div>
                           
                           {/* 文字起こしテキストの表示 */}
-                          {recording.transcription_text && (
-                            <div className="mb-3 p-3 bg-muted rounded-md">
-                              <div className="text-sm font-medium mb-1 text-muted-foreground">文字起こしテキスト:</div>
-                              <div className="text-sm">{recording.transcription_text}</div>
+                          <div className="mb-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              <div className="text-sm font-semibold text-blue-900">文字起こし</div>
                             </div>
-                          )}
+                            {recording.transcription_text && recording.transcription_text.trim() ? (
+                              <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                {recording.transcription_text}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-gray-500 italic">
+                                文字起こしデータがありません
+                              </div>
+                            )}
+                          </div>
                           
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-muted-foreground">
                             <div className="flex items-center gap-2">
