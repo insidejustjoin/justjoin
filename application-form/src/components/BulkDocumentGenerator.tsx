@@ -1510,7 +1510,12 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
       // 面接録音シートを追加
       try {
         const apiUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://justjoin.jp';
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('auth_token');
+        
+        if (!token) {
+          console.warn('🎤 認証トークンが見つかりません。面接録音シートはスキップします。');
+          // トークンがない場合は面接録音シートの追加をスキップ
+        } else {
         
         // 求職者のuser_idを取得
         const jobSeeker = selectedJobSeekers.find(js => String(js.id) === String(jobSeekerId) || String(js.user_id) === String(jobSeekerId));
