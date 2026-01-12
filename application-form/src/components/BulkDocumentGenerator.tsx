@@ -1668,14 +1668,17 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
                 // パスワードを生成（録音IDと作成日時から）
                 try {
                   // フロントエンドでパスワードを生成（バックエンドと同じロジック）
-                  const generatePassword = async (recordingId: string, createdAt: string) => {
-                    // created_atの形式を統一（ISO文字列またはDateオブジェクトからISO文字列に変換）
-                    let createdAtStr = createdAt;
-                    if (createdAt instanceof Date) {
-                      createdAtStr = createdAt.toISOString();
-                    } else if (typeof createdAt === 'string') {
-                      // 既に文字列の場合はそのまま使用
-                      createdAtStr = createdAt;
+                  const generatePassword = async (recordingId: string, createdAt: string | Date | undefined) => {
+                    // created_atの形式を統一（ISO文字列に変換）
+                    let createdAtStr = '';
+                    if (createdAt) {
+                      if (typeof createdAt === 'string') {
+                        createdAtStr = createdAt;
+                      } else if (createdAt instanceof Date) {
+                        createdAtStr = createdAt.toISOString();
+                      } else {
+                        createdAtStr = String(createdAt);
+                      }
                     }
                     
                     const encoder = new TextEncoder();
@@ -1686,7 +1689,7 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     return hashHex.substring(0, 16); // 16文字に短縮
                   };
                   
-                  const password = await generatePassword(recording.id.toString(), recording.created_at || '');
+                  const password = await generatePassword(recording.id.toString(), recording.created_at);
                   // パスワード保護された公開URLを生成
                   audioUrl = `${apiUrl}/api/documents/public/interview-recording/${recording.id}/${password}`;
                   console.log(`🎤 パスワード保護URL生成: ${recording.id} (有効期限: 1週間)`);
