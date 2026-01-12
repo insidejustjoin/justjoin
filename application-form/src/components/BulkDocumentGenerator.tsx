@@ -1516,8 +1516,7 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
           console.warn('🎤 認証トークンが見つかりません。面接録音シートはスキップします。');
           // トークンがない場合は面接録音シートの追加をスキップ
         } else {
-        
-        // 求職者のuser_idを取得
+          // 求職者のuser_idを取得
         const jobSeeker = selectedJobSeekers.find(js => String(js.id) === String(jobSeekerId) || String(js.user_id) === String(jobSeekerId));
         const userId = jobSeeker?.user_id || jobSeekerId;
         
@@ -1746,6 +1745,7 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
             statusText: recordingsResponse.statusText,
             errorText: errorText.substring(0, 500)
           });
+        }
         }
       } catch (recordingsError) {
         console.error('🎤 面接録音データの取得に失敗しました:', recordingsError);
