@@ -557,6 +557,59 @@ class DatabaseService {
             // エラーが発生しても面接を継続できるようにする
         }
     }
+    // user_idからregistration_typeを取得
+    async getRegistrationTypeByUserId(userId) {
+        try {
+            this.initializePool();
+            if (!this.pool) {
+                throw new Error('Pool not initialized');
+            }
+            await this.pool.query('SET search_path = public');
+            const query = `
+        SELECT registration_type 
+        FROM job_seekers 
+        WHERE user_id::text = $1 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `;
+            const result = await this.pool.query(query, [String(userId)]);
+            if (result.rows.length > 0) {
+                return result.rows[0].registration_type || undefined;
+            }
+            return undefined;
+        }
+        catch (error) {
+            console.error('❌ Error getting registration_type by user_id:', error);
+            return undefined;
+        }
+    }
+    // emailからregistration_typeを取得
+    async getRegistrationTypeByEmail(email) {
+        try {
+            this.initializePool();
+            if (!this.pool) {
+                throw new Error('Pool not initialized');
+            }
+            await this.pool.query('SET search_path = public');
+            const query = `
+        SELECT js.registration_type 
+        FROM job_seekers js
+        JOIN users u ON js.user_id = u.id
+        WHERE u.email = $1 
+        ORDER BY js.created_at DESC 
+        LIMIT 1
+      `;
+            const result = await this.pool.query(query, [email]);
+            if (result.rows.length > 0) {
+                return result.rows[0].registration_type || undefined;
+            }
+            return undefined;
+        }
+        catch (error) {
+            console.error('❌ Error getting registration_type by email:', error);
+            return undefined;
+        }
+    }
     // セッションの録音情報を取得
     async getSessionRecordings(sessionId) {
         try {

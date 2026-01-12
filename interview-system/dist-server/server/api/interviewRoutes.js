@@ -203,6 +203,25 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
             mimetype: req.file.mimetype,
             bufferSize: req.file.buffer?.length || 0
         });
+        // 求職者タイプ（registration_type）を取得
+        let registrationType = undefined;
+        try {
+            if (userId) {
+                registrationType = await databaseService_js_1.default.getRegistrationTypeByUserId(userId);
+                if (registrationType) {
+                    console.log(`📋 求職者タイプを取得: ${registrationType} (user_id: ${userId})`);
+                }
+            }
+            if (!registrationType && email) {
+                registrationType = await databaseService_js_1.default.getRegistrationTypeByEmail(email);
+                if (registrationType) {
+                    console.log(`📋 求職者タイプを取得: ${registrationType} (email: ${email})`);
+                }
+            }
+        }
+        catch (registrationTypeError) {
+            console.warn('⚠️ 求職者タイプの取得に失敗しました（録音は続行します）:', registrationTypeError);
+        }
         // Cloud Storageに録音ファイルをアップロード
         let recordingUrl = '';
         let storagePath = '';
@@ -210,7 +229,8 @@ router.post('/upload-recording', upload.single('file'), async (req, res) => {
             if (!req.file.buffer) {
                 throw new Error('ファイルバッファが存在しません');
             }
-            const gcsUrl = await (0, storageService_js_1.uploadRecordingToGCS)(req.file.buffer, filename, req.file.mimetype);
+            const gcsUrl = await (0, storageService_js_1.uploadRecordingToGCS)(req.file.buffer, filename, req.file.mimetype, registrationType // 求職者タイプを渡す
+            );
             storagePath = gcsUrl;
             recordingUrl = gcsUrl;
             console.log('✅ 録音ファイルをCloud Storageにアップロードしました:', gcsUrl);
