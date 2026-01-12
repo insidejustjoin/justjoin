@@ -1662,28 +1662,59 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
               row.getCell(2).font = { name: 'MS Gothic', size: 9 };
               row.getCell(2).alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
               
-              // 音声URL（署名付きURLを取得）
-              let audioUrl = recording.downloadUrl || recording.recording_url || '';
-              if (!audioUrl && recording.id) {
-                // 署名付きURLを取得
+              // 音声URL（パスワード保護された公開URLを生成）
+              let audioUrl = '';
+              if (recording.id && recording.created_at) {
+                // パスワードを生成（録音IDと作成日時から）
                 try {
-                  const signedUrlResponse = await fetch(`${apiUrl}/api/documents/admin/interview-recording/${recording.id}?format=json`, {
-                    method: 'GET',
-                    headers: {
-                      'Authorization': `Bearer ${token}`,
-                      'Accept': 'application/json',
-                    },
-                  });
-                  
-                  if (signedUrlResponse.ok) {
-                    const signedUrlResult = await signedUrlResponse.json();
-                    if (signedUrlResult.success && signedUrlResult.data?.signedUrl) {
-                      audioUrl = signedUrlResult.data.signedUrl;
+                  // フロントエンドでパスワードを生成（バックエンドと同じロジック）
+                  const generatePassword = async (recordingId: string, createdAt: string) => {
+                    // created_atの形式を統一（ISO文字列またはDateオブジェクトからISO文字列に変換）
+                    let createdAtStr = createdAt;
+                    if (createdAt instanceof Date) {
+                      createdAtStr = createdAt.toISOString();
+                    } else if (typeof createdAt === 'string') {
+                      // 既に文字列の場合はそのまま使用
+                      createdAtStr = createdAt;
                     }
+                    
+                    const encoder = new TextEncoder();
+                    const data = encoder.encode(`${recordingId}-${createdAtStr}-justjoin-recording-secret-key-2024`);
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                    return hashHex.substring(0, 16); // 16文字に短縮
+                  };
+                  
+                  const password = await generatePassword(recording.id.toString(), recording.created_at || '');
+                  // パスワード保護された公開URLを生成
+                  audioUrl = `${apiUrl}/api/documents/public/interview-recording/${recording.id}/${password}`;
+                  console.log(`🎤 パスワード保護URL生成: ${recording.id} (有効期限: 1週間)`);
+                } catch (passwordError) {
+                  console.warn('パスワード生成エラー:', passwordError);
+                  // フォールバック: 管理者用エンドポイントを使用
+                  try {
+                    const signedUrlResponse = await fetch(`${apiUrl}/api/documents/admin/interview-recording/${recording.id}?format=json`, {
+                      method: 'GET',
+                      headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/json',
+                      },
+                    });
+                    
+                    if (signedUrlResponse.ok) {
+                      const signedUrlResult = await signedUrlResponse.json();
+                      if (signedUrlResult.success && signedUrlResult.data?.signedUrl) {
+                        audioUrl = signedUrlResult.data.signedUrl;
+                      }
+                    }
+                  } catch (urlError) {
+                    console.warn('署名付きURL取得エラー:', urlError);
                   }
-                } catch (urlError) {
-                  console.warn('署名付きURL取得エラー:', urlError);
                 }
+              } else {
+                // フォールバック: 既存のURLを使用
+                audioUrl = recording.downloadUrl || recording.recording_url || '';
               }
               
               row.getCell(3).value = audioUrl || '音声URLなし';

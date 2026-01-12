@@ -2849,6 +2849,156 @@ router.get('/admin/interview-recordings/:userId', authenticate, async (req: Auth
   }
 });
 
+// 公開用：パスワード保護された面接録音アクセスエンドポイント（1週間限定）
+router.get('/public/interview-recording/:recordingId/:password', async (req: express.Request, res: express.Response) => {
+  try {
+    const { recordingId, password } = req.params;
+    
+    // 録音情報を取得
+    const recordingQuery = `
+      SELECT 
+        ir.id,
+        ir.session_id,
+        ir.storage_path,
+        ir.recording_url,
+        ir.recording_type,
+        ir.file_size,
+        ir.created_at
+      FROM interview_recordings ir
+      WHERE ir.id = $1
+    `;
+    
+    const recordingResult = await query(recordingQuery, [recordingId]);
+    
+    if (recordingResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'RECORDING_NOT_FOUND',
+        message: '録音ファイルが見つかりません'
+      });
+    }
+    
+    const recording = recordingResult.rows[0];
+    
+    // 1週間の有効期限チェック
+    const createdAt = new Date(recording.created_at);
+    const oneWeekLater = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    
+    if (now > oneWeekLater) {
+      return res.status(403).json({
+        success: false,
+        error: 'EXPIRED',
+        message: 'この録音へのアクセス期限が切れています（1週間）'
+      });
+    }
+    
+    // パスワード検証（録音IDと作成日時から生成したハッシュと比較）
+    const crypto = await import('crypto');
+    const secretKey = process.env.RECORDING_ACCESS_SECRET || 'justjoin-recording-secret-key-2024';
+    const expectedPassword = crypto.createHash('sha256')
+      .update(`${recordingId}-${recording.created_at}-${secretKey}`)
+      .digest('hex')
+      .substring(0, 16); // 16文字に短縮
+    
+    if (password !== expectedPassword) {
+      return res.status(403).json({
+        success: false,
+        error: 'INVALID_PASSWORD',
+        message: 'パスワードが正しくありません'
+      });
+    }
+    
+    // ファイルパスを決定
+    let filePath = recording.storage_path || recording.recording_url;
+    
+    if (!filePath) {
+      return res.status(404).json({
+        success: false,
+        error: 'FILE_NOT_FOUND',
+        message: '録音ファイルのパスが見つかりません'
+      });
+    }
+    
+    // Cloud Storageから署名付きURLを生成（1週間有効）
+    const { Storage } = await import('@google-cloud/storage');
+    const originalCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (originalCredentials) {
+      delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    }
+    
+    const storageOptions: any = {
+      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'justjoin-platform',
+    };
+    const storage = new Storage(storageOptions);
+    
+    if (originalCredentials) {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = originalCredentials;
+    }
+    
+    const bucketName = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || 'justjoin-platform-match-job-documents';
+    const bucket = storage.bucket(bucketName);
+    
+    // ファイルパスを正規化（求職者タイプのパスも考慮）
+    let gcsFilePath = filePath;
+    if (filePath.startsWith('https://storage.googleapis.com/')) {
+      // 求職者タイプのパスを含む可能性がある（engineer/またはgeneral/）
+      const match = filePath.match(/interview-recordings\/(?:engineer|general)?\/?[^?]+/);
+      if (match) {
+        gcsFilePath = match[0];
+      } else {
+        gcsFilePath = filePath.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+      }
+    } else if (!filePath.startsWith('interview-recordings/')) {
+      // ファイル名のみの場合は、interview-recordings/プレフィックスを追加
+      // 求職者タイプのパスは含めない（デフォルトはinterview-recordings/）
+      if (filePath.includes('interview_') || filePath.includes('.webm')) {
+        gcsFilePath = `interview-recordings/${filePath}`;
+      } else {
+        gcsFilePath = `interview-recordings/${filePath}`;
+      }
+    }
+    
+    try {
+      const file = bucket.file(gcsFilePath);
+      const expirationDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 1週間後
+      const [signedUrl] = await file.getSignedUrl({
+        action: 'read',
+        expires: expirationDate,
+      });
+      
+      // リダイレクトまたはJSON形式で返す
+      const acceptHeader = req.headers.accept || '';
+      if (acceptHeader.includes('application/json') || req.query.format === 'json') {
+        return res.json({
+          success: true,
+          data: {
+            signedUrl: signedUrl,
+            recordingId: recordingId,
+            expiresAt: expirationDate.toISOString()
+          }
+        });
+      } else {
+        return res.redirect(302, signedUrl);
+      }
+    } catch (signError: any) {
+      console.error(`❌ 署名付きURL生成エラー:`, signError);
+      return res.status(500).json({
+        success: false,
+        error: 'SIGNED_URL_ERROR',
+        message: '署名付きURLの生成に失敗しました'
+      });
+    }
+  } catch (error) {
+    console.error('❌ 公開録音アクセスエラー:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'INTERNAL_ERROR',
+      message: '録音ファイルへのアクセスに失敗しました'
+    });
+  }
+});
+
 // 管理者用：面接録音ファイルダウンロードエンドポイント
 router.get('/admin/interview-recording/:recordingId', authenticate, async (req: AuthenticatedRequest, res: express.Response) => {
   try {
