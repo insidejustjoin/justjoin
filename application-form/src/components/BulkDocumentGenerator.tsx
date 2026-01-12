@@ -1516,6 +1516,13 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
         const jobSeeker = selectedJobSeekers.find(js => String(js.id) === String(jobSeekerId) || String(js.user_id) === String(jobSeekerId));
         const userId = jobSeeker?.user_id || jobSeekerId;
         
+        console.log('🎤 面接録音データ取得開始:', {
+          jobSeekerId,
+          userId,
+          jobSeeker: jobSeeker ? { id: jobSeeker.id, user_id: jobSeeker.user_id, email: jobSeeker.email } : null,
+          apiUrl: `${apiUrl}/api/documents/admin/interview-recordings/${userId}`
+        });
+        
         // 面接録音データを取得
         const recordingsResponse = await fetch(`${apiUrl}/api/documents/admin/interview-recordings/${userId}`, {
           method: 'GET',
@@ -1525,10 +1532,29 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
           },
         });
         
+        console.log('🎤 面接録音APIレスポンス:', {
+          status: recordingsResponse.status,
+          statusText: recordingsResponse.statusText,
+          ok: recordingsResponse.ok
+        });
+        
         if (recordingsResponse.ok) {
           const recordingsResult = await recordingsResponse.json();
-          const recordings = recordingsResult.data?.recordings || [];
+          console.log('🎤 面接録音API結果:', {
+            success: recordingsResult.success,
+            dataKeys: recordingsResult.data ? Object.keys(recordingsResult.data) : null,
+            recordingsCount: recordingsResult.data?.recordings?.length || 0
+          });
           
+          const recordings = recordingsResult.data?.recordings || [];
+          console.log('🎤 取得した録音データ:', {
+            totalCount: recordings.length,
+            withQuestionId: recordings.filter((r: any) => r.question_id).length,
+            withoutQuestionId: recordings.filter((r: any) => !r.question_id).length,
+            questionIds: recordings.map((r: any) => r.question_id).filter(Boolean)
+          });
+          
+          // 録音データがある場合、シートを作成
           if (recordings.length > 0) {
             // 質問内容のマッピング（日本語）
             const questionTexts: { [key: string]: string } = {
@@ -1593,14 +1619,27 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
             };
             
             // 録音データを行として追加（question_idでソート）
-            const sortedRecordings = recordings
-              .filter((r: any) => r.question_id) // question_idがあるもののみ
-              .sort((a: any, b: any) => {
-                // q1, q2, ..., q10の順にソート
-                const aNum = parseInt(a.question_id.replace('q', ''));
-                const bNum = parseInt(b.question_id.replace('q', ''));
-                return aNum - bNum;
-              });
+            // question_idがあるものとないものを分けて処理
+            const recordingsWithQuestionId = recordings.filter((r: any) => r.question_id);
+            const recordingsWithoutQuestionId = recordings.filter((r: any) => !r.question_id);
+            
+            console.log('🎤 録音データ分類:', {
+              withQuestionId: recordingsWithQuestionId.length,
+              withoutQuestionId: recordingsWithoutQuestionId.length
+            });
+            
+            const sortedRecordings = recordingsWithQuestionId.sort((a: any, b: any) => {
+              // q1, q2, ..., q10の順にソート
+              const aNum = parseInt(a.question_id.replace('q', ''));
+              const bNum = parseInt(b.question_id.replace('q', ''));
+              return aNum - bNum;
+            });
+            
+            // question_idがない録音も追加（最後に）
+            if (recordingsWithoutQuestionId.length > 0) {
+              console.log('🎤 question_idがない録音を追加:', recordingsWithoutQuestionId.length);
+              sortedRecordings.push(...recordingsWithoutQuestionId);
+            }
             
             let rowIndex = 2;
             for (const recording of sortedRecordings) {
@@ -1666,16 +1705,51 @@ m26Cell.alignment = { horizontal: 'center', vertical: 'middle' };
             
             // 録音がない場合のメッセージ
             if (sortedRecordings.length === 0) {
+              console.log('🎤 録音データが0件のため、メッセージを表示');
               const row = recordingsSheet.getRow(2);
               row.getCell(1).value = '録音データなし';
               row.getCell(1).font = { name: 'MS Gothic', size: 10 };
               row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
               recordingsSheet.mergeCells('A2:D2');
+            } else {
+              console.log(`🎤 面接録音シートを作成しました: ${sortedRecordings.length}件の録音`);
             }
+          } else {
+            console.log('🎤 録音データが0件のため、シートを作成しません');
+            // デバッグ用：録音データがなくてもシートを作成（後で削除可能）
+            const recordingsSheet = workbook.addWorksheet('面接録音');
+            recordingsSheet.getColumn('A').width = 5;
+            recordingsSheet.getColumn('B').width = 60;
+            recordingsSheet.getColumn('C').width = 80;
+            recordingsSheet.getColumn('D').width = 20;
+            const headerRow = recordingsSheet.getRow(1);
+            headerRow.height = 25;
+            headerRow.getCell(1).value = '設問番号';
+            headerRow.getCell(2).value = '質問内容';
+            headerRow.getCell(3).value = '音声URL';
+            headerRow.getCell(4).value = '文字起こし';
+            const row = recordingsSheet.getRow(2);
+            row.getCell(1).value = '録音データなし';
+            recordingsSheet.mergeCells('A2:D2');
+            console.log('🎤 デバッグ: 録音データなしでもシートを作成しました');
           }
+        } else {
+          // APIエラーの場合
+          const errorText = await recordingsResponse.text().catch(() => 'エラーテキスト取得失敗');
+          console.error('🎤 面接録音APIエラー:', {
+            status: recordingsResponse.status,
+            statusText: recordingsResponse.statusText,
+            errorText: errorText.substring(0, 500)
+          });
         }
       } catch (recordingsError) {
-        console.warn('面接録音データの取得に失敗しました:', recordingsError);
+        console.error('🎤 面接録音データの取得に失敗しました:', recordingsError);
+        if (recordingsError instanceof Error) {
+          console.error('🎤 エラー詳細:', {
+            message: recordingsError.message,
+            stack: recordingsError.stack
+          });
+        }
         // エラーが発生してもExcel生成は続行
       }
     
